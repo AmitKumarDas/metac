@@ -29,6 +29,11 @@ import (
 	"openebs.io/metac/test/integration/framework"
 )
 
+// This will be run only once when go test is invoked against this package.
+// All the other TestXYZ functions will be invoked via m.Run call only.
+//
+// framework.TestMain provides setup & teardown features required for
+// all the individual testcases to run.
 func TestMain(m *testing.M) {
 	framework.TestMain(m.Run)
 }
@@ -67,7 +72,7 @@ func TestSyncWebhook(t *testing.T) {
 
 	parent := framework.UnstructuredCRD(parentCRD, "test-sync-webhook")
 	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
-	_, err := parentClient.Namespace(ns).Create(parent)
+	_, err := parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +135,7 @@ func TestResyncAfter(t *testing.T) {
 
 	parent := framework.UnstructuredCRD(parentCRD, "test-resync-after")
 	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
-	_, err := parentClient.Namespace(ns).Create(parent)
+	_, err := parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

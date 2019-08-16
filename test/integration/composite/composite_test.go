@@ -32,6 +32,11 @@ import (
 	"openebs.io/metac/test/integration/framework"
 )
 
+// This will be run only once when go test is invoked against this package.
+// All the other TestXYZ functions will be invoked via m.Run call only.
+//
+// framework.TestMain provides setup & teardown features required for
+// all the individual testcases to run.
 func TestMain(m *testing.M) {
 	framework.TestMain(m.Run)
 }
@@ -44,12 +49,18 @@ func TestSyncWebhook(t *testing.T) {
 		"test": "test-sync-webhook",
 	}
 
+	// fixture provides the common test logic including a way to
+	// invoke teardown after completion of this particular test
 	f := framework.NewFixture(t)
 	defer f.TearDown()
 
 	f.CreateNamespace(ns)
-	parentCRD, parentClient := f.CreateCRD("TestSyncWebhookParent", apiextensions.NamespaceScoped)
-	childCRD, childClient := f.CreateCRD("TestSyncWebhookChild", apiextensions.NamespaceScoped)
+	parentCRD, parentClient := f.CreateCRD(
+		"TestSyncWebhookParent", apiextensions.NamespaceScoped,
+	)
+	childCRD, childClient := f.CreateCRD(
+		"TestSyncWebhookChild", apiextensions.NamespaceScoped,
+	)
 
 	hook := f.ServeWebhook(func(body []byte) ([]byte, error) {
 		req := composite.SyncHookRequest{}
@@ -66,11 +77,16 @@ func TestSyncWebhook(t *testing.T) {
 		return json.Marshal(resp)
 	})
 
-	f.CreateCompositeController("test-sync-webhook", hook.URL, framework.CRDResourceRule(parentCRD), framework.CRDResourceRule(childCRD))
+	f.CreateCompositeController(
+		"test-sync-webhook",
+		hook.URL,
+		framework.CRDResourceRule(parentCRD),
+		framework.CRDResourceRule(childCRD),
+	)
 
 	parent := framework.UnstructuredCRD(parentCRD, "test-sync-webhook")
 	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
-	_, err := parentClient.Namespace(ns).Create(parent)
+	_, err := parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +113,9 @@ func TestCacadingDelete(t *testing.T) {
 	defer f.TearDown()
 
 	f.CreateNamespace(ns)
-	parentCRD, parentClient := f.CreateCRD("TestCascadingDeleteParent", apiextensions.NamespaceScoped)
+	parentCRD, parentClient := f.CreateCRD(
+		"TestCascadingDeleteParent", apiextensions.NamespaceScoped,
+	)
 	childClient := f.Clientset().BatchV1().Jobs(ns)
 
 	hook := f.ServeWebhook(func(body []byte) ([]byte, error) {
@@ -139,7 +157,7 @@ func TestCacadingDelete(t *testing.T) {
 	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
 	unstructured.SetNestedField(parent.Object, int64(1), "spec", "replicas")
 	var err error
-	if parent, err = parentClient.Namespace(ns).Create(parent); err != nil {
+	if parent, err = parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -227,7 +245,7 @@ func TestResyncAfter(t *testing.T) {
 
 	parent := framework.UnstructuredCRD(parentCRD, "test-resync-after")
 	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
-	_, err := parentClient.Namespace(ns).Create(parent)
+	_, err := parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

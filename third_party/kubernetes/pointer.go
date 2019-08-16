@@ -21,3 +21,9 @@ func BoolPtr(b bool) *bool {
 	o := b
 	return &o
 }
+
+// Int32Ptr returns a pointer to an int32
+func Int32Ptr(i int32) *int32 {
+	o := i
+	return &o
+}

@@ -50,7 +50,24 @@ func getKubectlPath() (string, error) {
 	return exec.LookPath("kubectl")
 }
 
-// TestMain starts etcd, kube-apiserver, and metacontroller before running tests.
+// TestMain starts etcd, kube-apiserver, and metacontroller before
+// running tests. This is meant to be executed from within a _test.go
+// file's TestMain(m *testing.M) function.
+//
+// Usage:
+// 	In some abc_test.go file in package abc
+//
+// ```go
+//	package abc
+//
+//	import (
+//		"openebs.io/metac/test/integration/framework
+//	)
+//
+// 	func TestMain(m *testing.M) {
+//		framework.TestMain(m.Run())
+//	}
+// ````
 func TestMain(tests func() int) {
 	if err := testMain(tests); err != nil {
 		fmt.Println(err)

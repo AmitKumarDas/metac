@@ -1,20 +1,28 @@
 language: go
+
+# Force-enable Go modules. Also force go to use the code in vendor/
+# These will both be unnecessary when Go 1.13 lands.
+env:
+- GO111MODULE=on
+
 go:
-- "1.12"
-go_import_path: openebs.io/metac
+- 1.12.x
+
 cache:
   directories:
   - vendor
+
 addons:
   apt:
     packages:
     - wget
-install:
-- hack/get-kube-binaries.sh
-- go get -u github.com/golang/dep/cmd/dep
-- dep ensure
+
 script:
-# We intentionally don't generate files in CI, since we check them in.
-- go install
+- cd ..
+- mkdir -p openebs.io
+- mv metac/ openebs.io/
+- cd openebs.io/metac/
+- make
 - make unit-test
+- make integration-dependencies
 - make integration-test

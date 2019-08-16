@@ -19,11 +19,12 @@ package framework
 import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/util/pointer"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
+	pointer "openebs.io/metac/third_party/kubernetes"
 )
 
+// CRDResourceRule returns a new instance of ResourceRule
 func CRDResourceRule(crd *apiextensions.CustomResourceDefinition) *v1alpha1.ResourceRule {
 	return &v1alpha1.ResourceRule{
 		APIVersion: crd.Spec.Group + "/" + crd.Spec.Versions[0].Name,
@@ -33,10 +34,16 @@ func CRDResourceRule(crd *apiextensions.CustomResourceDefinition) *v1alpha1.Reso
 
 // CreateCompositeController generates a test CompositeController and installs
 // it in the test API server.
-func (f *Fixture) CreateCompositeController(name, syncHookURL string, parentRule, childRule *v1alpha1.ResourceRule) *v1alpha1.CompositeController {
+func (f *Fixture) CreateCompositeController(
+	name, syncHookURL string,
+	parentRule, childRule *v1alpha1.ResourceRule,
+) *v1alpha1.CompositeController {
 	childResources := []v1alpha1.CompositeControllerChildResourceRule{}
 	if childRule != nil {
-		childResources = append(childResources, v1alpha1.CompositeControllerChildResourceRule{ResourceRule: *childRule})
+		childResources = append(
+			childResources,
+			v1alpha1.CompositeControllerChildResourceRule{ResourceRule: *childRule},
+		)
 	}
 	cc := &v1alpha1.CompositeController{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,7 +72,8 @@ func (f *Fixture) CreateCompositeController(name, syncHookURL string, parentRule
 		f.t.Fatal(err)
 	}
 	f.deferTeardown(func() error {
-		return f.metacontroller.MetacontrollerV1alpha1().CompositeControllers().Delete(cc.Name, nil)
+		return f.metacontroller.
+			MetacontrollerV1alpha1().CompositeControllers().Delete(cc.Name, nil)
 	})
 
 	return cc
@@ -73,10 +81,16 @@ func (f *Fixture) CreateCompositeController(name, syncHookURL string, parentRule
 
 // CreateDecoratorController generates a test DecoratorController and installs
 // it in the test API server.
-func (f *Fixture) CreateDecoratorController(name, syncHookURL string, parentRule, childRule *v1alpha1.ResourceRule) *v1alpha1.DecoratorController {
+func (f *Fixture) CreateDecoratorController(
+	name, syncHookURL string,
+	parentRule, childRule *v1alpha1.ResourceRule,
+) *v1alpha1.DecoratorController {
 	childResources := []v1alpha1.DecoratorControllerAttachmentRule{}
 	if childRule != nil {
-		childResources = append(childResources, v1alpha1.DecoratorControllerAttachmentRule{ResourceRule: *childRule})
+		childResources = append(
+			childResources,
+			v1alpha1.DecoratorControllerAttachmentRule{ResourceRule: *childRule},
+		)
 	}
 	dc := &v1alpha1.DecoratorController{
 		ObjectMeta: metav1.ObjectMeta{

@@ -30,14 +30,17 @@ import (
 
 const (
 	// APIGroup is the group used for CRDs created as part of the test.
-	APIGroup = "test.metac.app"
+	APIGroup = "test.metac.openebs.io"
 	// APIVersion is the group-version used for CRDs created as part of the test.
 	APIVersion = APIGroup + "/v1"
 )
 
 // CreateCRD generates a quick-and-dirty CRD for use in tests,
 // and installs it in the test environment's API server.
-func (f *Fixture) CreateCRD(kind string, scope v1beta1.ResourceScope) (*v1beta1.CustomResourceDefinition, *dynamicclientset.ResourceClient) {
+func (f *Fixture) CreateCRD(
+	kind string,
+	scope v1beta1.ResourceScope,
+) (*v1beta1.CustomResourceDefinition, *dynamicclientset.ResourceClient) {
 	singular := strings.ToLower(kind)
 	plural := singular + "s"
 	crd := &v1beta1.CustomResourceDefinition{
@@ -95,7 +98,10 @@ func (f *Fixture) CreateCRD(kind string, scope v1beta1.ResourceScope) (*v1beta1.
 }
 
 // UnstructuredCRD creates a new Unstructured object for the given CRD.
-func UnstructuredCRD(crd *v1beta1.CustomResourceDefinition, name string) *unstructured.Unstructured {
+func UnstructuredCRD(
+	crd *v1beta1.CustomResourceDefinition,
+	name string,
+) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetAPIVersion(crd.Spec.Group + "/" + crd.Spec.Versions[0].Name)
 	obj.SetKind(crd.Spec.Names.Kind)
