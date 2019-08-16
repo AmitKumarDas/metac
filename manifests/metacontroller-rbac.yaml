@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: metacontroller
-  namespace: metacontroller
+  name: metac
+  namespace: metac
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: metacontroller
+  name: metac
 rules:
 - apiGroups:
   - "*"
@@ -19,27 +19,27 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: metacontroller
+  name: metac
 subjects:
 - kind: ServiceAccount
-  name: metacontroller
-  namespace: metacontroller
+  name: metac
+  namespace: metac
 roleRef:
   kind: ClusterRole
-  name: metacontroller
+  name: metac
   apiGroup: rbac.authorization.k8s.io
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: aggregate-metacontroller-view
+  name: aggregate-metac-view
   labels:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
     rbac.authorization.k8s.io/aggregate-to-view: "true"
 rules:
 - apiGroups:
-  - metacontroller.k8s.io
+  - metac.openebs.io
   resources:
   - compositecontrollers
   - controllerrevisions
@@ -52,13 +52,13 @@ rules:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: aggregate-metacontroller-edit
+  name: aggregate-metac-edit
   labels:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
 rules:
 - apiGroups:
-  - metacontroller.k8s.io
+  - metac.openebs.io
   resources:
   - controllerrevisions
   verbs:

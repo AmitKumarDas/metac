@@ -77,8 +77,8 @@ const (
 // can be fetched by the watcher that reconciles the WorkflowController
 // resource.
 type ConfigHook struct {
-	Type *ConfigHookType `json:"type"`
-	Name string          `json:name`
+	Type *ConfigHookType `json:"type,omitempty"`
+	Name string          `json:"name"`
 }
 
 // WorkflowControllerResource represent a resource that is understood

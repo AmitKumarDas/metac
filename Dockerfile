@@ -1,4 +1,4 @@
-# Build the metacontroller binary
+# Build metac binary
 FROM golang:1.12.5 as builder
 
 WORKDIR /go/src/openebs.io/metac/

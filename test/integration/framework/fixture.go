@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	mcclientset "openebs.io/metac/client/generated/clientset/internalclientset"
+	mcclientset "openebs.io/metac/client/generated/clientset/versioned"
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 )
 
@@ -35,7 +35,9 @@ const (
 	defaultWaitInterval = 250 * time.Millisecond
 )
 
-// Fixture is a collection of scaffolding for each integration test method.
+// Fixture is a collection of scaffolding for each integration
+// test method. This is used by individual test cases to handle their
+// respective teardown as well as their common logic.
 type Fixture struct {
 	t *testing.T
 
@@ -47,6 +49,7 @@ type Fixture struct {
 	metacontroller mcclientset.Interface
 }
 
+// NewFixture returns a new instance of Fixture
 func NewFixture(t *testing.T) *Fixture {
 	config := ApiserverConfig()
 	apiextensions, err := apiextensionsclient.NewForConfig(config)
@@ -80,8 +83,8 @@ func (f *Fixture) Clientset() kubernetes.Interface {
 	return f.kubernetes
 }
 
-// CreateNamespace creates a namespace that will be deleted after this test
-// finishes.
+// CreateNamespace creates a namespace that will be deleted
+// after this test finishes.
 func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -98,7 +101,8 @@ func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
 	return ns
 }
 
-// TearDown cleans up resources created through this instance of the test fixture.
+// TearDown cleans up resources created through this instance
+// of the test fixture.
 func (f *Fixture) TearDown() {
 	for i := len(f.teardownFuncs) - 1; i >= 0; i-- {
 		teardown := f.teardownFuncs[i]
@@ -110,8 +114,9 @@ func (f *Fixture) TearDown() {
 	}
 }
 
-// Wait polls the condition until it's true, with a default interval and timeout.
-// This is meant for use in integration tests, so frequent polling is fine.
+// Wait polls the condition until it's true, with a default interval
+// and timeout. This is meant for use in integration tests, so frequent
+// polling is fine.
 //
 // The condition function returns a bool indicating whether it is satisfied,
 // as well as an error which should be non-nil if and only if the function was

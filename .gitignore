@@ -1,7 +1,6 @@
 /.idea/
 /vendor/
 /client/generated/
-/apis/metacontroller/v1alpha1/zz_generated.deepcopy.go
 /metac
 /hack/bin/
 .*.swp

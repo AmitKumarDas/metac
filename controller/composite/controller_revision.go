@@ -32,8 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/json"
 
-	"openebs.io/metac/controller/common"
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
+	"openebs.io/metac/controller/common"
 	dynamiccontrollerref "openebs.io/metac/dynamic/controllerref"
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
