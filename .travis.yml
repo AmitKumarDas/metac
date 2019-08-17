@@ -5,6 +5,8 @@ language: go
 env:
   global:
   - GO111MODULE=on
+  # each corresponds to a travis job
+  # each will be run in parallel
   matrix:
   - TEST=bins
   - TEST=unit-test
