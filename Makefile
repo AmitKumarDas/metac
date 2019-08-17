@@ -14,15 +14,7 @@ GO_FLAGS = -gcflags '-N -l' -ldflags "$(BUILD_LDFLAGS)"
 REGISTRY ?= quay.io/amitkumardas
 IMG_NAME ?= metac
 
-all: vendor bins
-
-# go mod download modules to local cache
-# make vendored copy of dependencies
-# install other go binaries for code generation
-.PHONY: vendor
-vendor: go.mod go.sum
-	@GO111MODULE=on go mod download
-	@GO111MODULE=on go mod vendor
+all: bins
 
 bins: generated_files $(IMG_NAME)
 
@@ -37,8 +29,16 @@ $(ALL_SRC): ;
 # https://github.com/kubernetes/community/blob/master/contributors/devel/api_changes.md#generate-code
 
 .PHONY: generated_files
-generated_files:
+generated_files: vendor
 	@./hack/update-codegen.sh
+
+# go mod download modules to local cache
+# make vendored copy of dependencies
+# install other go binaries for code generation
+.PHONY: vendor
+vendor: go.mod go.sum
+	@GO111MODULE=on go mod download
+	@GO111MODULE=on go mod vendor
 
 .PHONY: image
 image:
@@ -49,7 +49,7 @@ push: image
 	docker push $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION)
 
 .PHONY: unit-test
-unit-test:
+unit-test: generated_files
 	@pkgs="$$(go list ./... | grep -v '/test/integration/\|/examples/')" ; \
 		go test -i $${pkgs} && \
 		go test $${pkgs}
@@ -59,5 +59,5 @@ integration-dependencies:
 	@./hack/get-kube-binaries.sh
 
 .PHONY: integration-test
-integration-test:
+integration-test: generated_files integration-dependencies
 	@PATH="$(PWD)/hack/bin:$(PATH)" go test ./test/integration/... -v -timeout 5m -args -v=6

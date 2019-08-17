@@ -3,7 +3,12 @@ language: go
 # Force-enable Go modules. Also force go to use the code in vendor/
 # These will both be unnecessary when Go 1.13 lands.
 env:
-- GO111MODULE=on
+  global:
+  - GO111MODULE=on
+  matrix:
+  - TEST=bins
+  - TEST=unit-test
+  - TEST=integration-test
 
 go:
 - 1.12.x
@@ -22,7 +27,4 @@ script:
 - mkdir -p openebs.io
 - mv metac/ openebs.io/
 - cd openebs.io/metac/
-- make
-- make unit-test
-- make integration-dependencies
-- make integration-test
+- make $TEST
