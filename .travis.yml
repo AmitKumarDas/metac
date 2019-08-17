@@ -8,9 +8,8 @@ env:
   # each corresponds to a travis job
   # each will be run in parallel
   matrix:
-  - TEST=bins
-  - TEST=unit-test
-  - TEST=integration-test
+  - TEST=image
+  - TEST="unit-test integration-test"
 
 go:
 - 1.12.x
