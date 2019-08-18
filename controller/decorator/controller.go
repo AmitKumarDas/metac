@@ -50,58 +50,80 @@ const (
 )
 
 type decoratorController struct {
-	dc *v1alpha1.DecoratorController
+	// api this controller is based on
+	api *v1alpha1.DecoratorController
 
+	// discovered resources
 	resources *dynamicdiscovery.ResourceMap
 
-	parentKinds    common.GroupKindMap
+	// hold the parent kinds
+	parentKinds common.GroupKindMap
+	// selector options to filter the parent
 	parentSelector *decoratorSelector
 
-	dynClient *dynamicclientset.Clientset
+	// dynamic clientset for resources managed by this
+	// controller instance
+	dynCliSet *dynamicclientset.Clientset
 
+	// channels to flag stopping or completing the
+	// reconcile process
 	stopCh, doneCh chan struct{}
-	queue          workqueue.RateLimitingInterface
+	// watched resources will be queued here
+	// before being reconciled
+	queue workqueue.RateLimitingInterface
 
+	// the strategy to follow during reconcile
 	updateStrategy updateStrategyMap
 
+	// informers are needed to capture the changes against
+	// the watched resource i.e. parent & to list the attachments
+	// i.e. children from the cache thereby reducing the pressure
+	// on kube api server
 	parentInformers common.InformerMap
 	childInformers  common.InformerMap
 
+	// instance that deals with this controller's finalizer
+	// if any
 	finalizer *finalizer.Manager
 }
 
 func newDecoratorController(
 	resources *dynamicdiscovery.ResourceMap,
-	dynClient *dynamicclientset.Clientset,
-	dynInformers *dynamicinformer.SharedInformerFactory,
-	dc *v1alpha1.DecoratorController,
+	dynCliSet *dynamicclientset.Clientset,
+	informerFactory *dynamicinformer.SharedInformerFactory,
+	api *v1alpha1.DecoratorController,
 ) (controller *decoratorController, newErr error) {
 	c := &decoratorController{
-		dc:              dc,
-		resources:       resources,
-		dynClient:       dynClient,
+		api:       api,
+		resources: resources,
+		dynCliSet: dynCliSet,
+
 		parentKinds:     make(common.GroupKindMap),
 		parentInformers: make(common.InformerMap),
 		childInformers:  make(common.InformerMap),
 
 		queue: workqueue.NewNamedRateLimitingQueue(
-			workqueue.DefaultControllerRateLimiter(), "DecoratorController-"+dc.Name,
+			workqueue.DefaultControllerRateLimiter(),
+			"DecoratorController-"+api.Name,
 		),
+
 		finalizer: &finalizer.Manager{
-			Name:    "metac.openebs.io/decoratorcontroller-" + dc.Name,
-			Enabled: dc.Spec.Hooks.Finalize != nil,
+			// finalizer manager is entrusted with this finalier name
+			Name: "metac.openebs.io/decoratorcontroller-" + api.Name,
+			// gets enabled if Finalize property is set
+			Enabled: api.Spec.Hooks.Finalize != nil,
 		},
 	}
 
 	var err error
 
-	c.parentSelector, err = newDecoratorSelector(resources, dc)
+	c.parentSelector, err = newDecoratorSelector(resources, api)
 	if err != nil {
 		return nil, err
 	}
 
 	// Keep a list of parent resource info from discovery.
-	for _, parent := range dc.Spec.Resources {
+	for _, parent := range api.Spec.Resources {
 		resource := resources.Get(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
@@ -114,12 +136,14 @@ func newDecoratorController(
 	}
 
 	// Remember the update strategy for each child type.
-	c.updateStrategy, err = makeUpdateStrategyMap(resources, dc)
+	c.updateStrategy, err = makeUpdateStrategyMap(resources, api)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create informers for all parent and child resources.
+	// close the successfully created informers for parent
+	// and child resources in-case of any errors during
+	// initialization
 	defer func() {
 		if newErr != nil {
 			// If newDecoratorController fails, Close() any informers we created
@@ -133,16 +157,16 @@ func newDecoratorController(
 		}
 	}()
 
-	for _, parent := range dc.Spec.Resources {
-		informer, err := dynInformers.Resource(parent.APIVersion, parent.Resource)
+	for _, parent := range api.Spec.Resources {
+		informer, err := informerFactory.GetOrCreate(parent.APIVersion, parent.Resource)
 		if err != nil {
 			return nil, errors.Errorf("can't create informer for parent resource: %v", err)
 		}
 		c.parentInformers.Set(parent.APIVersion, parent.Resource, informer)
 	}
 
-	for _, child := range dc.Spec.Attachments {
-		informer, err := dynInformers.Resource(child.APIVersion, child.Resource)
+	for _, child := range api.Spec.Attachments {
+		informer, err := informerFactory.GetOrCreate(child.APIVersion, child.Resource)
 		if err != nil {
 			return nil, errors.Errorf("can't create informer for child resource: %v", err)
 		}
@@ -165,9 +189,9 @@ func (c *decoratorController) Start() {
 		DeleteFunc: c.enqueueParentObject,
 	}
 	var resyncPeriod time.Duration
-	if c.dc.Spec.ResyncPeriodSeconds != nil {
+	if c.api.Spec.ResyncPeriodSeconds != nil {
 		// Use a custom resync period if requested. This only applies to the parent.
-		resyncPeriod = time.Duration(*c.dc.Spec.ResyncPeriodSeconds) * time.Second
+		resyncPeriod = time.Duration(*c.api.Spec.ResyncPeriodSeconds) * time.Second
 		// Put a reasonable limit on it.
 		if resyncPeriod < time.Second {
 			resyncPeriod = time.Second
@@ -192,21 +216,21 @@ func (c *decoratorController) Start() {
 		defer close(c.doneCh)
 		defer utilruntime.HandleCrash()
 
-		glog.Infof("Starting DecoratorController %v", c.dc.Name)
-		defer glog.Infof("Shutting down DecoratorController %v", c.dc.Name)
+		glog.Infof("Starting DecoratorController %v", c.api.Name)
+		defer glog.Infof("Shutting down DecoratorController %v", c.api.Name)
 
 		// Wait for dynamic client and all informers.
-		glog.Infof("Waiting for DecoratorController %v caches to sync", c.dc.Name)
-		syncFuncs := make([]cache.InformerSynced, 0, 1+len(c.dc.Spec.Resources)+len(c.dc.Spec.Attachments))
+		glog.Infof("Waiting for DecoratorController %v caches to sync", c.api.Name)
+		syncFuncs := make([]cache.InformerSynced, 0, 1+len(c.api.Spec.Resources)+len(c.api.Spec.Attachments))
 		for _, informer := range c.parentInformers {
 			syncFuncs = append(syncFuncs, informer.Informer().HasSynced)
 		}
 		for _, informer := range c.childInformers {
 			syncFuncs = append(syncFuncs, informer.Informer().HasSynced)
 		}
-		if !k8s.WaitForCacheSync(c.dc.Name, c.stopCh, syncFuncs...) {
+		if !k8s.WaitForCacheSync(c.api.Name, c.stopCh, syncFuncs...) {
 			// We wait forever unless Stop() is called, so this isn't an error.
-			glog.Warningf("DecoratorController %v cache sync never finished", c.dc.Name)
+			glog.Warningf("DecoratorController %v cache sync never finished", c.api.Name)
 			return
 		}
 
@@ -254,7 +278,7 @@ func (c *decoratorController) processNextWorkItem() bool {
 
 	err := c.sync(key.(string))
 	if err != nil {
-		utilruntime.HandleError(errors.Errorf("failed to sync %v %q: %v", c.dc.Name, key, err))
+		utilruntime.HandleError(errors.Errorf("failed to sync %v %q: %v", c.api.Name, key, err))
 		c.queue.AddRateLimited(key)
 		return true
 	}
@@ -361,7 +385,7 @@ func (c *decoratorController) onChildAdd(obj interface{}) {
 		// The controllerRef isn't a parent we know about.
 		return
 	}
-	glog.V(4).Infof("DecoratorController %v: %v %v/%v: child %v %v created or updated", c.dc.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(), child.GetKind(), child.GetName())
+	glog.V(4).Infof("DecoratorController %v: %v %v/%v: child %v %v created or updated", c.api.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(), child.GetKind(), child.GetName())
 	c.enqueueParentObject(parent)
 }
 
@@ -386,12 +410,19 @@ func (c *decoratorController) onChildDelete(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %+v", obj))
+			utilruntime.HandleError(
+				errors.Errorf("couldn't get object from tombstone %+v", obj),
+			)
 			return
 		}
 		child, ok = tombstone.Obj.(*unstructured.Unstructured)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not *unstructured.Unstructured %#v", obj))
+			utilruntime.HandleError(
+				errors.Errorf(
+					"tombstone contained object that is not *unstructured.Unstructured %#v",
+					obj,
+				),
+			)
 			return
 		}
 	}
@@ -409,7 +440,7 @@ func (c *decoratorController) onChildDelete(obj interface{}) {
 		// The controllerRef isn't a parent we know about.
 		return
 	}
-	glog.V(4).Infof("DecoratorController %v: %v %v/%v: child %v %v deleted", c.dc.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(), child.GetKind(), child.GetName())
+	glog.V(4).Infof("DecoratorController %v: %v %v/%v: child %v %v deleted", c.api.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(), child.GetKind(), child.GetName())
 	c.enqueueParentObject(parent)
 }
 
@@ -445,9 +476,9 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 		return nil
 	}
 
-	glog.V(4).Infof("DecoratorController %v: sync %v %v/%v", c.dc.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName())
+	glog.V(4).Infof("DecoratorController %v: sync %v %v/%v", c.api.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName())
 
-	parentClient, err := c.dynClient.Kind(parent.GetAPIVersion(), parent.GetKind())
+	parentClient, err := c.dynCliSet.Kind(parent.GetAPIVersion(), parent.GetKind())
 	if err != nil {
 		return errors.Wrapf(
 			err,
@@ -487,7 +518,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 
 	// Call the sync hook to get the desired annotations and children.
 	syncRequest := &SyncHookRequest{
-		Controller:  c.dc,
+		Controller:  c.api,
 		Object:      parent,
 		Attachments: observedChildren,
 	}
@@ -537,7 +568,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 			result, err := parentClient.Namespace(parent.GetNamespace()).
 				UpdateStatus(updatedParent, metav1.UpdateOptions{})
 			if err != nil {
-				return fmt.Errorf("can't update status: %v", err)
+				return errors.Errorf("can't update status: %v", err)
 			}
 			// The Update below needs to use the latest ResourceVersion.
 			updatedParent.SetResourceVersion(result.GetResourceVersion())
@@ -547,11 +578,14 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 			dynamicobject.RemoveFinalizer(updatedParent, c.finalizer.Name)
 		}
 
-		glog.V(4).Infof("DecoratorController %v: updating %v %v/%v", c.dc.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName())
+		glog.V(4).Infof("DecoratorController %v: updating %v %v/%v", c.api.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName())
 		_, err = parentClient.
 			Namespace(parent.GetNamespace()).Update(updatedParent, metav1.UpdateOptions{})
 		if err != nil {
-			return fmt.Errorf("can't update %v %v/%v: %v", parent.GetKind(), parent.GetNamespace(), parent.GetName(), err)
+			return errors.Wrapf(err,
+				"can't update %v %v/%v",
+				parent.GetKind(), parent.GetNamespace(), parent.GetName(),
+			)
 		}
 	}
 
@@ -560,13 +594,13 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 	for _, group := range desiredChildren {
 		for _, child := range group {
 			ann := child.GetAnnotations()
-			if ann[decoratorControllerAnnotation] == c.dc.Name {
+			if ann[decoratorControllerAnnotation] == c.api.Name {
 				continue
 			}
 			if ann == nil {
 				ann = make(map[string]string)
 			}
-			ann[decoratorControllerAnnotation] = c.dc.Name
+			ann[decoratorControllerAnnotation] = c.api.Name
 			child.SetAnnotations(ann)
 		}
 	}
@@ -579,25 +613,37 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 	var manageErr error
 	if parent.GetDeletionTimestamp() == nil || c.finalizer.ShouldFinalize(parent) {
 		// Reconcile children.
-		if err := common.ManageChildren(c.dynClient, c.updateStrategy, parent, observedChildren, desiredChildren); err != nil {
-			manageErr = fmt.Errorf("can't reconcile children for %v %v/%v: %v", parent.GetKind(), parent.GetNamespace(), parent.GetName(), err)
+		err := common.ManageChildren(
+			c.dynCliSet, c.updateStrategy, parent, observedChildren, desiredChildren,
+		)
+		if err != nil {
+			manageErr = errors.Wrapf(
+				err,
+				"can't reconcile children for %v %v/%v",
+				parent.GetKind(), parent.GetNamespace(), parent.GetName(),
+			)
 		}
 	}
 
 	return manageErr
 }
 
-func (c *decoratorController) getChildren(parent *unstructured.Unstructured) (common.ChildMap, error) {
+func (c *decoratorController) getChildren(
+	parent *unstructured.Unstructured,
+) (common.ChildMap, error) {
 	parentUID := parent.GetUID()
 	parentNamespace := parent.GetNamespace()
 	childMap := make(common.ChildMap)
 
-	for _, child := range c.dc.Spec.Attachments {
+	for _, child := range c.api.Spec.Attachments {
 		// List all objects of the child kind in the parent object's namespace,
 		// or in all namespaces if the parent is cluster-scoped.
 		informer := c.childInformers.Get(child.APIVersion, child.Resource)
 		if informer == nil {
-			return nil, fmt.Errorf("no informer for resource %q in apiVersion %q", child.Resource, child.APIVersion)
+			return nil, errors.Errorf(
+				"no informer for resource %q in apiVersion %q",
+				child.Resource, child.APIVersion,
+			)
 		}
 		var all []*unstructured.Unstructured
 		var err error
@@ -607,13 +653,21 @@ func (c *decoratorController) getChildren(parent *unstructured.Unstructured) (co
 			all, err = informer.Lister().List(labels.Everything())
 		}
 		if err != nil {
-			return nil, fmt.Errorf("can't list children for resource %q in apiVersion %q: %v", child.Resource, child.APIVersion, err)
+			return nil, errors.Wrapf(
+				err,
+				"can't list children for resource %q in apiVersion %q",
+				child.Resource, child.APIVersion,
+			)
 		}
 
 		// Always include the requested groups, even if there are no entries.
 		resource := c.resources.Get(child.APIVersion, child.Resource)
 		if resource == nil {
-			return nil, fmt.Errorf("can't find resource %q in apiVersion %q", child.Resource, child.APIVersion)
+			return nil, errors.Errorf(
+				"can't find resource %q in apiVersion %q",
+				child.Resource,
+				child.APIVersion,
+			)
 		}
 		childMap.InitGroup(child.APIVersion, resource.Kind)
 
@@ -624,7 +678,7 @@ func (c *decoratorController) getChildren(parent *unstructured.Unstructured) (co
 			if controllerRef == nil || controllerRef.UID != parentUID {
 				continue
 			}
-			if obj.GetAnnotations()[decoratorControllerAnnotation] != c.dc.Name {
+			if obj.GetAnnotations()[decoratorControllerAnnotation] != c.api.Name {
 				continue
 			}
 			childMap.Insert(parent, obj)
@@ -633,16 +687,22 @@ func (c *decoratorController) getChildren(parent *unstructured.Unstructured) (co
 	return childMap, nil
 }
 
+// holds update strategies of various resources
 type updateStrategyMap map[string]*v1alpha1.DecoratorControllerAttachmentUpdateStrategy
 
+// GetMethod returns the upgrade strategy based on
+// the given api group & kind
 func (m updateStrategyMap) GetMethod(apiGroup, kind string) v1alpha1.ChildUpdateMethod {
 	strategy := m.get(apiGroup, kind)
 	if strategy == nil || strategy.Method == "" {
+		// default
 		return v1alpha1.ChildUpdateOnDelete
 	}
 	return strategy.Method
 }
 
+// get returns the controller's attachment's upgrade strategy
+// based on the given api group & kind
 func (m updateStrategyMap) get(apiGroup, kind string) *v1alpha1.DecoratorControllerAttachmentUpdateStrategy {
 	return m[updateStrategyMapKey(apiGroup, kind)]
 }
@@ -651,14 +711,24 @@ func updateStrategyMapKey(apiGroup, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiGroup)
 }
 
-func makeUpdateStrategyMap(resources *dynamicdiscovery.ResourceMap, dc *v1alpha1.DecoratorController) (updateStrategyMap, error) {
+func makeUpdateStrategyMap(
+	resources *dynamicdiscovery.ResourceMap,
+	dc *v1alpha1.DecoratorController,
+) (updateStrategyMap, error) {
 	m := make(updateStrategyMap)
 	for _, child := range dc.Spec.Attachments {
-		if child.UpdateStrategy != nil && child.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
-			// Map resource name to kind name.
+		// no need to store ondelete strategy since
+		// its the default anyways
+		if child.UpdateStrategy != nil &&
+			child.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
+			// this is done to map resource name to kind name
 			resource := resources.Get(child.APIVersion, child.Resource)
 			if resource == nil {
-				return nil, fmt.Errorf("can't find child resource %q in %v", child.Resource, child.APIVersion)
+				return nil, errors.Errorf(
+					"can't find child resource %q in %v",
+					child.Resource,
+					child.APIVersion,
+				)
 			}
 			// Ignore API version.
 			apiGroup, _ := common.ParseAPIVersion(child.APIVersion)
@@ -676,16 +746,21 @@ func parentQueueKey(obj interface{}) (string, error) {
 	case cache.ExplicitKey:
 		return string(o), nil
 	case *unstructured.Unstructured:
-		return fmt.Sprintf("%s:%s:%s:%s", o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName()), nil
+		return fmt.Sprintf(
+			"%s:%s:%s:%s", o.GetAPIVersion(), o.GetKind(), o.GetNamespace(), o.GetName(),
+		), nil
 	default:
-		return "", fmt.Errorf("can't get key for object of type %T; expected *unstructured.Unstructured", obj)
+		return "", errors.Errorf(
+			"can't get key for object of type %T; expected *unstructured.Unstructured",
+			obj,
+		)
 	}
 }
 
 func splitParentQueueKey(key string) (apiVersion, kind, namespace, name string, err error) {
 	parts := strings.SplitN(key, ":", 4)
 	if len(parts) != 4 {
-		return "", "", "", "", fmt.Errorf("invalid parent key: %q", key)
+		return "", "", "", "", errors.Errorf("invalid parent key: %q", key)
 	}
 	return parts[0], parts[1], parts[2], parts[3], nil
 }

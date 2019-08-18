@@ -52,7 +52,7 @@ func NewSharedInformerFactory(
 	}
 }
 
-// Resource returns a dynamic informer and lister for the given resource.
+// GetOrCreate returns a dynamic informer and lister for the given resource.
 // These are shared with any other controllers in the same process that
 // request the same resource.
 //
@@ -60,7 +60,7 @@ func NewSharedInformerFactory(
 // Close() on the returned ResourceInformer when they no longer need it.
 // Shared informers that become unused will be stopped to minimize our load on
 // the API server.
-func (f *SharedInformerFactory) Resource(apiVersion, resource string) (*ResourceInformer, error) {
+func (f *SharedInformerFactory) GetOrCreate(apiVersion, resource string) (*ResourceInformer, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 

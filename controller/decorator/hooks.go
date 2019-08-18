@@ -48,7 +48,7 @@ type SyncHookResponse struct {
 }
 
 func (c *decoratorController) callSyncHook(request *SyncHookRequest) (*SyncHookResponse, error) {
-	if c.dc.Spec.Hooks == nil {
+	if c.api.Spec.Hooks == nil {
 		return nil, fmt.Errorf("no hooks defined")
 	}
 
@@ -62,21 +62,21 @@ func (c *decoratorController) callSyncHook(request *SyncHookRequest) (*SyncHookR
 	// when the object no longer matches our decorator selector.
 	// This allows the decorator to clean up after itself if the object has been
 	// updated to disable the functionality added by the decorator.
-	if c.dc.Spec.Hooks.Finalize != nil &&
+	if c.api.Spec.Hooks.Finalize != nil &&
 		(request.Object.GetDeletionTimestamp() != nil || !c.parentSelector.Matches(request.Object)) {
 		// Finalize
 		request.Finalizing = true
-		if err := hooks.Call(c.dc.Spec.Hooks.Finalize, request, &response); err != nil {
+		if err := hooks.Call(c.api.Spec.Hooks.Finalize, request, &response); err != nil {
 			return nil, fmt.Errorf("finalize hook failed: %v", err)
 		}
 	} else {
 		// Sync
 		request.Finalizing = false
-		if c.dc.Spec.Hooks.Sync == nil {
+		if c.api.Spec.Hooks.Sync == nil {
 			return nil, fmt.Errorf("sync hook not defined")
 		}
 
-		if err := hooks.Call(c.dc.Spec.Hooks.Sync, request, &response); err != nil {
+		if err := hooks.Call(c.api.Spec.Hooks.Sync, request, &response); err != nil {
 			return nil, fmt.Errorf("sync hook failed: %v", err)
 		}
 	}
