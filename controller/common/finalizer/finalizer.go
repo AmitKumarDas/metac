@@ -1,4 +1,5 @@
 /*
+Copyright 2019 The MayaData Authors.
 Copyright 2018 Google Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,13 +25,20 @@ import (
 	dynamicobject "openebs.io/metac/dynamic/object"
 )
 
-// Manager encapsulates controller logic for dealing with finalizers.
+// Manager encapsulates controller logic for dealing with
+// any specific finalizer.
+//
+// TODO (@amitkumardas) Move this to dynamic pkg to
+// let dynamic pkg be used as a library by other
+// projects
 type Manager struct {
+	// Name of the finalizer that needs to be managed
 	Name    string
 	Enabled bool
 }
 
-// SyncObject adds or removes the finalizer on the given object as necessary.
+// SyncObject adds or removes the finalizer on the given object
+// as necessary.
 func (m *Manager) SyncObject(
 	client *dynamicclientset.ResourceClient,
 	obj *unstructured.Unstructured,
@@ -52,8 +60,9 @@ func (m *Manager) SyncObject(
 	return client.Namespace(obj.GetNamespace()).RemoveFinalizer(obj, m.Name)
 }
 
-// ShouldFinalize returns true if the controller should take action to manage
-// children even though the parent is pending deletion (i.e. finalize).
+// ShouldFinalize returns true if the controller should take action
+// to manage children even though the parent is pending deletion
+// (i.e. finalize).
 func (m *Manager) ShouldFinalize(parent metav1.Object) bool {
 	// There's no point managing children if the parent has a GC finalizer,
 	// because we'd be fighting the GC.

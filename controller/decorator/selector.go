@@ -29,15 +29,30 @@ import (
 	dynamicdiscovery "openebs.io/metac/dynamic/discovery"
 )
 
+// selector options supported by decorator controller
+//
+// TODO (@amitkumardas) Provide useful unit tests that help
+// to:
+//	1/ eliminate wrong logic
+//	2/ enable contributors to understand the logic
+//	3/ add/update new logic without injecting bugs
+//
+// TODO (@amitkumardas) Check if this can be a common package
+// perhaps in dynamic package that in turn can be used as a
+// library by other projects.
 type decoratorSelector struct {
 	labelSelectors      map[string]labels.Selector
 	annotationSelectors map[string]labels.Selector
 }
 
+// newDecoratorSelector returns a new instance of decorator
+// selector based on the provided resources and decorator
+// controller
 func newDecoratorSelector(
 	resources *dynamicdiscovery.ResourceMap,
 	dc *v1alpha1.DecoratorController,
 ) (*decoratorSelector, error) {
+	// init
 	ds := &decoratorSelector{
 		labelSelectors:      make(map[string]labels.Selector),
 		annotationSelectors: make(map[string]labels.Selector),
@@ -45,7 +60,7 @@ func newDecoratorSelector(
 	var err error
 
 	for _, parent := range dc.Spec.Resources {
-		// Keep the map by Group and Kind. Ignore Version.
+		// fetch the resource from the discovered set
 		resource := resources.Get(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
@@ -96,6 +111,8 @@ func newDecoratorSelector(
 	return ds, nil
 }
 
+// Matches flags if the provided unstruct instance match the
+// selectors that were set previously
 func (ds *decoratorSelector) Matches(obj *unstructured.Unstructured) bool {
 	// Look up the label and annotation selectors for this object.
 	// Use only Group and Kind. Ignore Version.
@@ -105,11 +122,16 @@ func (ds *decoratorSelector) Matches(obj *unstructured.Unstructured) bool {
 	labelSelector := ds.labelSelectors[key]
 	annotationSelector := ds.annotationSelectors[key]
 	if labelSelector == nil || annotationSelector == nil {
-		// This object is not a kind we care about, so it doesn't match.
+		// This object is not a kind we care about, so it doesn't match
+		// It is very strict in the sense that the given unstruct instance
+		// must provide a selector (earlier) to be considered as a
+		// successful match
 		return false
 	}
 
 	// It must match both selectors.
+	//
+	// note: annotations are translated into labels here
 	return labelSelector.Matches(labels.Set(obj.GetLabels())) &&
 		annotationSelector.Matches(labels.Set(obj.GetAnnotations()))
 }

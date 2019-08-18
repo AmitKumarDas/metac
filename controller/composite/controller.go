@@ -70,7 +70,7 @@ type parentController struct {
 func newParentController(
 	resources *dynamicdiscovery.ResourceMap,
 	dynClient *dynamicclientset.Clientset,
-	dynInformers *dynamicinformer.SharedInformerFactory,
+	informerFactory *dynamicinformer.SharedInformerFactory,
 	mcClient mcclientset.Interface,
 	revisionLister mclisters.ControllerRevisionLister,
 	cc *v1alpha1.CompositeController,
@@ -91,7 +91,7 @@ func newParentController(
 	}
 
 	// Create informer for the parent resource.
-	parentInformer, err := dynInformers.Resource(
+	parentInformer, err := informerFactory.GetOrCreate(
 		cc.Spec.ParentResource.APIVersion,
 		cc.Spec.ParentResource.Resource,
 	)
@@ -112,7 +112,10 @@ func newParentController(
 		}
 	}()
 	for _, child := range cc.Spec.ChildResources {
-		childInformer, err := dynInformers.Resource(child.APIVersion, child.Resource)
+		childInformer, err := informerFactory.GetOrCreate(
+			child.APIVersion,
+			child.Resource,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("can't create informer for child resource: %v", err)
 		}

@@ -98,8 +98,10 @@ func (ri *ResourceInformer) Close() {
 // sharedResourceInformer is the actual, single informer that's shared by
 // multiple ResourceInformer instances.
 type sharedResourceInformer struct {
+	// informer to the specific API resource
 	informer cache.SharedIndexInformer
-	lister   *dynamiclister.Lister
+	// lister to the specific API resource
+	lister *dynamiclister.Lister
 
 	defaultResyncPeriod time.Duration
 
@@ -153,7 +155,9 @@ type sharedEventHandler struct {
 	handlers map[*informerWrapper][]*eventHandler
 }
 
-func newSharedEventHandler(lister *dynamiclister.Lister, relistPeriod time.Duration) *sharedEventHandler {
+func newSharedEventHandler(
+	lister *dynamiclister.Lister, relistPeriod time.Duration,
+) *sharedEventHandler {
 	return &sharedEventHandler{
 		lister:       lister,
 		relistPeriod: relistPeriod,
@@ -163,7 +167,11 @@ func newSharedEventHandler(lister *dynamiclister.Lister, relistPeriod time.Durat
 
 // addHandler adds a subscriber, remembering which informerWrapper it came from.
 // This lets us easily remove all handlers added through the same source.
-func (seh *sharedEventHandler) addHandler(iw *informerWrapper, handler cache.ResourceEventHandler, resyncPeriod time.Duration) {
+func (seh *sharedEventHandler) addHandler(
+	iw *informerWrapper,
+	handler cache.ResourceEventHandler,
+	resyncPeriod time.Duration,
+) {
 	seh.mutex.Lock()
 	defer seh.mutex.Unlock()
 

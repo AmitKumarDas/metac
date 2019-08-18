@@ -30,9 +30,9 @@ import (
 	dynamicobject "openebs.io/metac/dynamic/object"
 )
 
-// Clientset exposes various operations against any API resource.
-// This is also known as dynamic client since it can cater to
-// any API resource kind and version.
+// Clientset manages various k8s client related operations against one
+// or more discovered API resource(s). Clientset has the ability to
+// provide dynamic client for specific resource.
 type Clientset struct {
 	config    rest.Config
 	resources *dynamicdiscovery.ResourceMap
