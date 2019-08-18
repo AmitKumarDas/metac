@@ -1,5 +1,6 @@
-# Metac
-It is metacontroller and more. This will have additional custom resources as required by OpenEBS.
+# Metac `pronounced [meta-see]`
+It is metacontroller and more. This has additional custom resources as required by OpenEBS. It will also package itself to be imported as a library by other Kubernetes operator based projects.
+
 Metac follows the same licensing as that of Metacontroller i.e. [Apache License 2.0](LICENSE).
 
 The original metacontroller project details is listed below.
