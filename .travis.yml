@@ -16,7 +16,7 @@ go:
 
 cache:
   directories:
-  - vendor
+  - $GOPATH/pkg/mod
 
 addons:
   apt:
