@@ -48,6 +48,8 @@ type decoratorSelector struct {
 // newDecoratorSelector returns a new instance of decorator
 // selector based on the provided resources and decorator
 // controller
+//
+// TODO (@amitkumardas) Should this be renamed to newParentSelector
 func newDecoratorSelector(
 	resources *dynamicdiscovery.ResourceMap,
 	dc *v1alpha1.DecoratorController,
@@ -59,12 +61,15 @@ func newDecoratorSelector(
 	}
 	var err error
 
+	// resources are the parents in decorator controller
 	for _, parent := range dc.Spec.Resources {
 		// fetch the resource from the discovered set
 		resource := resources.Get(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
-				"can't find resource %q in apiVersion %q", parent.Resource, parent.APIVersion,
+				"can't find parent resource %q in apiVersion %q",
+				parent.Resource,
+				parent.APIVersion,
 			)
 		}
 		key := selectorMapKey(resource.Group, resource.Kind)

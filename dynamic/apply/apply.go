@@ -33,9 +33,11 @@ import (
 )
 
 const (
-	lastAppliedAnnotation = "metacontroller.k8s.io/last-applied-configuration"
+	lastAppliedAnnotation = "metac.openebs.io/last-applied-configuration"
 )
 
+// SetLastApplied sets the last applied state against a predefined annotation
+// key
 func SetLastApplied(obj *unstructured.Unstructured, lastApplied map[string]interface{}) error {
 	lastAppliedJSON, err := json.Marshal(lastApplied)
 	if err != nil {
@@ -51,6 +53,7 @@ func SetLastApplied(obj *unstructured.Unstructured, lastApplied map[string]inter
 	return nil
 }
 
+// GetLastApplied returns the last applied state from a predefined annotation
 func GetLastApplied(obj *unstructured.Unstructured) (map[string]interface{}, error) {
 	lastAppliedJSON := obj.GetAnnotations()[lastAppliedAnnotation]
 	if lastAppliedJSON == "" {

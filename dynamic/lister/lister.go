@@ -61,7 +61,8 @@ func (l *Lister) ListNamespace(
 	return ret, err
 }
 
-// Get returns the specific instance of API resource
+// Get returns the specific instance of API resource as an unstructured
+// instance
 func (l *Lister) Get(namespace, name string) (*unstructured.Unstructured, error) {
 	key := name
 	if namespace != "" {
