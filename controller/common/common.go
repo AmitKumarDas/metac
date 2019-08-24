@@ -127,7 +127,7 @@ func (m ChildMap) List() []*unstructured.Unstructured {
 // `attachments` field of  the  DecoratorControllers SyncRequest.
 //
 // This function returns a ChildMap which is a map of maps. The outer most map
-// is keyed  using the child's type and the inner map is keyed using the
+// is keyed using the child's type and the inner map is keyed using the
 // child's name. If the parent resource is clustered and the child resource
 // is namespaced the inner map's keys are prefixed by the namespace of the
 // child resource.

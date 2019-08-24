@@ -138,6 +138,9 @@ type ChildUpdateStrategy interface {
 
 // ManageChildren ensures the relevant children objects of the
 // given parent are in sync
+//
+// TODO (@amitkumardas) deprecate this in favour of
+// ControllerManager's Apply method
 func ManageChildren(
 	dynClient *dynamicclientset.Clientset,
 	updateStrategy ChildUpdateStrategy,
@@ -185,6 +188,8 @@ func ManageChildren(
 	return utilerrors.NewAggregate(errs)
 }
 
+// TODO (@amitkumardas) deprecate this in favour of
+// ControllerManager's Delete method
 func deleteChildren(
 	client *dynamicclientset.ResourceClient,
 	parent *unstructured.Unstructured,
@@ -216,6 +221,8 @@ func deleteChildren(
 	return utilerrors.NewAggregate(errs)
 }
 
+// TODO (@amitkumardas) deprecate this in favour of
+// ControllerManager's Update method
 func updateChildren(
 	client *dynamicclientset.ResourceClient,
 	updateStrategy ChildUpdateStrategy,
