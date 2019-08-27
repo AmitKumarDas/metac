@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,12 +40,12 @@ import (
 )
 
 const (
-	labelKeyAPIGroup = "metacontroller.k8s.io/apiGroup"
-	labelKeyResource = "metacontroller.k8s.io/resource"
+	labelKeyAPIGroup = "metac.openebs.io/apiGroup"
+	labelKeyResource = "metac.openebs.io/resource"
 )
 
-// claimRevisions returns the list of controller revisions
-// based on the given parent object
+// claimRevisions claims the controller revisions
+// based on the given parent resource
 func (pc *parentController) claimRevisions(
 	parent *unstructured.Unstructured,
 ) ([]*v1alpha1.ControllerRevision, error) {
@@ -70,11 +71,11 @@ func (pc *parentController) claimRevisions(
 	}
 
 	// Handle orphan/adopt and filter by owner+selector.
-	client := pc.mcClient.MetacontrollerV1alpha1().ControllerRevisions(parent.GetNamespace())
-	crm := dynamiccontrollerref.NewControllerRevisionManager(
+	client := pc.mcClientSet.MetacontrollerV1alpha1().ControllerRevisions(parent.GetNamespace())
+	crm := dynamiccontrollerref.NewControllerRevisionClaimManager(
 		client, parent, selector, parentGVK, canAdoptFunc,
 	)
-	revisions, err := crm.ClaimControllerRevisions(all)
+	revisions, err := crm.BulkClaim(all)
 	if err != nil {
 		return nil, fmt.Errorf("can't claim ControllerRevisions: %v", err)
 	}
@@ -92,13 +93,19 @@ func (pc *parentController) syncRevisions(
 	if !pc.updateStrategy.anyRolling() ||
 		(parent.GetDeletionTimestamp() != nil && !pc.finalizer.ShouldFinalize(parent)) {
 		syncRequest := &SyncHookRequest{
-			Controller: pc.cc,
+			Controller: pc.api,
 			Parent:     parent,
 			Children:   observedChildren,
 		}
-		syncResult, err := callSyncHook(pc.cc, syncRequest)
+		syncResult, err := callSyncHook(pc.api, syncRequest)
 		if err != nil {
-			return nil, fmt.Errorf("sync hook failed for %v %v/%v: %v", pc.parentResource.Kind, parent.GetNamespace(), parent.GetName(), err)
+			return nil, errors.Wrapf(
+				err,
+				"%s: sync hook failed for %v/%v",
+				pc,
+				parent.GetNamespace(),
+				parent.GetName(),
+			)
 		}
 		return syncResult, nil
 	}
@@ -113,7 +120,7 @@ func (pc *parentController) syncRevisions(
 	// said are relevant for revision history.
 	// If nothing was specified, default to all of "spec".
 	var fieldPaths []string
-	if rh := pc.cc.Spec.ParentResource.RevisionHistory; rh != nil && len(rh.FieldPaths) > 0 {
+	if rh := pc.api.Spec.ParentResource.RevisionHistory; rh != nil && len(rh.FieldPaths) > 0 {
 		fieldPaths = rh.FieldPaths
 	} else {
 		fieldPaths = []string{"spec"}
@@ -164,11 +171,11 @@ func (pc *parentController) syncRevisions(
 			defer wg.Done()
 
 			syncRequest := &SyncHookRequest{
-				Controller: pc.cc,
+				Controller: pc.api,
 				Parent:     pr.parent,
 				Children:   observedChildren,
 			}
-			syncResult, err := callSyncHook(pc.cc, syncRequest)
+			syncResult, err := callSyncHook(pc.api, syncRequest)
 			if err != nil {
 				pr.syncError = err
 				return
@@ -255,7 +262,7 @@ func (pc *parentController) syncRevisions(
 }
 
 func (pc *parentController) manageRevisions(parent *unstructured.Unstructured, observedRevisions, desiredRevisions []*v1alpha1.ControllerRevision) error {
-	client := pc.mcClient.MetacontrollerV1alpha1().ControllerRevisions(parent.GetNamespace())
+	client := pc.mcClientSet.MetacontrollerV1alpha1().ControllerRevisions(parent.GetNamespace())
 
 	// Build maps for convenient lookup by object name.
 	observedMap := make(map[string]*v1alpha1.ControllerRevision, len(observedRevisions))
@@ -496,6 +503,7 @@ func (m childClaimMap) setParentRevision(apiGroup, kind, name string, pr *parent
 	claimMap[name] = pr
 }
 
+// claimMapKey joins api group with kind
 func claimMapKey(apiGroup, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiGroup)
 }

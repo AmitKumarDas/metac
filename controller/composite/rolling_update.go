@@ -341,12 +341,15 @@ func isRollingStrategy(strategy *v1alpha1.CompositeControllerChildUpdateStrategy
 	return false
 }
 
+// makeUpdateStrategyMap builds a map of update strategies
+// as declared by composite controller spec. These strategies are
+// achored by group & kind
 func makeUpdateStrategyMap(
 	resources *dynamicdiscovery.ResourceMap,
-	cc *v1alpha1.CompositeController,
+	api *v1alpha1.CompositeController,
 ) (updateStrategyMap, error) {
 	m := make(updateStrategyMap)
-	for _, child := range cc.Spec.ChildResources {
+	for _, child := range api.Spec.ChildResources {
 		if child.UpdateStrategy != nil &&
 			child.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
 			// Map resource name to kind name.
