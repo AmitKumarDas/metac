@@ -18,6 +18,7 @@ package kubernetes
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -45,4 +46,47 @@ func WaitForCacheSync(
 
 	glog.Infof("Caches are synced for controller %q", controllerName)
 	return true
+}
+
+// WaitForCacheSyncFn is a typed function that adheres to
+// cache.WaitForCacheSync signature
+type WaitForCacheSyncFn func(
+	stop <-chan struct{}, isSyncFns ...cache.InformerSynced,
+) bool
+
+// CacheSyncTimeTaken is a decorator around WaitForCacheSyncFn
+// that logs the time taken for all caches to sync for the
+// given controller
+func CacheSyncTimeTaken(
+	controllerName string,
+	fn WaitForCacheSyncFn,
+) WaitForCacheSyncFn {
+	return func(stop <-chan struct{}, isSyncFns ...cache.InformerSynced) bool {
+		start := time.Now()
+		defer glog.Infof(
+			"Controller %s cache sync took %s",
+			controllerName,
+			time.Now().Sub(start),
+		)
+
+		return fn(stop, isSyncFns...)
+	}
+}
+
+// CacheSyncFailureAsError is a decorator around WaitForCacheSyncFn
+// that logs an error if all caches could not be sync-ed for the
+// given controller
+func CacheSyncFailureAsError(
+	controllerName string,
+	fn WaitForCacheSyncFn,
+) WaitForCacheSyncFn {
+	return func(stop <-chan struct{}, isSyncFns ...cache.InformerSynced) bool {
+		synced := fn(stop, isSyncFns...)
+		if !synced {
+			utilruntime.HandleError(fmt.Errorf(
+				"Unable to sync caches for controller %s", controllerName,
+			))
+		}
+		return synced
+	}
 }

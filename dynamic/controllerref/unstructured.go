@@ -1,5 +1,6 @@
 /*
 Copyright 2017 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,9 +18,8 @@ limitations under the License.
 package controllerref
 
 import (
-	"fmt"
-
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,126 +32,132 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// UnstructuredManager manages children of a parent resource
+// UnstructClaimManager manages children of a watched resource
 // by either adopting the children or releasing these children
-type UnstructuredManager struct {
-	k8s.BaseControllerRefManager
-	parentKind schema.GroupVersionKind
-	childKind  schema.GroupVersionKind
-	client     *dynamicclientset.ResourceClient
+//
+// This instance provides the logic of `how to adopt` or `how to
+// release`. `When to adopt` & `when to release` is implemented at
+// the embedded ClaimManager.
+type UnstructClaimManager struct {
+	k8s.ClaimManager
+
+	// kind of attachment resources that needs to be adopted
+	// or released
+	attachmentKind schema.GroupVersionKind
+
+	// dynamic client associated with attachment resource kind
+	attachmentClient *dynamicclientset.ResourceClient
 }
 
-// NewUnstructuredManager returns a new instance of UnstructuredManager
-func NewUnstructuredManager(
-	client *dynamicclientset.ResourceClient,
-	parent metav1.Object,
+// NewUnstructClaimManager returns a new instance of UnstructClaimManager
+func NewUnstructClaimManager(
+	attachmentClient *dynamicclientset.ResourceClient,
+	watched metav1.Object,
 	selector labels.Selector,
-	parentKind,
-	childKind schema.GroupVersionKind,
+	watchedKind,
+	attachmentKind schema.GroupVersionKind,
 	canAdopt func() error,
-) *UnstructuredManager {
-	return &UnstructuredManager{
-		BaseControllerRefManager: k8s.BaseControllerRefManager{
-			Controller:   parent,
+) *UnstructClaimManager {
+	return &UnstructClaimManager{
+		ClaimManager: k8s.ClaimManager{
+			Watched:      watched,
+			WatchedKind:  watchedKind,
 			Selector:     selector,
 			CanAdoptFunc: canAdopt,
 		},
-		parentKind: parentKind,
-		childKind:  childKind,
-		client:     client,
+		attachmentKind:   attachmentKind,
+		attachmentClient: attachmentClient,
 	}
 }
 
-// ClaimChildren manages children of this manager instance by
-// either adopting or releasing a child based on match or
-// nomatch against the provided children instances
-func (m *UnstructuredManager) ClaimChildren(
-	children []*unstructured.Unstructured,
+// String implements Stringer interface
+func (m *UnstructClaimManager) String() string {
+	return m.ClaimManager.String()
+}
+
+// BulkClaim claims the provided list of attachments against
+// this manager instance by either adopting or releasing each
+// attachment based on match or nomatch w.r.t the watched
+// resource.
+func (m *UnstructClaimManager) BulkClaim(
+	attachments []*unstructured.Unstructured,
 ) ([]*unstructured.Unstructured, error) {
 	var claimed []*unstructured.Unstructured
 	var errlist []error
 
-	match := func(obj metav1.Object) bool {
-		return m.Selector.Matches(labels.Set(obj.GetLabels()))
+	match := func(attachment metav1.Object) bool {
+		return m.Selector.Matches(labels.Set(attachment.GetLabels()))
 	}
-	adopt := func(obj metav1.Object) error {
-		return m.adoptChild(obj.(*unstructured.Unstructured))
+	adopt := func(attachment metav1.Object) error {
+		return m.adopt(attachment.(*unstructured.Unstructured))
 	}
-	release := func(obj metav1.Object) error {
-		return m.releaseChild(obj.(*unstructured.Unstructured))
+	release := func(attachment metav1.Object) error {
+		return m.release(attachment.(*unstructured.Unstructured))
 	}
 
-	for _, child := range children {
-		ok, err := m.ClaimObject(child, match, adopt, release)
+	for _, attachment := range attachments {
+		ok, err := m.Claim(attachment, match, adopt, release)
 		if err != nil {
 			errlist = append(errlist, err)
 			continue
 		}
 		if ok {
-			claimed = append(claimed, child)
+			claimed = append(claimed, attachment)
 		}
 	}
 	return claimed, utilerrors.NewAggregate(errlist)
 }
 
-func atomicUpdate(
-	rc *dynamicclientset.ResourceClient,
-	obj *unstructured.Unstructured,
-	updateFunc func(obj *unstructured.Unstructured) bool,
-) error {
-	// We can't use strategic merge patch because we want this to work with custom resources.
-	// We can't use merge patch because that would replace the whole list.
-	// We can't use JSON patch ops because that wouldn't be idempotent.
-	// The only option is GET/PUT with ResourceVersion.
-	_, err := rc.Namespace(obj.GetNamespace()).AtomicUpdate(obj, updateFunc)
-	return err
-}
-
-func (m *UnstructuredManager) adoptChild(obj *unstructured.Unstructured) error {
+// adopt is the logic to adopt the provided attachment to the
+// watched resource of this instance
+func (m *UnstructClaimManager) adopt(attachment *unstructured.Unstructured) error {
 	if err := m.CanAdopt(); err != nil {
-		return fmt.Errorf(
-			"Failed to adopt child %v %v/%v (%v): %v",
-			m.childKind.Kind,
-			obj.GetNamespace(),
-			obj.GetName(),
-			obj.GetUID(),
+		return errors.Wrapf(
 			err,
+			"%s: Failed to adopt child %s/%s (%v)",
+			m,
+			attachment.GetNamespace(),
+			attachment.GetName(),
+			attachment.GetUID(),
 		)
 	}
 	glog.Infof(
-		"%v %v/%v: adopting %v %v",
-		m.parentKind.Kind,
-		m.Controller.GetNamespace(),
-		m.Controller.GetName(),
-		m.childKind.Kind,
-		obj.GetName(),
+		"%s %s/%s: adopting %s/%s (%v)",
+		m,
+		m.Watched.GetNamespace(),
+		m.Watched.GetName(),
+		attachment.GetNamespace(),
+		attachment.GetName(),
+		attachment.GetUID(),
 	)
 	controllerRef := metav1.OwnerReference{
-		APIVersion:         m.parentKind.GroupVersion().String(),
-		Kind:               m.parentKind.Kind,
-		Name:               m.Controller.GetName(),
-		UID:                m.Controller.GetUID(),
+		APIVersion:         m.WatchedKind.GroupVersion().String(),
+		Kind:               m.WatchedKind.Kind,
+		Name:               m.Watched.GetName(),
+		UID:                m.Watched.GetUID(),
 		Controller:         k8s.BoolPtr(true),
 		BlockOwnerDeletion: k8s.BoolPtr(true),
 	}
-	return atomicUpdate(m.client, obj, func(obj *unstructured.Unstructured) bool {
+	return atomicUpdate(m.attachmentClient, attachment, func(obj *unstructured.Unstructured) bool {
 		ownerRefs := addOwnerReference(obj.GetOwnerReferences(), controllerRef)
 		obj.SetOwnerReferences(ownerRefs)
 		return true
 	})
 }
 
-func (m *UnstructuredManager) releaseChild(obj *unstructured.Unstructured) error {
+// release is the logic to release the provided attachment to the
+// watched resource of this instance
+func (m *UnstructClaimManager) release(attachment *unstructured.Unstructured) error {
 	glog.Infof(
-		"%v %v/%v: releasing %v %v",
-		m.parentKind.Kind,
-		m.Controller.GetNamespace(),
-		m.Controller.GetName(),
-		m.childKind.Kind,
-		obj.GetName(),
+		"%s %s/%s: releasing %s/%s",
+		m,
+		m.Watched.GetNamespace(),
+		m.Watched.GetName(),
+		attachment.GetNamespace(),
+		attachment.GetName(),
 	)
-	err := atomicUpdate(m.client, obj, func(obj *unstructured.Unstructured) bool {
-		ownerRefs := removeOwnerReference(obj.GetOwnerReferences(), m.Controller.GetUID())
+	err := atomicUpdate(m.attachmentClient, attachment, func(obj *unstructured.Unstructured) bool {
+		ownerRefs := removeOwnerReference(obj.GetOwnerReferences(), m.Watched.GetUID())
 		obj.SetOwnerReferences(ownerRefs)
 		return true
 	})
@@ -160,5 +166,21 @@ func (m *UnstructuredManager) releaseChild(obj *unstructured.Unstructured) error
 		// because we're giving up on this child anyway
 		return nil
 	}
+	return err
+}
+
+func atomicUpdate(
+	resourceClient *dynamicclientset.ResourceClient,
+	resource *unstructured.Unstructured,
+	updateFunc func(obj *unstructured.Unstructured) bool,
+) error {
+	// We can't use strategic merge patch because we want this to work with
+	// custom resources.
+	// We can't use merge patch because that would replace the whole list.
+	// We can't use JSON patch ops because that wouldn't be idempotent.
+	// The only option is GET/PUT with ResourceVersion.
+	_, err := resourceClient.Namespace(resource.GetNamespace()).AtomicUpdate(
+		resource, updateFunc,
+	)
 	return err
 }

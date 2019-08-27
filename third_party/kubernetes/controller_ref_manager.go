@@ -1,9 +1,13 @@
 /*
 Copyright 2016 The Kubernetes Authors.
+Copyright 2019 The MayaData Authors.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,29 +21,55 @@ package kubernetes
 // TODO(enisoc): Move the upstream code to somewhere better.
 
 import (
+	"fmt"
 	"sync"
 
-	"fmt"
-
-	"k8s.io/apimachinery/pkg/api/errors"
+	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// BaseControllerRefManager handles operations related
-// to kubernetes controllers
-type BaseControllerRefManager struct {
-	Controller metav1.Object
-	Selector   labels.Selector
+// ClaimManager adopts orphans or releases owned
+// resources. These owned or orphaned resources is
+// referred to as attachments.
+//
+// NOTE:
+//	Claiming resources is part of the overall reconciliation
+// process to get to the desired state of the system.
+type ClaimManager struct {
+	// resource that is watched to have its attachments
+	// claimed
+	Watched metav1.Object
+
+	// kind of the resource that is being watched
+	WatchedKind schema.GroupVersionKind
+
+	// selector to be used to filter the attachments that
+	// belong / should belong to the watched resource
+	Selector labels.Selector
 
 	canAdoptErr  error
 	canAdoptOnce sync.Once
 	CanAdoptFunc func() error
 }
 
+func (m *ClaimManager) String() string {
+	if m.Watched == nil {
+		return fmt.Sprintf("ClaimManager %s", m.WatchedKind.Kind)
+	}
+	return fmt.Sprintf(
+		"ClaimManager %s %s/%s",
+		m.WatchedKind.Kind,
+		m.Watched.GetNamespace(),
+		m.Watched.GetName(),
+	)
+}
+
 // CanAdopt runs this instance's adopt function and returns
 // the corresponding error if any
-func (m *BaseControllerRefManager) CanAdopt() error {
+func (m *ClaimManager) CanAdopt() error {
 	m.canAdoptOnce.Do(func() {
 		if m.CanAdoptFunc != nil {
 			m.canAdoptErr = m.CanAdoptFunc()
@@ -48,7 +78,7 @@ func (m *BaseControllerRefManager) CanAdopt() error {
 	return m.canAdoptErr
 }
 
-// ClaimObject tries to take ownership of an object for this controller.
+// Claim tries to take ownership of an object for this watched resource.
 //
 // It will reconcile the following:
 //   * Adopt orphans if the match function returns true.
@@ -62,15 +92,15 @@ func (m *BaseControllerRefManager) CanAdopt() error {
 // reconciliation was necessary. The returned boolean indicates whether you now
 // own the object.
 //
-// No reconciliation will be attempted if the controller is being deleted.
-func (m *BaseControllerRefManager) ClaimObject(
+// No reconciliation will be attempted if the watched resource is being deleted.
+func (m *ClaimManager) Claim(
 	obj metav1.Object,
 	match func(metav1.Object) bool,
 	adopt, release func(metav1.Object) error,
 ) (bool, error) {
 	controllerRef := metav1.GetControllerOf(obj)
 	if controllerRef != nil {
-		if controllerRef.UID != m.Controller.GetUID() {
+		if controllerRef.UID != m.Watched.GetUID() {
 			// Owned by someone else. Ignore.
 			return false, nil
 		}
@@ -84,12 +114,12 @@ func (m *BaseControllerRefManager) ClaimObject(
 		}
 		// Owned by us but selector doesn't match.
 		// Try to release, unless we're being deleted.
-		if m.Controller.GetDeletionTimestamp() != nil {
+		if m.Watched.GetDeletionTimestamp() != nil {
 			return false, nil
 		}
 		if err := release(obj); err != nil {
-			// If the pod no longer exists, ignore the error.
-			if errors.IsNotFound(err) {
+			// If the object no longer exists, ignore the error.
+			if kerrors.IsNotFound(err) {
 				return false, nil
 			}
 			// Either someone else released it, or there was a transient error.
@@ -101,7 +131,7 @@ func (m *BaseControllerRefManager) ClaimObject(
 	}
 
 	// It's an orphan.
-	if m.Controller.GetDeletionTimestamp() != nil || !match(obj) {
+	if m.Watched.GetDeletionTimestamp() != nil || !match(obj) {
 		// Ignore if we're being deleted or selector doesn't match.
 		return false, nil
 	}
@@ -111,8 +141,8 @@ func (m *BaseControllerRefManager) ClaimObject(
 	}
 	// Selector matches. Try to adopt.
 	if err := adopt(obj); err != nil {
-		// If the pod no longer exists, ignore the error.
-		if errors.IsNotFound(err) {
+		// If the object no longer exists, ignore the error.
+		if kerrors.IsNotFound(err) {
 			return false, nil
 		}
 		// Either someone else claimed it first, or there was a transient error.
@@ -123,19 +153,17 @@ func (m *BaseControllerRefManager) ClaimObject(
 	return true, nil
 }
 
-// RecheckDeletionTimestamp returns a CanAdopt() function to recheck deletion.
-//
-// The CanAdopt() function calls getObject() to fetch the latest value,
-// and denies adoption attempts if that object has a non-nil DeletionTimestamp.
-func RecheckDeletionTimestamp(getObject func() (metav1.Object, error)) func() error {
+// ErrorOnDeletionTimestamp returns a function that errors if
+// provided object has a deletion timestamp on it
+func ErrorOnDeletionTimestamp(getObject func() (metav1.Object, error)) func() error {
 	return func() error {
 		obj, err := getObject()
 		if err != nil {
-			return fmt.Errorf("Failed to recheck DeletionTimestamp: %v", err)
+			return err
 		}
 		if obj.GetDeletionTimestamp() != nil {
-			return fmt.Errorf(
-				"%v/%v has just been deleted at %v",
+			return errors.Errorf(
+				"%s/%s has just been deleted at %s",
 				obj.GetNamespace(),
 				obj.GetName(),
 				obj.GetDeletionTimestamp(),

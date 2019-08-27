@@ -1,5 +1,6 @@
 /*
 Copyright 2017 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -155,7 +156,7 @@ func (rc *ResourceClient) Namespace(namespace string) *ResourceClient {
 // with the update, or false if no update is required.
 func (rc *ResourceClient) AtomicUpdate(
 	orig *unstructured.Unstructured,
-	update func(obj *unstructured.Unstructured) bool,
+	updateFunc func(obj *unstructured.Unstructured) bool,
 ) (result *unstructured.Unstructured, err error) {
 	name := orig.GetName()
 
@@ -168,7 +169,7 @@ func (rc *ResourceClient) AtomicUpdate(
 			// The original object was deleted and replaced with a new one.
 			return apierrors.NewNotFound(rc.GroupResource(), name)
 		}
-		if changed := update(current); !changed {
+		if changed := updateFunc(current); !changed {
 			// There's nothing to do.
 			result = current
 			return nil

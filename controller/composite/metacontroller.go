@@ -172,7 +172,7 @@ func (mc *Metacontroller) sync(key string) error {
 func (mc *Metacontroller) syncCompositeController(cc *v1alpha1.CompositeController) error {
 	if pc, ok := mc.parentControllers[cc.Name]; ok {
 		// The controller was already started.
-		if apiequality.Semantic.DeepEqual(cc.Spec, pc.cc.Spec) {
+		if apiequality.Semantic.DeepEqual(cc.Spec, pc.api.Spec) {
 			// Nothing has changed.
 			return nil
 		}
