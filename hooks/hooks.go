@@ -1,5 +1,6 @@
 /*
 Copyright 2018 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,16 +18,43 @@ limitations under the License.
 package hooks
 
 import (
-	"fmt"
-
-	"openebs.io/metac/apis/metacontroller/v1alpha1"
+	"github.com/pkg/errors"
 )
 
-// Call invokes the given hook by providing it with the
-// passed request & response structure
-func Call(hook *v1alpha1.Hook, request interface{}, response interface{}) error {
-	if hook.Webhook != nil {
-		return callWebhook(hook.Webhook, request, response)
+// HookCaller enables invocation of appropriate hook
+type HookCaller struct {
+	CallFunc func(request, response interface{}) error
+}
+
+// HookCallerOption is a typed function that helps in building
+// up the HookCaller instance
+//
+// This follows the pattern called "functional options"
+type HookCallerOption func(*HookCaller) error
+
+// NewHookCaller returns a new instance of HookCaller
+// This requires at-least one option to be sent from
+// its callers.
+func NewHookCaller(
+	must HookCallerOption, others ...HookCallerOption,
+) (*HookCaller, error) {
+
+	var options = []HookCallerOption{must}
+	options = append(options, others...)
+
+	c := &HookCaller{}
+	for _, o := range options {
+		o(c)
 	}
-	return fmt.Errorf("Failed to invoke hook: missing hook spec")
+
+	if c.CallFunc == nil {
+		return nil,
+			errors.Errorf("Invalid hook: Nil CallFunc")
+	}
+	return c, nil
+}
+
+// Call invokes the hook
+func (c *HookCaller) Call(request, response interface{}) error {
+	return c.CallFunc(request, response)
 }

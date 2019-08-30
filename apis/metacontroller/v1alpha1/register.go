@@ -51,8 +51,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&DecoratorControllerList{},
 		&ControllerRevision{},
 		&ControllerRevisionList{},
-		&WorkflowController{},
-		&WorkflowControllerList{},
+		&GenericController{},
+		&GenericControllerList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

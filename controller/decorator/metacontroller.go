@@ -159,7 +159,7 @@ func (mc *Metacontroller) sync(key string) error {
 func (mc *Metacontroller) syncDecoratorController(dc *v1alpha1.DecoratorController) error {
 	if c, ok := mc.decoratorControllers[dc.Name]; ok {
 		// The controller was already started.
-		if apiequality.Semantic.DeepEqual(dc.Spec, c.api.Spec) {
+		if apiequality.Semantic.DeepEqual(dc.Spec, c.schema.Spec) {
 			// Nothing has changed.
 			return nil
 		}

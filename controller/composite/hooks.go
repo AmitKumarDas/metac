@@ -24,7 +24,6 @@ import (
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/common"
-	"openebs.io/metac/hooks"
 )
 
 // SyncHookRequest is the object sent as JSON to the sync hook.
@@ -35,22 +34,30 @@ type SyncHookRequest struct {
 	Finalizing bool                          `json:"finalizing"`
 }
 
-func (req SyncHookRequest) String() string {
-	if req.Parent == nil || req.Controller == nil {
-		return ""
+// String implements Stringer interface
+func (r *SyncHookRequest) String() string {
+	if r.Parent == nil {
+		return "SyncHookRequest"
 	}
 	return fmt.Sprintf(
-		"composite controller %s/%s of %s: parent %s/%s of %s",
-		req.Controller.Namespace,
-		req.Controller.Name,
-		req.Controller.GroupVersionKind(),
-		req.Parent.GetNamespace(),
-		req.Parent.GetName(),
-		req.Parent.GroupVersionKind(),
+		"SyncHookRequest %s/%s of %s",
+		r.Parent.GetNamespace(), r.Parent.GetName(), r.Parent.GroupVersionKind(),
 	)
 }
 
-// SyncHookResponse is the expected format of the JSON response from the sync hook.
+// NewSyncHookRequest returns a new instance of SyncHookRequest
+func NewSyncHookRequest(
+	parent *unstructured.Unstructured,
+	children common.ChildMap,
+) *SyncHookRequest {
+	return &SyncHookRequest{
+		Parent:   parent,
+		Children: children,
+	}
+}
+
+// SyncHookResponse is the expected format of the JSON response
+// from the sync hook.
 type SyncHookResponse struct {
 	Status   map[string]interface{}       `json:"status"`
 	Children []*unstructured.Unstructured `json:"children"`
@@ -61,36 +68,64 @@ type SyncHookResponse struct {
 	Finalized bool `json:"finalized"`
 }
 
-func callSyncHook(
-	cc *v1alpha1.CompositeController,
-	request *SyncHookRequest,
-) (*SyncHookResponse, error) {
-	if cc.Spec.Hooks == nil {
-		return nil, errors.Errorf("no hooks defined at %s", request)
-	}
+// HookExecutor can execute a hook
+type HookExecutor struct {
+	Controller *v1alpha1.CompositeController
+}
 
-	var response SyncHookResponse
+// String implements Stringer interface
+func (e *HookExecutor) String() string {
+	if e.Controller == nil {
+		return "HookExecutor"
+	}
+	return fmt.Sprintf(
+		"HookExecutor %s/%s of %s",
+		e.Controller.Namespace, e.Controller.Name, e.Controller.Kind,
+	)
+}
+
+// Execute invokes the hook for the given request
+func (e *HookExecutor) Execute(req *SyncHookRequest) (*SyncHookResponse, error) {
+	if e.Controller == nil || e.Controller.Spec.Hooks == nil {
+		return nil, errors.Errorf("%s: Execute failed: Nil hooks", e)
+	}
+	req.Controller = e.Controller
+
+	var resp SyncHookResponse
 
 	// First check if we should instead call the finalize hook,
 	// which has the same API as the sync hook except that it's
 	// called while the object is pending deletion.
-	if request.Parent.GetDeletionTimestamp() != nil && cc.Spec.Hooks.Finalize != nil {
+	if req.Parent.GetDeletionTimestamp() != nil &&
+		e.Controller.Spec.Hooks.Finalize != nil {
 		// Finalize
-		request.Finalizing = true
-		if err := hooks.Call(cc.Spec.Hooks.Finalize, request, &response); err != nil {
-			return nil, errors.Errorf("finalize hook failed for %s: %v", request, err)
+		req.Finalizing = true
+		err := common.CallHook(e.Controller.Spec.Hooks.Finalize, req, &resp)
+		if err != nil {
+			return nil, errors.Wrapf(err, "%s: Finalize hook failed for %s", e, req)
 		}
 	} else {
 		// Sync
-		request.Finalizing = false
-		if cc.Spec.Hooks.Sync == nil {
-			return nil, errors.Errorf("sync hook not defined for %s", request)
+		req.Finalizing = false
+		if e.Controller.Spec.Hooks.Sync == nil {
+			return nil,
+				errors.Errorf("%s: Sync hook not defined for %s", e, req)
 		}
 
-		if err := hooks.Call(cc.Spec.Hooks.Sync, request, &response); err != nil {
-			return nil, errors.Errorf("sync hook failed for %s: %v", request, err)
+		err := common.CallHook(e.Controller.Spec.Hooks.Sync, req, &resp)
+		if err != nil {
+			return nil,
+				errors.Wrapf(err, "%s: Sync hook failed for %s", e, req)
 		}
 	}
 
-	return &response, nil
+	return &resp, nil
+}
+
+func callSyncHook(
+	controller *v1alpha1.CompositeController,
+	request *SyncHookRequest,
+) (*SyncHookResponse, error) {
+	e := HookExecutor{Controller: controller}
+	return e.Execute(request)
 }

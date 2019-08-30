@@ -17,13 +17,11 @@ limitations under the License.
 package decorator
 
 import (
-	"fmt"
-
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/common"
-	"openebs.io/metac/hooks"
 )
 
 // SyncHookRequest is the object sent as JSON to the sync hook.
@@ -47,9 +45,11 @@ type SyncHookResponse struct {
 	Finalized bool `json:"finalized"`
 }
 
-func (c *decoratorController) callSyncHook(request *SyncHookRequest) (*SyncHookResponse, error) {
-	if c.api.Spec.Hooks == nil {
-		return nil, fmt.Errorf("no hooks defined")
+func (c *decoratorController) callSyncHook(
+	request *SyncHookRequest,
+) (*SyncHookResponse, error) {
+	if c.schema.Spec.Hooks == nil {
+		return nil, errors.Errorf("No hooks defined")
 	}
 
 	var response SyncHookResponse
@@ -62,22 +62,25 @@ func (c *decoratorController) callSyncHook(request *SyncHookRequest) (*SyncHookR
 	// when the object no longer matches our decorator selector.
 	// This allows the decorator to clean up after itself if the object has been
 	// updated to disable the functionality added by the decorator.
-	if c.api.Spec.Hooks.Finalize != nil &&
-		(request.Object.GetDeletionTimestamp() != nil || !c.parentSelector.Matches(request.Object)) {
+	if c.schema.Spec.Hooks.Finalize != nil &&
+		(request.Object.GetDeletionTimestamp() != nil ||
+			!c.parentSelector.Matches(request.Object)) {
 		// Finalize
 		request.Finalizing = true
-		if err := hooks.Call(c.api.Spec.Hooks.Finalize, request, &response); err != nil {
-			return nil, fmt.Errorf("finalize hook failed: %v", err)
+		err := common.CallHook(c.schema.Spec.Hooks.Finalize, request, &response)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Finalize hook failed")
 		}
 	} else {
 		// Sync
 		request.Finalizing = false
-		if c.api.Spec.Hooks.Sync == nil {
-			return nil, fmt.Errorf("sync hook not defined")
+		if c.schema.Spec.Hooks.Sync == nil {
+			return nil, errors.Errorf("Sync hook not defined")
 		}
 
-		if err := hooks.Call(c.api.Spec.Hooks.Sync, request, &response); err != nil {
-			return nil, fmt.Errorf("sync hook failed: %v", err)
+		err := common.CallHook(c.schema.Spec.Hooks.Sync, request, &response)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Sync hook failed")
 		}
 	}
 
