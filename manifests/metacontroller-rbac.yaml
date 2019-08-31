@@ -44,6 +44,7 @@ rules:
   - compositecontrollers
   - controllerrevisions
   - decoratorcontrollers
+  - genericcontrollers
   verbs:
   - get
   - list

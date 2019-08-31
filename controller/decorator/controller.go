@@ -53,8 +53,8 @@ const (
 )
 
 type decoratorController struct {
-	// api this controller is based on
-	api *v1alpha1.DecoratorController
+	// schema this controller is based on
+	schema *v1alpha1.DecoratorController
 
 	// discovered discoveredResources
 	discoveredResources *dynamicdiscovery.ResourceMap
@@ -97,11 +97,11 @@ func newDecoratorController(
 	discoveredResources *dynamicdiscovery.ResourceMap,
 	dynCliSet *dynamicclientset.Clientset,
 	informerFactory *dynamicinformer.SharedInformerFactory,
-	api *v1alpha1.DecoratorController,
+	schema *v1alpha1.DecoratorController,
 ) (controller *decoratorController, newErr error) {
 
 	c := &decoratorController{
-		api:                 api,
+		schema:              schema,
 		discoveredResources: discoveredResources,
 		dynCliSet:           dynCliSet,
 
@@ -111,26 +111,26 @@ func newDecoratorController(
 
 		queue: workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(),
-			"DecoratorController-"+api.Name,
+			"DecoratorController-"+schema.Name,
 		),
 
 		finalizer: &finalizer.Manager{
 			// finalizer manager is entrusted with this finalier name
-			Name: "metac.openebs.io/decoratorcontroller-" + api.Name,
+			Name: "metac.openebs.io/decoratorcontroller-" + schema.Name,
 			// gets enabled if Finalize property is set
-			Enabled: api.Spec.Hooks.Finalize != nil,
+			Enabled: schema.Spec.Hooks.Finalize != nil,
 		},
 	}
 
 	var err error
 
-	c.parentSelector, err = newDecoratorSelector(discoveredResources, api)
+	c.parentSelector, err = newDecoratorSelector(discoveredResources, schema)
 	if err != nil {
 		return nil, err
 	}
 
 	// Keep a list of parent resource info from discovery.
-	for _, parent := range api.Spec.Resources {
+	for _, parent := range schema.Spec.Resources {
 		resource := discoveredResources.Get(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
@@ -143,7 +143,7 @@ func newDecoratorController(
 	}
 
 	// Remember the update strategy for each child type.
-	c.updateStrategy, err = makeUpdateStrategyMap(discoveredResources, api)
+	c.updateStrategy, err = makeUpdateStrategyMap(discoveredResources, schema)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func newDecoratorController(
 	}()
 
 	// init required parent informers
-	for _, parent := range api.Spec.Resources {
+	for _, parent := range schema.Spec.Resources {
 		informer, err := informerFactory.GetOrCreate(parent.APIVersion, parent.Resource)
 		if err != nil {
 			return nil, errors.Errorf(
@@ -176,7 +176,7 @@ func newDecoratorController(
 	}
 
 	// init required child informers
-	for _, child := range api.Spec.Attachments {
+	for _, child := range schema.Spec.Attachments {
 		informer, err := informerFactory.GetOrCreate(child.APIVersion, child.Resource)
 		if err != nil {
 			return nil, errors.Errorf(
@@ -205,10 +205,10 @@ func (c *decoratorController) Start() {
 		DeleteFunc: c.enqueueParentObject,
 	}
 	var resyncPeriod time.Duration
-	if c.api.Spec.ResyncPeriodSeconds != nil {
+	if c.schema.Spec.ResyncPeriodSeconds != nil {
 		// Use a custom resync period if requested
 		// NOTE: This only applies to the parent
-		resyncPeriod = time.Duration(*c.api.Spec.ResyncPeriodSeconds) * time.Second
+		resyncPeriod = time.Duration(*c.schema.Spec.ResyncPeriodSeconds) * time.Second
 		// Put a reasonable limit on it.
 		if resyncPeriod < time.Second {
 			resyncPeriod = time.Second
@@ -235,15 +235,15 @@ func (c *decoratorController) Start() {
 		// provide the ability to run operations after panics
 		defer utilruntime.HandleCrash()
 
-		glog.Infof("Starting DecoratorController %v", c.api.Name)
-		defer glog.Infof("Shutting down DecoratorController %v", c.api.Name)
+		glog.Infof("Starting DecoratorController %v", c.schema.Name)
+		defer glog.Infof("Shutting down DecoratorController %v", c.schema.Name)
 
 		// Wait for dynamic client and all informers.
-		glog.Infof("Waiting for DecoratorController %v caches to sync", c.api.Name)
+		glog.Infof("Waiting for DecoratorController %v caches to sync", c.schema.Name)
 		syncFuncs := make(
 			[]cache.InformerSynced,
 			0,
-			1+len(c.api.Spec.Resources)+len(c.api.Spec.Attachments),
+			1+len(c.schema.Spec.Resources)+len(c.schema.Spec.Attachments),
 		)
 		for _, informer := range c.parentInformers {
 			syncFuncs = append(syncFuncs, informer.Informer().HasSynced)
@@ -251,10 +251,10 @@ func (c *decoratorController) Start() {
 		for _, informer := range c.childInformers {
 			syncFuncs = append(syncFuncs, informer.Informer().HasSynced)
 		}
-		if !k8s.WaitForCacheSync(c.api.Name, c.stopCh, syncFuncs...) {
+		if !k8s.WaitForCacheSync(c.schema.Name, c.stopCh, syncFuncs...) {
 			// We wait forever unless Stop() is called, so this isn't an error.
 			glog.Warningf(
-				"DecoratorController %v cache sync never finished", c.api.Name,
+				"DecoratorController %v cache sync never finished", c.schema.Name,
 			)
 			return
 		}
@@ -327,7 +327,7 @@ func (c *decoratorController) processNextWorkItem() bool {
 	err := c.sync(key.(string))
 	if err != nil {
 		utilruntime.HandleError(
-			errors.Errorf("failed to sync %v %q: %v", c.api.Name, key, err),
+			errors.Errorf("failed to sync %v %q: %v", c.schema.Name, key, err),
 		)
 		c.queue.AddRateLimited(key)
 		return true
@@ -448,7 +448,7 @@ func (c *decoratorController) onChildAdd(obj interface{}) {
 	}
 	glog.V(4).Infof(
 		"DecoratorController %v: %v %v/%v: child %v %v created or updated",
-		c.api.Name,
+		c.schema.Name,
 		parent.GetKind(),
 		parent.GetNamespace(),
 		parent.GetName(),
@@ -513,7 +513,7 @@ func (c *decoratorController) onChildDelete(obj interface{}) {
 	}
 	glog.V(4).Infof(
 		"DecoratorController %v: %v %v/%v: child %v %v deleted",
-		c.api.Name,
+		c.schema.Name,
 		parent.GetKind(),
 		parent.GetNamespace(),
 		parent.GetName(),
@@ -565,7 +565,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 
 	glog.V(4).Infof(
 		"DecoratorController %v: sync %v %v/%v",
-		c.api.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(),
+		c.schema.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(),
 	)
 
 	parentClient, err := c.dynCliSet.Kind(parent.GetAPIVersion(), parent.GetKind())
@@ -609,7 +609,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 
 	// Call the sync hook to get the desired annotations and children.
 	syncRequest := &SyncHookRequest{
-		Controller:  c.api,
+		Controller:  c.schema,
 		Object:      parent,
 		Attachments: observedChildren,
 	}
@@ -671,7 +671,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 			dynamicobject.RemoveFinalizer(updatedParent, c.finalizer.Name)
 		}
 
-		glog.V(4).Infof("DecoratorController %v: updating %v %v/%v", c.api.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName())
+		glog.V(4).Infof("DecoratorController %v: updating %v %v/%v", c.schema.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName())
 		_, err = parentClient.
 			Namespace(parent.GetNamespace()).Update(updatedParent, metav1.UpdateOptions{})
 		if err != nil {
@@ -687,13 +687,13 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 	for _, group := range desiredChildren {
 		for _, child := range group {
 			ann := child.GetAnnotations()
-			if ann[decoratorControllerAnnotation] == c.api.Name {
+			if ann[decoratorControllerAnnotation] == c.schema.Name {
 				continue
 			}
 			if ann == nil {
 				ann = make(map[string]string)
 			}
-			ann[decoratorControllerAnnotation] = c.api.Name
+			ann[decoratorControllerAnnotation] = c.schema.Name
 			child.SetAnnotations(ann)
 		}
 	}
@@ -730,7 +730,7 @@ func (c *decoratorController) getChildren(
 	parentNamespace := parent.GetNamespace()
 	childMap := make(common.ChildMap)
 
-	for _, child := range c.api.Spec.Attachments {
+	for _, child := range c.schema.Spec.Attachments {
 		// List all objects of the child kind in the parent object's namespace,
 		// or in all namespaces if the parent is cluster-scoped.
 		informer := c.childInformers.Get(child.APIVersion, child.Resource)
@@ -775,7 +775,7 @@ func (c *decoratorController) getChildren(
 			if controllerRef == nil || controllerRef.UID != parentUID {
 				continue
 			}
-			if obj.GetAnnotations()[decoratorControllerAnnotation] != c.api.Name {
+			if obj.GetAnnotations()[decoratorControllerAnnotation] != c.schema.Name {
 				continue
 			}
 			childMap.Insert(parent, obj)

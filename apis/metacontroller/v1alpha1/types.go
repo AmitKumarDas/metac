@@ -118,18 +118,6 @@ type CompositeControllerHooks struct {
 	PostUpdateChild *Hook `json:"postUpdateChild,omitempty"`
 }
 
-type Hook struct {
-	Webhook *Webhook `json:"webhook,omitempty"`
-}
-
-type Webhook struct {
-	URL     *string          `json:"url,omitempty"`
-	Timeout *metav1.Duration `json:"timeout,omitempty"`
-
-	Path    *string           `json:"path,omitempty"`
-	Service *ServiceReference `json:"service,omitempty"`
-}
-
 type CompositeControllerStatus struct {
 }
 
