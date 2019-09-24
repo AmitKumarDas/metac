@@ -28,7 +28,7 @@ import (
 type SyncHookRequest struct {
 	Controller  *v1alpha1.DecoratorController `json:"controller"`
 	Object      *unstructured.Unstructured    `json:"object"`
-	Attachments common.ChildMap               `json:"attachments"`
+	Attachments common.AnyUnstructRegistry    `json:"attachments"`
 	Finalizing  bool                          `json:"finalizing"`
 }
 

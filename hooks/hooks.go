@@ -23,7 +23,9 @@ import (
 
 // HookCaller enables invocation of appropriate hook
 type HookCaller struct {
-	CallFunc func(request, response interface{}) error
+	// CallFn abstracts invocation of hook. Typically specific
+	// hook implementors will have their call methods set here
+	CallFn func(request, response interface{}) error
 }
 
 // HookCallerOption is a typed function that helps in building
@@ -35,9 +37,7 @@ type HookCallerOption func(*HookCaller) error
 // NewHookCaller returns a new instance of HookCaller
 // This requires at-least one option to be sent from
 // its callers.
-func NewHookCaller(
-	must HookCallerOption, others ...HookCallerOption,
-) (*HookCaller, error) {
+func NewHookCaller(must HookCallerOption, others ...HookCallerOption) (*HookCaller, error) {
 
 	var options = []HookCallerOption{must}
 	options = append(options, others...)
@@ -47,14 +47,13 @@ func NewHookCaller(
 		o(c)
 	}
 
-	if c.CallFunc == nil {
-		return nil,
-			errors.Errorf("Invalid hook: Nil CallFunc")
+	if c.CallFn == nil {
+		return nil, errors.Errorf("Invalid hook: Nil CallFunc")
 	}
 	return c, nil
 }
 
 // Call invokes the hook
 func (c *HookCaller) Call(request, response interface{}) error {
-	return c.CallFunc(request, response)
+	return c.CallFn(request, response)
 }

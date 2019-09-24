@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// TODO (@amitkumardas):
+// Some functions in this file should be deprecated in favour of
+// manage_attachments.go
 package common
 
 import (
@@ -33,18 +36,18 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// ApplyUpdate applies the update against the original object in the
+// ApplyMerge applies the update against the original object in the
 // style of kubectl apply
 //
-// TODO(@amitkumardas): ApplyUpdate along with reflect.DeepEqual can be
+// TODO(@amitkumardas): ApplyMerge along with reflect.DeepEqual can be
 // used to build assert logic based on observed yaml vs. desired yaml
-func ApplyUpdate(orig, update *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	// The controller only returns a partial object.
-	// We compute the full updated object in the style of "kubectl apply".
+func ApplyMerge(orig, update *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	// state that was last applied by this controller
 	lastApplied, err := dynamicapply.GetLastApplied(orig)
 	if err != nil {
 		return nil, err
 	}
+
 	newObj := &unstructured.Unstructured{}
 	newObj.Object, err = dynamicapply.Merge(
 		orig.UnstructuredContent(),
@@ -54,6 +57,7 @@ func ApplyUpdate(orig, update *unstructured.Unstructured) (*unstructured.Unstruc
 	if err != nil {
 		return nil, err
 	}
+
 	// Revert metadata fields that are known to be read-only, system fields,
 	// so that attempts to change those fields will never cause a diff to be found
 	// by DeepEqual, which would cause needless, no-op updates or recreates.
@@ -117,35 +121,35 @@ func revertField(newObj, orig *unstructured.Unstructured, fieldPath ...string) e
 	return nil
 }
 
-// MakeControllerRef builds & returns a new instance of OwnerReference
-// from the given parent instance
-func MakeControllerRef(parent *unstructured.Unstructured) *metav1.OwnerReference {
+// MakeOwnerRef builds & returns a new instance of OwnerReference
+// from the given unstruct instance
+func MakeOwnerRef(obj *unstructured.Unstructured) *metav1.OwnerReference {
 	return &metav1.OwnerReference{
-		APIVersion:         parent.GetAPIVersion(),
-		Kind:               parent.GetKind(),
-		Name:               parent.GetName(),
-		UID:                parent.GetUID(),
+		APIVersion:         obj.GetAPIVersion(),
+		Kind:               obj.GetKind(),
+		Name:               obj.GetName(),
+		UID:                obj.GetUID(),
 		Controller:         k8s.BoolPtr(true),
 		BlockOwnerDeletion: k8s.BoolPtr(true),
 	}
 }
 
-// ChildUpdateStrategy provides the abstraction to figure out
+// ChildUpdateStrategyGetter provides the abstraction to figure out
 // the required update strategy
-type ChildUpdateStrategy interface {
-	GetMethod(apiGroup, kind string) v1alpha1.ChildUpdateMethod
+type ChildUpdateStrategyGetter interface {
+	Get(apiGroup, kind string) v1alpha1.ChildUpdateMethod
 }
 
 // ManageChildren ensures the relevant children objects of the
 // given parent are in sync
 //
 // TODO (@amitkumardas) deprecate this in favour of
-// ControllerManager's Apply method
+// AttachmentOperationManager's Apply method
 func ManageChildren(
 	dynClient *dynamicclientset.Clientset,
-	updateStrategy ChildUpdateStrategy,
+	updateStrategy ChildUpdateStrategyGetter,
 	parent *unstructured.Unstructured,
-	observedChildren, desiredChildren ChildMap,
+	observedChildren, desiredChildren AnyUnstructRegistry,
 ) error {
 	// If some operations fail, keep trying others so, for example,
 	// we don't block recovery (create new Pod) on a failed delete.
@@ -153,8 +157,8 @@ func ManageChildren(
 
 	// Delete observed, owned objects that are not desired.
 	for key, objects := range observedChildren {
-		apiVersion, kind := ParseChildMapKey(key)
-		client, err := dynClient.Kind(apiVersion, kind)
+		apiVersion, kind := ParseKeyToAPIVersionKind(key)
+		client, err := dynClient.GetClientByKind(apiVersion, kind)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -167,8 +171,8 @@ func ManageChildren(
 
 	// Create or update desired objects.
 	for key, objects := range desiredChildren {
-		apiVersion, kind := ParseChildMapKey(key)
-		client, err := dynClient.Kind(apiVersion, kind)
+		apiVersion, kind := ParseKeyToAPIVersionKind(key)
+		client, err := dynClient.GetClientByKind(apiVersion, kind)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -225,7 +229,7 @@ func deleteChildren(
 // ControllerManager's Update method
 func updateChildren(
 	client *dynamicclientset.ResourceClient,
-	updateStrategy ChildUpdateStrategy,
+	updateStrategy ChildUpdateStrategyGetter,
 	parent *unstructured.Unstructured,
 	observed, desired map[string]*unstructured.Unstructured,
 ) error {
@@ -237,7 +241,7 @@ func updateChildren(
 		}
 		if oldObj := observed[name]; oldObj != nil {
 			// Update
-			newObj, err := ApplyUpdate(oldObj, obj)
+			newObj, err := ApplyMerge(oldObj, obj)
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -268,7 +272,7 @@ func updateChildren(
 			}
 
 			// Check the update strategy for this child kind.
-			switch method := updateStrategy.GetMethod(client.Group, client.Kind); method {
+			switch method := updateStrategy.Get(client.Group, client.Kind); method {
 			case v1alpha1.ChildUpdateOnDelete, "":
 				// This means we don't try to update anything unless it gets deleted
 				// by someone else (we won't delete it ourselves).
@@ -327,7 +331,7 @@ func updateChildren(
 			}
 
 			// We always claim everything we create.
-			controllerRef := MakeControllerRef(parent)
+			controllerRef := MakeOwnerRef(parent)
 			ownerRefs := obj.GetOwnerReferences()
 			ownerRefs = append(ownerRefs, *controllerRef)
 			obj.SetOwnerReferences(ownerRefs)

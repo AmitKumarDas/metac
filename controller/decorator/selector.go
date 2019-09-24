@@ -51,7 +51,7 @@ type decoratorSelector struct {
 //
 // TODO (@amitkumardas) Should this be renamed to newParentSelector
 func newDecoratorSelector(
-	resources *dynamicdiscovery.ResourceMap,
+	resourceMgr *dynamicdiscovery.APIResourceManager,
 	dc *v1alpha1.DecoratorController,
 ) (*decoratorSelector, error) {
 	// init
@@ -64,7 +64,7 @@ func newDecoratorSelector(
 	// resources are the parents in decorator controller
 	for _, parent := range dc.Spec.Resources {
 		// fetch the resource from the discovered set
-		resource := resources.Get(parent.APIVersion, parent.Resource)
+		resource := resourceMgr.GetByResource(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
 				"can't find parent resource %q in apiVersion %q",
@@ -121,7 +121,7 @@ func newDecoratorSelector(
 func (ds *decoratorSelector) Matches(obj *unstructured.Unstructured) bool {
 	// Look up the label and annotation selectors for this object.
 	// Use only Group and Kind. Ignore Version.
-	apiGroup, _ := common.ParseAPIVersion(obj.GetAPIVersion())
+	apiGroup, _ := common.ParseAPIVersionToGroupVersion(obj.GetAPIVersion())
 	key := selectorMapKey(apiGroup, obj.GetKind())
 
 	labelSelector := ds.labelSelectors[key]

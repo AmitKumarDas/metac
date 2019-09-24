@@ -29,44 +29,82 @@ import (
 )
 
 var (
+	// KeyFunc checks for DeletedFinalStateUnknown objects
+	// before calling MetaNamespaceKeyFunc.
 	KeyFunc = cache.DeletionHandlingMetaNamespaceKeyFunc
 )
 
-// ChildMap is the registrar of child objects anchored by
-// child's apiVersion and kind and then by this child's
-// namespace and name
-type ChildMap map[string]map[string]*unstructured.Unstructured
+// AnyUnstructRegistry is the register that holds various
+// unstructured instances grouped by
+//
+// 1/ unstruct's apiVersion & kind, and then by
+// 2/ unstruct's namespace & name
+//
+// This registry is useful to store arbitary unstructured
+// instances in a way that is easy to find / filter later.
+type AnyUnstructRegistry map[string]map[string]*unstructured.Unstructured
 
-// InitGroup initialises the registration of a child object with
-// the given version and kind
-func (m ChildMap) InitGroup(apiVersion, kind string) {
-	m[childMapKey(apiVersion, kind)] = make(map[string]*unstructured.Unstructured)
+// InitGroupByVK initialises (or re-initializes) a group within the
+// registry. Group is initialized based on the provided apiVersion & kind.
+//
+// Caller can issue "InsertByReference" request if it is not sure about
+// initializing a group in this registry.
+func (m AnyUnstructRegistry) InitGroupByVK(apiVersion, kind string) {
+	m[makeKeyFromAPIVersionKind(apiVersion, kind)] =
+		make(map[string]*unstructured.Unstructured)
 }
 
-// Insert adds the child object to appropriate group anchored by
-// version, kind and then by namespace, name.
-func (m ChildMap) Insert(parent metav1.Object, obj *unstructured.Unstructured) {
-	key := childMapKey(obj.GetAPIVersion(), obj.GetKind())
+// InsertByReference adds the resource to appropriate group. Inserting into
+// particular group is handled automatically.
+func (m AnyUnstructRegistry) InsertByReference(
+	ref metav1.Object, obj *unstructured.Unstructured,
+) {
+	key := makeKeyFromAPIVersionKind(obj.GetAPIVersion(), obj.GetKind())
 	group := m[key]
 	if group == nil {
 		group = make(map[string]*unstructured.Unstructured)
 		m[key] = group
 	}
-	name := relativeName(parent, obj)
+	name := relativeName(ref, obj)
 	group[name] = obj
 }
 
-// FindGroupKindName filters the child object based on the given
+// ReplaceByReference replaces the unstruct instance having
+// the same name & namespace as the given unstruct instance
+// with the contents of the new unstruct instance. If no
+// unstruct instance exists in the registry then no action
+// is taken.
+func (m AnyUnstructRegistry) ReplaceByReference(
+	ref metav1.Object, obj *unstructured.Unstructured,
+) {
+
+	key := makeKeyFromAPIVersionKind(obj.GetAPIVersion(), obj.GetKind())
+	children := m[key]
+	if children == nil {
+		// Nothing to do since instance does not exist
+		return
+	}
+
+	name := relativeName(ref, obj)
+	if _, found := children[name]; found {
+		children[name] = obj
+	}
+}
+
+// FindByGroupKindName finds the resource based on the given
 // apigroup, kind and name
-func (m ChildMap) FindGroupKindName(apiGroup, kind, name string) *unstructured.Unstructured {
-	// The map is keyed by group-version-kind, but we don't know the version.
-	// So, check inside any GVK that matches the group and kind, ignoring version.
-	for key, children := range m {
-		if gv, k := ParseChildMapKey(key); k == kind {
-			if g, _ := ParseAPIVersion(gv); g == apiGroup {
-				for n, child := range children {
+func (m AnyUnstructRegistry) FindByGroupKindName(
+	apiGroup, kind, name string,
+) *unstructured.Unstructured {
+	// The registry is keyed by apiVersion & kind, but we don't know
+	// the version. So, check inside any GVK that matches the group and
+	// kind, ignoring version.
+	for key, resources := range m {
+		if apiVer, k := ParseKeyToAPIVersionKind(key); k == kind {
+			if g, _ := ParseAPIVersionToGroupVersion(apiVer); g == apiGroup {
+				for n, res := range resources {
 					if n == name {
-						return child
+						return res
 					}
 				}
 			}
@@ -75,44 +113,37 @@ func (m ChildMap) FindGroupKindName(apiGroup, kind, name string) *unstructured.U
 	return nil
 }
 
-// relativeName returns the name of the child relative to the parent.
-// If the parent is cluster scoped and the child namespaced scoped the
-// name is of the format <namespace>/<name>. Otherwise the name of the child
-// is returned.
-func relativeName(parent metav1.Object, child *unstructured.Unstructured) string {
-	if parent.GetNamespace() == "" && child.GetNamespace() != "" {
-		return fmt.Sprintf("%s/%s", child.GetNamespace(), child.GetName())
+// relativeName returns the name of the attachment relative to the provided
+// reference.
+func relativeName(ref metav1.Object, obj *unstructured.Unstructured) string {
+	if ref.GetNamespace() == "" && obj.GetNamespace() != "" {
+		return fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
 	}
-	return child.GetName()
+	return obj.GetName()
+}
+
+// namespacedNameOrName returns the name of the resource based on its
+// scope
+func namespacedNameOrName(obj *unstructured.Unstructured) string {
+	if obj.GetNamespace() != "" {
+		return fmt.Sprintf(
+			"%s/%s", obj.GetNamespace(), obj.GetName(),
+		)
+	}
+	return obj.GetName()
 }
 
 // describeObject returns a human-readable string to identify a given object.
 func describeObject(obj *unstructured.Unstructured) string {
 	if ns := obj.GetNamespace(); ns != "" {
-		return fmt.Sprintf("%s %s/%s", obj.GetKind(), ns, obj.GetName())
+		return fmt.Sprintf("%s/%s of %s", ns, obj.GetName(), obj.GetKind())
 	}
-	return fmt.Sprintf("%s %s", obj.GetKind(), obj.GetName())
+	return fmt.Sprintf("%s of %s", obj.GetName(), obj.GetKind())
 }
 
-// ReplaceChild replaces the child object with the same name & namespace as
-// the given child with the contents of the given child. If no child exists
-// in the existing map then no action is taken.
-func (m ChildMap) ReplaceChild(parent metav1.Object, child *unstructured.Unstructured) {
-	key := childMapKey(child.GetAPIVersion(), child.GetKind())
-	children := m[key]
-	if children == nil {
-		// We only want to replace if it already exists, so do nothing.
-		return
-	}
-
-	name := relativeName(parent, child)
-	if _, found := children[name]; found {
-		children[name] = child
-	}
-}
-
-// List expands the ChildMap into a flat list of child objects, in random order.
-func (m ChildMap) List() []*unstructured.Unstructured {
+// List expands the registry map into a flat list of unstructured
+// objects; in some random order.
+func (m AnyUnstructRegistry) List() []*unstructured.Unstructured {
 	var list []*unstructured.Unstructured
 	for _, group := range m {
 		for _, obj := range group {
@@ -122,47 +153,47 @@ func (m ChildMap) List() []*unstructured.Unstructured {
 	return list
 }
 
-// MakeChildMap builds the map of children resources that is suitable for use
-// in the `children` field of a CompositeController SyncRequest or
-// `attachments` field of  the  DecoratorControllers SyncRequest.
+// MakeAnyUnstructRegistryByReference builds the registry of unstructured instances.
 //
-// This function returns a ChildMap which is a map of maps. The outer most map
-// is keyed using the child's type and the inner map is keyed using the
-// child's name. If the parent resource is clustered and the child resource
+// This registry is suitable for use in the `children` field of a
+// CompositeController or `attachments` field of DecoratorController or
+// GenericController.
+//
+// This function returns a registry which is a map of maps. The outer most
+// map is keyed using the unstruct's type and the inner map is keyed using the
+// unstruct's name. If the parent resource is clustered and the child resource
 // is namespaced the inner map's keys are prefixed by the namespace of the
 // child resource.
 //
-// This function requires parent resources has the meta.Namespace accurately
-// set. If the namespace of the pareent is empty it's considered a clustered
-// resource.
-//
-// If a user returns a namespaced as a child of a clustered resources without
-// the namespace set this is considered a user error but it's not handled here
-// since the api errorstrying to create the child is clear.
-func MakeChildMap(parent metav1.Object, list []*unstructured.Unstructured) ChildMap {
-	children := make(ChildMap)
+// This function requires parent resources has the meta.Namespace set. If the
+// namespace of the parent is empty it's considered a clustered resource.
+func MakeAnyUnstructRegistryByReference(
+	ref metav1.Object, objList []*unstructured.Unstructured,
+) AnyUnstructRegistry {
+	children := make(AnyUnstructRegistry)
 
-	for _, child := range list {
-		children.Insert(parent, child)
+	for _, child := range objList {
+		children.InsertByReference(ref, child)
 	}
 	return children
 }
 
-// childMapKey returns the string format for the given version
-// and kind
-func childMapKey(apiVersion, kind string) string {
+// makeKeyFromAPIVersionKind returns the string format for the
+// given version and kind
+func makeKeyFromAPIVersionKind(apiVersion, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiVersion)
 }
 
-// ParseChildMapKey parses the given key into apiVersion and kind
-func ParseChildMapKey(key string) (apiVersion, kind string) {
+// ParseKeyToAPIVersionKind parses the given key into apiVersion
+// and kind
+func ParseKeyToAPIVersionKind(key string) (apiVersion, kind string) {
 	parts := strings.SplitN(key, ".", 2)
 	return parts[1], parts[0]
 }
 
-// ParseAPIVersion parses the given version into respective group
-// and version
-func ParseAPIVersion(apiVersion string) (group, version string) {
+// ParseAPIVersionToGroupVersion parses the given version into
+// respective group and version
+func ParseAPIVersionToGroupVersion(apiVersion string) (group, version string) {
 	parts := strings.SplitN(apiVersion, "/", 2)
 	if len(parts) == 1 {
 		// It's a core version.
@@ -171,45 +202,58 @@ func ParseAPIVersion(apiVersion string) (group, version string) {
 	return parts[0], parts[1]
 }
 
-// GroupKindMap is the registrar of API resources anchored by
-// group and kind
-type GroupKindMap map[string]*dynamicdiscovery.APIResource
+// ResourceRegistryByGK is the registrar of server API resources
+// anchored by group and kind
+type ResourceRegistryByGK map[string]*dynamicdiscovery.APIResource
 
 // Set registers the given API resource against the registrar based
 // on the given group and kind
-func (m GroupKindMap) Set(apiGroup, kind string, resource *dynamicdiscovery.APIResource) {
-	m[groupKindKey(apiGroup, kind)] = resource
+func (m ResourceRegistryByGK) Set(
+	apiGroup, kind string, resource *dynamicdiscovery.APIResource,
+) {
+
+	m[makeKeyFromAPIGroupKind(apiGroup, kind)] = resource
 }
 
 // Get returns the API resource from the registrar based on the given
 // group and kind
-func (m GroupKindMap) Get(apiGroup, kind string) *dynamicdiscovery.APIResource {
-	return m[groupKindKey(apiGroup, kind)]
+func (m ResourceRegistryByGK) Get(
+	apiGroup, kind string,
+) *dynamicdiscovery.APIResource {
+
+	return m[makeKeyFromAPIGroupKind(apiGroup, kind)]
 }
 
-// groupKindKey returns the string format of the given group and
-// kind
-func groupKindKey(apiGroup, kind string) string {
+// makeKeyFromAPIGroupKind returns the string format of the given group
+// and kind
+func makeKeyFromAPIGroupKind(apiGroup, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiGroup)
 }
 
-// InformerMap acts as the registrar of Informer instances anchored by
-// apiversion and resource (i.e. plural format of kind)
-type InformerMap map[string]*dynamicinformer.ResourceInformer
+// ResourceInformerRegistryByVR acts as the registrar of Informer instances
+// anchored by apiversion and resource name (i.e. plural format of kind)
+type ResourceInformerRegistryByVR map[string]*dynamicinformer.ResourceInformer
 
 // Set registers the given informer object based on the given version
 // and resource
-func (m InformerMap) Set(apiVersion, resource string, informer *dynamicinformer.ResourceInformer) {
-	m[informerMapKey(apiVersion, resource)] = informer
+func (m ResourceInformerRegistryByVR) Set(
+	apiVersion, resource string, informer *dynamicinformer.ResourceInformer,
+) {
+
+	m[makeKeyFromAPIVersionResource(apiVersion, resource)] = informer
 }
 
 // Get returns the informer instance from the registrar based on the
 // given version and resource
-func (m InformerMap) Get(apiVersion, resource string) *dynamicinformer.ResourceInformer {
-	return m[informerMapKey(apiVersion, resource)]
+func (m ResourceInformerRegistryByVR) Get(
+	apiVersion, resource string,
+) *dynamicinformer.ResourceInformer {
+
+	return m[makeKeyFromAPIVersionResource(apiVersion, resource)]
 }
 
-// informerMapKey returns the string format of given version and resource
-func informerMapKey(apiVersion, resource string) string {
+// makeKeyFromAPIVersionResource returns the string format of given
+// apiVersion and resource
+func makeKeyFromAPIVersionResource(apiVersion, resource string) string {
 	return fmt.Sprintf("%s.%s", resource, apiVersion)
 }

@@ -56,7 +56,7 @@ func NewFixture(t *testing.T) *Fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dynClient, err := dynamicclientset.New(config, resourceMap)
+	dynClient, err := dynamicclientset.New(config, resourceManager)
 	if err != nil {
 		t.Fatal(err)
 	}

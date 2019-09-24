@@ -17,18 +17,19 @@ limitations under the License.
 package server
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
-	mcclientset "openebs.io/metac/client/generated/clientset/versioned"
-	mcinformers "openebs.io/metac/client/generated/informers/externalversions"
+	metaclientset "openebs.io/metac/client/generated/clientset/versioned"
+	metainformers "openebs.io/metac/client/generated/informers/externalversions"
 	"openebs.io/metac/controller/composite"
 	"openebs.io/metac/controller/decorator"
+	"openebs.io/metac/controller/generic"
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 	dynamicdiscovery "openebs.io/metac/dynamic/discovery"
 	dynamicinformer "openebs.io/metac/dynamic/informer"
@@ -44,53 +45,75 @@ type controller interface {
 // Start will start this controller service
 func Start(
 	config *rest.Config,
-	discoveryInterval, informerRelist time.Duration,
+	discoveryInterval time.Duration,
+	informerRelist time.Duration,
 ) (stop func(), err error) {
+
 	// Periodically refresh discovery to pick up newly-installed resources.
-	dc := discovery.NewDiscoveryClientForConfigOrDie(config)
-	resources := dynamicdiscovery.NewResourceMap(dc)
+	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(config)
+	resourceMgr := dynamicdiscovery.NewAPIResourceManager(discoveryClient)
+
 	// We don't care about stopping this cleanly since it has no external effects.
-	resources.Start(discoveryInterval)
+	resourceMgr.Start(discoveryInterval)
 
 	// Create informer factory for metacontroller API objects.
-	mcClient, err := mcclientset.NewForConfig(config)
+	metaClientset, err := metaclientset.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"Failed to start: can't create client for api %s: %v",
-			v1alpha1.SchemeGroupVersion,
+		return nil, errors.Wrapf(
 			err,
+			"%s: Start server failed: Can't create clientset",
+			v1alpha1.SchemeGroupVersion,
 		)
 	}
-	mcInformerFactory := mcinformers.NewSharedInformerFactory(mcClient, informerRelist)
+	metaInformerFactory :=
+		metainformers.NewSharedInformerFactory(metaClientset, informerRelist)
 
 	// Create dynamic clientset (factory for dynamic clients).
-	dynClient, err := dynamicclientset.New(config, resources)
+	dynamicClientset, err := dynamicclientset.New(config, resourceMgr)
 	if err != nil {
 		return nil, err
 	}
 	// Create dynamic informer factory (for sharing dynamic informers).
-	dynInformers := dynamicinformer.NewSharedInformerFactory(dynClient, informerRelist)
+	dynamicInformerFactory :=
+		dynamicinformer.NewSharedInformerFactory(dynamicClientset, informerRelist)
 
-	// Start metacontrollers (controllers that spawn controllers).
+	// Start various metacontrollers (controllers that spawn controllers).
 	// Each one requests the informers it needs from the factory.
-	controllers := []controller{
-		composite.NewMetacontroller(resources, dynClient, dynInformers, mcInformerFactory, mcClient),
-		decorator.NewMetacontroller(resources, dynClient, dynInformers, mcInformerFactory),
+	metaControllers := []controller{
+		composite.NewMetacontroller(
+			resourceMgr,
+			dynamicClientset,
+			dynamicInformerFactory,
+			metaInformerFactory,
+			metaClientset,
+		),
+		decorator.NewMetacontroller(
+			resourceMgr,
+			dynamicClientset,
+			dynamicInformerFactory,
+			metaInformerFactory,
+		),
+		generic.NewMetacontroller(
+			resourceMgr,
+			dynamicClientset,
+			dynamicInformerFactory,
+			metaInformerFactory,
+		),
 	}
 
 	// Start all requested informers.
 	// We don't care about stopping this cleanly since it has no external effects.
-	mcInformerFactory.Start(nil)
+	metaInformerFactory.Start(nil)
 
 	// Start all controllers.
-	for _, c := range controllers {
+	for _, c := range metaControllers {
 		c.Start()
 	}
 
 	// Return a function that will stop all controllers.
 	return func() {
 		var wg sync.WaitGroup
-		for _, c := range controllers {
+		for _, c := range metaControllers {
 			wg.Add(1)
 			go func(c controller) {
 				defer wg.Done()

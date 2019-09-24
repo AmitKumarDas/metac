@@ -1,5 +1,6 @@
 /*
 Copyright 2017 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,13 +30,16 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
-// APIResource wraps the original API resource schema
-// with additional info required during discovery
-// process
+// APIResource wraps the original server API resource
+// with additional info
 type APIResource struct {
 	metav1.APIResource
-	APIVersion     string
-	subresourceMap map[string]bool
+
+	// TODO (@amitkumardas):
+	// Why is this required? is this not same as metav1.APIResource.Version
+	APIVersion string
+
+	hasSubresource map[string]bool
 }
 
 // GroupVersion returns the GroupVersion of this resource
@@ -44,7 +48,7 @@ func (r *APIResource) GroupVersion() schema.GroupVersion {
 	if err != nil {
 		// This shouldn't happen because we get this value from discovery.
 		panic(fmt.Sprintf(
-			"Failed to parse group/version %q: %v", r.APIVersion, err,
+			"Parse GroupVersion %q failed: %v", r.APIVersion, err,
 		))
 	}
 	return gv
@@ -66,96 +70,117 @@ func (r *APIResource) GroupResource() schema.GroupResource {
 	return schema.GroupResource{Group: r.Group, Resource: r.Name}
 }
 
-// HasSubresource indicates if the provided subresource is
+// HasSubresource flags if the provided subresource is
 // available in this resource
 func (r *APIResource) HasSubresource(subresourceKey string) bool {
-	return r.subresourceMap[subresourceKey]
+	return r.hasSubresource[subresourceKey]
 }
 
-// groupVersionEntry acts as a registry of maps for
-// convenient lookup by either Group-Version-Kind or
-// Group-Version-Resource.
-type groupVersionEntry struct {
+// apiResourceRegistry is a registry of Kubernetes server
+// supported API groups, versions & resources.
+//
+// Resources are anchored by appropriate keys for easy
+// lookup. A resource can be looked up based on kind or
+// resource name or sub-resource name
+type apiResourceRegistry struct {
 	resources, kinds, subresources map[string]*APIResource
 }
 
-// ResourceMap provides operations against API resources
-// that are discovered from K8s cluster. It also exposes
-// function to discover these resources.
-type ResourceMap struct {
+// APIResourceManager helps discovering Kubernetes server
+// supported API groups, versions & resources.
+type APIResourceManager struct {
 	mutex sync.RWMutex
 
-	// map of resources anchored by apiVersion
-	groupVersions map[string]groupVersionEntry
+	// discovered resources that are anchored by apiVersion
+	//
+	// NOTE:
+	//	This map of registry works well, since the registry
+	// itself is a map of resources anchored by resource name.
+	// Hence, this combination of apiVersion and resource name
+	// is sufficient to find a particular API resource.
+	resources map[string]apiResourceRegistry
 
-	discoveryClient discovery.DiscoveryInterface
-	stopCh, doneCh  chan struct{}
+	// Client to discover API resource
+	Client discovery.DiscoveryInterface
+
+	stopCh, doneCh chan struct{}
 }
 
-// Get returns the API resource based on the provided
+// NewAPIResourceManager returns a new instance of
+// APIResourceManager
+func NewAPIResourceManager(c discovery.DiscoveryInterface) *APIResourceManager {
+	return &APIResourceManager{Client: c}
+}
+
+// GetByResource returns the API resource based on the provided
 // version and resource (this is typically the plural
 // notation of kind)
-func (rm *ResourceMap) Get(apiVersion, resource string) (result *APIResource) {
-	rm.mutex.RLock()
-	defer rm.mutex.RUnlock()
+func (mgr *APIResourceManager) GetByResource(
+	apiVersion, resource string,
+) *APIResource {
 
-	gv, ok := rm.groupVersions[apiVersion]
+	mgr.mutex.RLock()
+	defer mgr.mutex.RUnlock()
+
+	registry, ok := mgr.resources[apiVersion]
 	if !ok {
 		return nil
 	}
-	return gv.resources[resource]
+	return registry.resources[resource]
 }
 
-// GetKind returns the API resource based on the provided
+// GetByKind returns the API resource based on the provided
 // version and kind
-func (rm *ResourceMap) GetKind(apiVersion, kind string) (result *APIResource) {
-	rm.mutex.RLock()
-	defer rm.mutex.RUnlock()
+func (mgr *APIResourceManager) GetByKind(
+	apiVersion, kind string,
+) *APIResource {
 
-	gv, ok := rm.groupVersions[apiVersion]
+	mgr.mutex.RLock()
+	defer mgr.mutex.RUnlock()
+
+	registry, ok := mgr.resources[apiVersion]
 	if !ok {
 		return nil
 	}
-	return gv.kinds[kind]
+	return registry.kinds[kind]
 }
 
-// refresh fetches all API Group-Versions and their resources
-// from the server.
+// refresh discovers all Kubernetes server resources
 //
 // NOTE:
 // 	We do this before acquiring the lock so we don't block readers.
-func (rm *ResourceMap) refresh() {
+func (mgr *APIResourceManager) refresh() {
 
-	glog.V(7).Info("Refreshing API discovery info")
-	groups, err := rm.discoveryClient.ServerResources()
+	glog.V(7).Info("Discovering API resources")
+	apiResourceSetList, err := mgr.Client.ServerResources()
 	if err != nil {
-		glog.Errorf("Failed to fetch discovery info: %v", err)
+		glog.Errorf("API resource discovery failed: %v", err)
 		return
 	}
 
-	// Denormalize resource lists into maps for convenient lookup
+	// Denormalize resourceset list into map for convenient lookup
 	// by either Group-Version-Kind or Group-Version-Resource
-	groupVersions := make(map[string]groupVersionEntry, len(groups))
-	for _, group := range groups {
-		gv, err := schema.ParseGroupVersion(group.GroupVersion)
+	groupVersions := make(map[string]apiResourceRegistry, len(apiResourceSetList))
+	for _, apiResourceSet := range apiResourceSetList {
+		gv, err := schema.ParseGroupVersion(apiResourceSet.GroupVersion)
 		if err != nil {
 			// This shouldn't happen because we get these values
 			// from the server.
 			panic(fmt.Errorf(
-				"Failed to fetch discovery info: invalid group version: %v",
-				err,
+				"API resource discovery failed: Invalid group version %q: %v",
+				apiResourceSet.GroupVersion, err,
 			))
 		}
-		gve := groupVersionEntry{
-			resources:    make(map[string]*APIResource, len(group.APIResources)),
-			kinds:        make(map[string]*APIResource, len(group.APIResources)),
-			subresources: make(map[string]*APIResource, len(group.APIResources)),
+		registrySet := apiResourceRegistry{
+			resources:    make(map[string]*APIResource, len(apiResourceSet.APIResources)),
+			kinds:        make(map[string]*APIResource, len(apiResourceSet.APIResources)),
+			subresources: make(map[string]*APIResource, len(apiResourceSet.APIResources)),
 		}
 
-		for i := range group.APIResources {
+		for i := range apiResourceSet.APIResources {
 			apiResource := &APIResource{
-				APIResource: group.APIResources[i],
-				APIVersion:  group.GroupVersion,
+				APIResource: apiResourceSet.APIResources[i],
+				APIVersion:  apiResourceSet.GroupVersion,
 			}
 			// Materialize default values from the list into each entry
 			if apiResource.Group == "" {
@@ -164,59 +189,60 @@ func (rm *ResourceMap) refresh() {
 			if apiResource.Version == "" {
 				apiResource.Version = gv.Version
 			}
-			gve.resources[apiResource.Name] = apiResource
+			registrySet.resources[apiResource.Name] = apiResource
 
 			// Remember which resources are subresources, and map the kind
 			// to the main resource. This is different from what RESTMapper
 			// provides because we already know the full GroupVersionKind
 			// and just need the resource name.
 			if strings.ContainsRune(apiResource.Name, '/') {
-				gve.subresources[apiResource.Name] = apiResource
+				registrySet.subresources[apiResource.Name] = apiResource
 			} else {
-				gve.kinds[apiResource.Kind] = apiResource
+				registrySet.kinds[apiResource.Kind] = apiResource
 			}
 		}
 
-		// Group all subresources for a resource.
-		for apiSubresourceName := range gve.subresources {
-			arr := strings.Split(apiSubresourceName, "/")
-			apiResourceName := arr[0]
-			subresourceKey := arr[1]
-			apiResource := gve.resources[apiResourceName]
+		// Flag each resource with all its supported sub resources
+		for subResourceNamedPath := range registrySet.subresources {
+			arr := strings.Split(subResourceNamedPath, "/")
+			resName := arr[0]
+			subResName := arr[1]
+			apiResource := registrySet.resources[resName]
 			if apiResource == nil {
 				continue
 			}
-			if apiResource.subresourceMap == nil {
-				apiResource.subresourceMap = make(map[string]bool)
+			if apiResource.hasSubresource == nil {
+				apiResource.hasSubresource = make(map[string]bool)
 			}
-			apiResource.subresourceMap[subresourceKey] = true
+			apiResource.hasSubresource[subResName] = true
 		}
 
-		groupVersions[group.GroupVersion] = gve
+		groupVersions[apiResourceSet.GroupVersion] = registrySet
 	}
 
 	// Replace the local cache.
-	rm.mutex.Lock()
-	rm.groupVersions = groupVersions
-	rm.mutex.Unlock()
+	mgr.mutex.Lock()
+	mgr.resources = groupVersions
+	mgr.mutex.Unlock()
 }
 
 // Start executes resource discovery in the given interval
-func (rm *ResourceMap) Start(refreshInterval time.Duration) {
-	rm.stopCh = make(chan struct{})
-	rm.doneCh = make(chan struct{})
+func (mgr *APIResourceManager) Start(refreshInterval time.Duration) {
+	mgr.stopCh = make(chan struct{})
+	mgr.doneCh = make(chan struct{})
 
 	go func() {
-		defer close(rm.doneCh)
+		defer close(mgr.doneCh)
 
 		ticker := time.NewTicker(refreshInterval)
 		defer ticker.Stop()
 
 		for {
-			rm.refresh()
+			mgr.refresh()
 
 			select {
-			case <-rm.stopCh:
+			case <-mgr.stopCh:
+				// return / exit from this anonymous func
 				return
 			case <-ticker.C:
 			}
@@ -225,21 +251,15 @@ func (rm *ResourceMap) Start(refreshInterval time.Duration) {
 }
 
 // Stop stops resource discovery ticker
-func (rm *ResourceMap) Stop() {
-	close(rm.stopCh)
-	<-rm.doneCh
+func (mgr *APIResourceManager) Stop() {
+	close(mgr.stopCh)
+	<-mgr.doneCh
 }
 
 // HasSynced flags if any resources were discovered
-func (rm *ResourceMap) HasSynced() bool {
-	rm.mutex.RLock()
-	defer rm.mutex.RUnlock()
-	return rm.groupVersions != nil
-}
+func (mgr *APIResourceManager) HasSynced() bool {
+	mgr.mutex.RLock()
+	defer mgr.mutex.RUnlock()
 
-// NewResourceMap returns a new instance of ResourceMap
-func NewResourceMap(dc discovery.DiscoveryInterface) *ResourceMap {
-	return &ResourceMap{
-		discoveryClient: dc,
-	}
+	return mgr.resources != nil
 }

@@ -31,8 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
-// WebhookCaller manages invocation of webhook
-type WebhookCaller struct {
+// WebhookManager manages invocation of webhook
+type WebhookManager struct {
 	// webhook URL
 	URL string
 
@@ -40,78 +40,76 @@ type WebhookCaller struct {
 	Timeout time.Duration
 }
 
-// WebhookCallerOption is a typed function that is meant to work
-// with *WebhookCaller as value
+// WebhookManagerOption is a typed function that is used
+// to build *WebhookCaller instance
 //
 // NOTE:
-//	This follows the pattern called "functional options"
-type WebhookCallerOption func(*WebhookCaller) error
+//	This follows "functional options" pattern
+type WebhookManagerOption func(*WebhookManager) error
 
-// NewWebhookCaller returns a new instance of WebhookCaller
+// NewWebhookManager returns a new instance of WebhookManager
 // based on an optional list of WebhookCallerOptions
-func NewWebhookCaller(options ...WebhookCallerOption) (*WebhookCaller, error) {
-	caller := &WebhookCaller{}
-	for _, o := range options {
-		err := o(caller)
+func NewWebhookManager(opts ...WebhookManagerOption) (*WebhookManager, error) {
+	mgr := &WebhookManager{}
+	for _, o := range opts {
+		err := o(mgr)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return caller, nil
+	return mgr, nil
 }
 
 // String implements Stringer interface
-func (c *WebhookCaller) String() string {
+func (mgr *WebhookManager) String() string {
 	cstr := []string{"Webhook"}
-	if c.URL != "" {
-		cstr = append(cstr, fmt.Sprintf("url=%s", c.URL))
+	if mgr.URL != "" {
+		cstr = append(cstr, fmt.Sprintf("url=%s", mgr.URL))
 	}
-	if c.Timeout != 0 {
-		cstr = append(cstr, fmt.Sprintf("timeout=%d", c.Timeout))
+	if mgr.Timeout != 0 {
+		cstr = append(cstr, fmt.Sprintf("timeout=%d", mgr.Timeout))
 	}
 	return strings.Join(cstr, " ")
 }
 
-// Call invokes this webhook by passing the given request
-// and filling up with the received response
-func (c *WebhookCaller) Call(request, response interface{}) error {
+// Invoke this webhook by passing the given request
+// and fill up the given response with the webhook response
+func (mgr *WebhookManager) Invoke(request, response interface{}) error {
 	// Encode request.
 	reqBody, err := json.Marshal(request)
 	if err != nil {
-		return errors.Wrapf(err, "%s: Failed to marshal", c)
+		return errors.Wrapf(err, "%s: Marshal failed", mgr)
 	}
 	if glog.V(6) {
 		reqBodyIndent, _ := gojson.MarshalIndent(request, "", "  ")
-		glog.Infof(
-			"DEBUG: %s: Invoking %q", c, reqBodyIndent,
-		)
+		glog.Infof("%s: Invoking %q", mgr, reqBodyIndent)
 	}
 
 	// Send request.
-	client := &http.Client{Timeout: c.Timeout}
-	resp, err := client.Post(c.URL, "application/json", bytes.NewReader(reqBody))
+	client := &http.Client{Timeout: mgr.Timeout}
+	resp, err := client.Post(mgr.URL, "application/json", bytes.NewReader(reqBody))
 	if err != nil {
-		return errors.Wrapf(err, "%s: Failed to invoke", c)
+		return errors.Wrapf(err, "%s: Invoke failed", mgr)
 	}
 	defer resp.Body.Close()
 
 	// Read response.
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrapf(err, "%s: Failed to read response", c)
+		return errors.Wrapf(err, "%s: Read response failed", mgr)
 	}
-	glog.V(6).Infof("DEBUG: %s: Got response %q", c, respBody)
+	glog.V(6).Infof("%s: Got response %q", mgr, respBody)
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
 		return errors.Errorf(
-			"%s: Got error %d: %q", c, resp.StatusCode, respBody,
+			"%s: Response status %d is not OK: %q", mgr, resp.StatusCode, respBody,
 		)
 	}
 
 	// Decode response.
 	if err := json.Unmarshal(respBody, response); err != nil {
-		return errors.Wrapf(err, "%s: Failed to unmarshal response", c)
+		return errors.Wrapf(err, "%s: UnMarshal response failed", mgr)
 	}
 	return nil
 }

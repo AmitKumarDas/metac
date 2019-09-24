@@ -39,12 +39,12 @@ import (
 )
 
 type Metacontroller struct {
-	resources    *dynamicdiscovery.ResourceMap
-	dynClient    *dynamicclientset.Clientset
-	dynInformers *dynamicinformer.SharedInformerFactory
+	resourceManager *dynamicdiscovery.APIResourceManager
+	clientset       *dynamicclientset.Clientset
+	informerFactory *dynamicinformer.SharedInformerFactory
 
-	dcLister   mclisters.DecoratorControllerLister
-	dcInformer cache.SharedIndexInformer
+	lister   mclisters.DecoratorControllerLister
+	informer cache.SharedIndexInformer
 
 	queue                workqueue.RateLimitingInterface
 	decoratorControllers map[string]*decoratorController
@@ -52,20 +52,27 @@ type Metacontroller struct {
 	stopCh, doneCh chan struct{}
 }
 
-func NewMetacontroller(resources *dynamicdiscovery.ResourceMap, dynClient *dynamicclientset.Clientset, dynInformers *dynamicinformer.SharedInformerFactory, mcInformerFactory mcinformers.SharedInformerFactory) *Metacontroller {
-	mc := &Metacontroller{
-		resources:    resources,
-		dynClient:    dynClient,
-		dynInformers: dynInformers,
+// NewMetacontroller returns a new instance of Metacontroller
+func NewMetacontroller(
+	resourceMgr *dynamicdiscovery.APIResourceManager,
+	clientset *dynamicclientset.Clientset,
+	dynInformers *dynamicinformer.SharedInformerFactory,
+	mcInformerFactory mcinformers.SharedInformerFactory,
+) *Metacontroller {
 
-		dcLister:   mcInformerFactory.Metacontroller().V1alpha1().DecoratorControllers().Lister(),
-		dcInformer: mcInformerFactory.Metacontroller().V1alpha1().DecoratorControllers().Informer(),
+	mc := &Metacontroller{
+		resourceManager: resourceMgr,
+		clientset:       clientset,
+		informerFactory: dynInformers,
+
+		lister:   mcInformerFactory.Metacontroller().V1alpha1().DecoratorControllers().Lister(),
+		informer: mcInformerFactory.Metacontroller().V1alpha1().DecoratorControllers().Informer(),
 
 		queue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "DecoratorController"),
 		decoratorControllers: make(map[string]*decoratorController),
 	}
 
-	mc.dcInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	mc.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    mc.enqueueDecoratorController,
 		UpdateFunc: mc.updateDecoratorController,
 		DeleteFunc: mc.enqueueDecoratorController,
@@ -74,6 +81,7 @@ func NewMetacontroller(resources *dynamicdiscovery.ResourceMap, dynClient *dynam
 	return mc
 }
 
+// Start this controller
 func (mc *Metacontroller) Start() {
 	mc.stopCh = make(chan struct{})
 	mc.doneCh = make(chan struct{})
@@ -85,7 +93,7 @@ func (mc *Metacontroller) Start() {
 		glog.Info("Starting DecoratorController metacontroller")
 		defer glog.Info("Shutting down DecoratorController metacontroller")
 
-		if !k8s.WaitForCacheSync("DecoratorController", mc.stopCh, mc.dcInformer.HasSynced) {
+		if !k8s.WaitForCacheSync("DecoratorController", mc.stopCh, mc.informer.HasSynced) {
 			return
 		}
 
@@ -96,6 +104,7 @@ func (mc *Metacontroller) Start() {
 	}()
 }
 
+// Stop this controller
 func (mc *Metacontroller) Stop() {
 	// Stop metacontroller first so there's no more changes to controllers.
 	close(mc.stopCh)
@@ -140,7 +149,7 @@ func (mc *Metacontroller) sync(key string) error {
 
 	glog.V(4).Infof("sync DecoratorController %v", name)
 
-	dc, err := mc.dcLister.Get(name)
+	dc, err := mc.lister.Get(name)
 	if apierrors.IsNotFound(err) {
 		glog.V(4).Infof("DecoratorController %v has been deleted", name)
 		// Stop and remove the controller if it exists.
@@ -168,7 +177,7 @@ func (mc *Metacontroller) syncDecoratorController(dc *v1alpha1.DecoratorControll
 		delete(mc.decoratorControllers, dc.Name)
 	}
 
-	c, err := newDecoratorController(mc.resources, mc.dynClient, mc.dynInformers, dc)
+	c, err := newDecoratorController(mc.resourceManager, mc.clientset, mc.informerFactory, dc)
 	if err != nil {
 		return err
 	}

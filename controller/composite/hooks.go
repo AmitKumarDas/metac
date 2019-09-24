@@ -30,7 +30,7 @@ import (
 type SyncHookRequest struct {
 	Controller *v1alpha1.CompositeController `json:"controller"`
 	Parent     *unstructured.Unstructured    `json:"parent"`
-	Children   common.ChildMap               `json:"children"`
+	Children   common.AnyUnstructRegistry    `json:"children"`
 	Finalizing bool                          `json:"finalizing"`
 }
 
@@ -48,8 +48,9 @@ func (r *SyncHookRequest) String() string {
 // NewSyncHookRequest returns a new instance of SyncHookRequest
 func NewSyncHookRequest(
 	parent *unstructured.Unstructured,
-	children common.ChildMap,
+	children common.AnyUnstructRegistry,
 ) *SyncHookRequest {
+
 	return &SyncHookRequest{
 		Parent:   parent,
 		Children: children,

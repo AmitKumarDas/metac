@@ -24,8 +24,14 @@ type Hook struct {
 	// Webhook based desired state
 	Webhook *Webhook `json:"webhook,omitempty"`
 
-	// ConfigHook based desired state
-	ConfigHook *ConfigHook `json:"confighook,omitempty"`
+	// Go templating based desired state
+	GoTemplate *GoTemplateHook `json:"gotemplate,omitempty"`
+
+	// Jsonnet based desired state
+	Jsonnet *JsonnetHook `json:"jsonnet,omitempty"`
+
+	// Job based desired state
+	Job *JobHook `json:"job,omitempty"`
 }
 
 // Webhook refers to the logic that needs to be invoked
@@ -38,29 +44,33 @@ type Webhook struct {
 	Service *ServiceReference `json:"service,omitempty"`
 }
 
-// ConfigHookType represents the supported config based hooks
-type ConfigHookType string
-
-const (
-	// ConfigHookTypeJSON represents Jsonnet based logic to derive
-	// the desired state
-	ConfigHookTypeJSON ConfigHookType = "Jsonnet"
-
-	// ConfigHookTypeGoTemplate represent Go template based logic
-	// to derive the desired state
-	ConfigHookTypeGoTemplate ConfigHookType = "GoTemplate"
-)
-
-// ConfigHook represents the logic to derive the desired state. A config
-// hook can be invoked for a sync/finalize action.
+// JobHook represents the logic to derive the desired state. A job
+// based hook can be invoked for a sync/finalize action.
 //
-// A ConfigHook differs from a webhook by being defined in some config file
-// that can be loaded/fetched by Metac binary itself.
-//
-// For example, a confighook can be defined as a Kubernetes ConfigMap and
-// can be fetched by the watcher that reconciles any Metac controller
-// resource.
-type ConfigHook struct {
-	Type *ConfigHookType `json:"type,omitempty"`
-	Name string          `json:"name"`
+// A JobHook is a Kubernetes Job API that can be applied by Metac
+// binary itself.
+type JobHook struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+
+	// Image refers to container image
+	Image string `json:"image"`
+}
+
+// GoTemplateHook represents the logic that helps in achieving the
+// desired state. This logic written as a go template. Metac fetches
+// this go template from Kubernetes ConfigMap. Metac has a go template
+// parser to parse the same.
+type GoTemplateHook ConfigMap
+
+// JsonnetHook represents the logic that helps in achieving the
+// desired state. This logic is written in jsonnet. Metac fetches
+// this jsonnet from Kubernetes ConfigMap and has a jsonnet parser
+// to parse the same.
+type JsonnetHook ConfigMap
+
+// ConfigMap refers to a Kubernetes ConfigMap
+type ConfigMap struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace, omitempty"`
 }

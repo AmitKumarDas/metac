@@ -50,7 +50,7 @@ import (
 type parentController struct {
 	api *v1alpha1.CompositeController
 
-	resources      *dynamicdiscovery.ResourceMap
+	resources      *dynamicdiscovery.APIResourceManager
 	parentResource *dynamicdiscovery.APIResource
 
 	mcClientSet  mcclientset.Interface
@@ -65,13 +65,13 @@ type parentController struct {
 	queue          workqueue.RateLimitingInterface
 
 	updateStrategy updateStrategyMap
-	childInformers common.InformerMap
+	childInformers common.ResourceInformerRegistryByVR
 
 	finalizer *finalizer.Manager
 }
 
 func newParentController(
-	resources *dynamicdiscovery.ResourceMap,
+	resources *dynamicdiscovery.APIResourceManager,
 	dynClientSet *dynamicclientset.Clientset,
 	informerFactory *dynamicinformer.SharedInformerFactory,
 	mcClient mcclientset.Interface,
@@ -79,7 +79,7 @@ func newParentController(
 	api *v1alpha1.CompositeController,
 ) (pc *parentController, newErr error) {
 	// Make a dynamic client for the parent resource.
-	parentClient, err := dynClientSet.Resource(
+	parentClient, err := dynClientSet.GetClientByResource(
 		api.Spec.ParentResource.APIVersion,
 		api.Spec.ParentResource.Resource,
 	)
@@ -108,7 +108,7 @@ func newParentController(
 	}
 
 	// Create informers for all child resources.
-	childInformers := make(common.InformerMap)
+	childInformers := make(common.ResourceInformerRegistryByVR)
 	defer func() {
 		if newErr != nil {
 			// If newParentController fails, Close() any informers we created
@@ -353,7 +353,7 @@ func (pc *parentController) resolveControllerRef(
 ) *unstructured.Unstructured {
 	// We can't look up by UID, so look up by Name and then verify UID.
 	// Don't even try to look up by Name if it's the wrong APIGroup or Kind.
-	apiGroup, _ := common.ParseAPIVersion(controllerRef.APIVersion)
+	apiGroup, _ := common.ParseAPIVersionToGroupVersion(controllerRef.APIVersion)
 	if apiGroup != pc.parentResource.Group {
 		return nil
 	}
@@ -588,7 +588,8 @@ func (pc *parentController) syncParentObject(parent *unstructured.Unstructured) 
 	if err != nil {
 		return err
 	}
-	desiredChildren := common.MakeChildMap(parent, syncResult.Children)
+	desiredChildren :=
+		common.MakeAnyUnstructRegistryByReference(parent, syncResult.Children)
 
 	// Enqueue a delayed resync, if requested.
 	if syncResult.ResyncAfterSeconds > 0 {
@@ -791,7 +792,7 @@ func (pc *parentController) canAdoptFunc(parent *unstructured.Unstructured) func
 // the current match
 func (pc *parentController) claimChildren(
 	parent *unstructured.Unstructured,
-) (common.ChildMap, error) {
+) (common.AnyUnstructRegistry, error) {
 	// Set up values common to all child types.
 	parentNamespace := parent.GetNamespace()
 	parentGVK := pc.parentResource.GroupVersionKind()
@@ -802,11 +803,12 @@ func (pc *parentController) claimChildren(
 	canAdoptFunc := pc.canAdoptFunc(parent)
 
 	// Claim all child types.
-	childMap := make(common.ChildMap)
+	childMap := make(common.AnyUnstructRegistry)
 	for _, child := range pc.api.Spec.ChildResources {
 		// List all objects of the child kind in the parent object's namespace,
 		// or in all namespaces if the parent is cluster-scoped.
-		childClient, err := pc.dynClientSet.Resource(child.APIVersion, child.Resource)
+		childClient, err :=
+			pc.dynClientSet.GetClientByResource(child.APIVersion, child.Resource)
 		if err != nil {
 			return nil, err
 		}
@@ -835,7 +837,7 @@ func (pc *parentController) claimChildren(
 		}
 
 		// Always include the requested groups, even if there are no entries.
-		childMap.InitGroup(child.APIVersion, childClient.Kind)
+		childMap.InitGroupByVK(child.APIVersion, childClient.Kind)
 
 		// Handle orphan/adopt and filter by owner+selector.
 		crm := dynamiccontrollerref.NewUnstructClaimManager(
@@ -859,7 +861,7 @@ func (pc *parentController) claimChildren(
 		// Add children to map by name.
 		// Note that we limit each parent to only working within its own namespace.
 		for _, obj := range children {
-			childMap.Insert(parent, obj)
+			childMap.InsertByReference(parent, obj)
 		}
 	}
 	return childMap, nil

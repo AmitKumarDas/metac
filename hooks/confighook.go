@@ -17,13 +17,49 @@ limitations under the License.
 package hooks
 
 import (
-	"github.com/pkg/errors"
-
-	"openebs.io/metac/apis/metacontroller/v1alpha1"
+	"fmt"
 )
 
-func callConfigHook(
-	confighook *v1alpha1.ConfigHook, request, response interface{},
-) error {
-	return errors.Errorf("Not Implemented")
+// GoTemplateManager manages execution of GoTemplate
+type GoTemplateManager struct {
+	// name of GoTemplate
+	Name string
+
+	// namespace of GoTemplate
+	Namespace string
+
+	// actual template body that will be executed by
+	// go template executor
+	Template string
+}
+
+// GoTemplateManagerOption is a typed function that is meant to
+// build an instance of *GoTemplateManager
+//
+// NOTE:
+//	This follows "functional options" pattern
+type GoTemplateManagerOption func(*GoTemplateManager) error
+
+// NewGoTemplateManager returns a new instance of GoTemplateManager
+// based on the provided options
+func NewGoTemplateManager(opts ...GoTemplateManagerOption) (*GoTemplateManager, error) {
+	mgr := &GoTemplateManager{}
+	for _, o := range opts {
+		err := o(mgr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return mgr, nil
+}
+
+// String implements Stringer interface
+func (mgr *GoTemplateManager) String() string {
+	return fmt.Sprintf("GoTemplate %s/%s", mgr.Namespace, mgr.Name)
+}
+
+// Invoke this webhook by using the provided request and fill up
+// the response with the provided response object
+func (mgr *GoTemplateManager) Invoke(request, response interface{}) error {
+	return nil
 }
