@@ -56,11 +56,12 @@ type decoratorController struct {
 	// schema this controller is based on
 	schema *v1alpha1.DecoratorController
 
-	// discovered discoveredResources
-	discoveredResources *dynamicdiscovery.ResourceMap
+	// discovered resourceManager
+	resourceManager *dynamicdiscovery.APIResourceManager
 
 	// hold the parent kinds
-	parentKinds common.GroupKindMap
+	parentKinds common.ResourceRegistryByGK
+
 	// selector options to filter the parent
 	parentSelector *decoratorSelector
 
@@ -82,8 +83,8 @@ type decoratorController struct {
 	// the watched resource i.e. parent & to list the attachments
 	// i.e. children from the cache thereby reducing the pressure
 	// on kube api server
-	parentInformers common.InformerMap
-	childInformers  common.InformerMap
+	parentInformers common.ResourceInformerRegistryByVR
+	childInformers  common.ResourceInformerRegistryByVR
 
 	// instance that deals with this controller's finalizer
 	// if any
@@ -94,20 +95,20 @@ type decoratorController struct {
 // controller with required parent & child informers, selectors,
 // update strategy & so on.
 func newDecoratorController(
-	discoveredResources *dynamicdiscovery.ResourceMap,
+	resourceMgr *dynamicdiscovery.APIResourceManager,
 	dynCliSet *dynamicclientset.Clientset,
 	informerFactory *dynamicinformer.SharedInformerFactory,
 	schema *v1alpha1.DecoratorController,
 ) (controller *decoratorController, newErr error) {
 
 	c := &decoratorController{
-		schema:              schema,
-		discoveredResources: discoveredResources,
-		dynCliSet:           dynCliSet,
+		schema:          schema,
+		resourceManager: resourceMgr,
+		dynCliSet:       dynCliSet,
 
-		parentKinds:     make(common.GroupKindMap),
-		parentInformers: make(common.InformerMap),
-		childInformers:  make(common.InformerMap),
+		parentKinds:     make(common.ResourceRegistryByGK),
+		parentInformers: make(common.ResourceInformerRegistryByVR),
+		childInformers:  make(common.ResourceInformerRegistryByVR),
 
 		queue: workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(),
@@ -124,14 +125,14 @@ func newDecoratorController(
 
 	var err error
 
-	c.parentSelector, err = newDecoratorSelector(discoveredResources, schema)
+	c.parentSelector, err = newDecoratorSelector(resourceMgr, schema)
 	if err != nil {
 		return nil, err
 	}
 
 	// Keep a list of parent resource info from discovery.
 	for _, parent := range schema.Spec.Resources {
-		resource := discoveredResources.Get(parent.APIVersion, parent.Resource)
+		resource := resourceMgr.GetByResource(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
 				"can't find parent resource %q in apiVersion %q",
@@ -143,7 +144,7 @@ func newDecoratorController(
 	}
 
 	// Remember the update strategy for each child type.
-	c.updateStrategy, err = makeUpdateStrategyMap(discoveredResources, schema)
+	c.updateStrategy, err = makeUpdateStrategyMap(resourceMgr, schema)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +388,7 @@ func (c *decoratorController) resolveControllerRef(
 	// Is the controllerRef pointing to one of the parent resources we care about?
 	// Only look at the group and kind; it doesn't matter if the controller uses
 	// a different version than we do.
-	apiGroup, _ := common.ParseAPIVersion(controllerRef.APIVersion)
+	apiGroup, _ := common.ParseAPIVersionToGroupVersion(controllerRef.APIVersion)
 	resource := c.parentKinds.Get(apiGroup, controllerRef.Kind)
 	if resource == nil {
 		// It's not one of the resources we care about.
@@ -531,7 +532,7 @@ func (c *decoratorController) sync(key string) error {
 		return err
 	}
 
-	resource := c.discoveredResources.GetKind(apiVersion, kind)
+	resource := c.resourceManager.GetByKind(apiVersion, kind)
 	if resource == nil {
 		return errors.Errorf("can't find kind %q in apiVersion %q", kind, apiVersion)
 	}
@@ -568,7 +569,8 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 		c.schema.Name, parent.GetKind(), parent.GetNamespace(), parent.GetName(),
 	)
 
-	parentClient, err := c.dynCliSet.Kind(parent.GetAPIVersion(), parent.GetKind())
+	parentClient, err :=
+		c.dynCliSet.GetClientByKind(parent.GetAPIVersion(), parent.GetKind())
 	if err != nil {
 		return errors.Wrapf(
 			err,
@@ -617,7 +619,8 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 	if err != nil {
 		return err
 	}
-	desiredChildren := common.MakeChildMap(parent, syncResult.Attachments)
+	desiredChildren :=
+		common.MakeAnyUnstructRegistryByReference(parent, syncResult.Attachments)
 
 	// Enqueue a delayed resync, if requested.
 	if syncResult.ResyncAfterSeconds > 0 {
@@ -725,10 +728,11 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 // resource as declared in this decorator controller resource
 func (c *decoratorController) getChildren(
 	parent *unstructured.Unstructured,
-) (common.ChildMap, error) {
+) (common.AnyUnstructRegistry, error) {
+
 	parentUID := parent.GetUID()
 	parentNamespace := parent.GetNamespace()
-	childMap := make(common.ChildMap)
+	childMap := make(common.AnyUnstructRegistry)
 
 	for _, child := range c.schema.Spec.Attachments {
 		// List all objects of the child kind in the parent object's namespace,
@@ -758,7 +762,7 @@ func (c *decoratorController) getChildren(
 		}
 
 		// Always include the requested groups, even if there are no entries.
-		resource := c.discoveredResources.Get(child.APIVersion, child.Resource)
+		resource := c.resourceManager.GetByResource(child.APIVersion, child.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
 				"can't find resource %q in apiVersion %q",
@@ -766,7 +770,7 @@ func (c *decoratorController) getChildren(
 				child.APIVersion,
 			)
 		}
-		childMap.InitGroup(child.APIVersion, resource.Kind)
+		childMap.InitGroupByVK(child.APIVersion, resource.Kind)
 
 		// Take only the objects that belong to this parent,
 		// and that were created by this decorator.
@@ -778,7 +782,7 @@ func (c *decoratorController) getChildren(
 			if obj.GetAnnotations()[decoratorControllerAnnotation] != c.schema.Name {
 				continue
 			}
-			childMap.Insert(parent, obj)
+			childMap.InsertByReference(parent, obj)
 		}
 	}
 	return childMap, nil
@@ -787,9 +791,9 @@ func (c *decoratorController) getChildren(
 // holds update strategies of various resources
 type updateStrategyMap map[string]*v1alpha1.DecoratorControllerAttachmentUpdateStrategy
 
-// GetMethod returns the upgrade strategy based on
+// Get returns the upgrade strategy based on
 // the given api group & kind
-func (m updateStrategyMap) GetMethod(apiGroup, kind string) v1alpha1.ChildUpdateMethod {
+func (m updateStrategyMap) Get(apiGroup, kind string) v1alpha1.ChildUpdateMethod {
 	strategy := m.get(apiGroup, kind)
 	if strategy == nil || strategy.Method == "" {
 		// default
@@ -809,7 +813,7 @@ func updateStrategyMapKey(apiGroup, kind string) string {
 }
 
 func makeUpdateStrategyMap(
-	resources *dynamicdiscovery.ResourceMap,
+	resourceMgr *dynamicdiscovery.APIResourceManager,
 	dc *v1alpha1.DecoratorController,
 ) (updateStrategyMap, error) {
 	m := make(updateStrategyMap)
@@ -819,7 +823,7 @@ func makeUpdateStrategyMap(
 		if child.UpdateStrategy != nil &&
 			child.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
 			// this is done to map resource name to kind name
-			resource := resources.Get(child.APIVersion, child.Resource)
+			resource := resourceMgr.GetByResource(child.APIVersion, child.Resource)
 			if resource == nil {
 				return nil, errors.Errorf(
 					"can't find child resource %q in %v",
@@ -828,7 +832,7 @@ func makeUpdateStrategyMap(
 				)
 			}
 			// Ignore API version.
-			apiGroup, _ := common.ParseAPIVersion(child.APIVersion)
+			apiGroup, _ := common.ParseAPIVersionToGroupVersion(child.APIVersion)
 			key := updateStrategyMapKey(apiGroup, resource.Kind)
 			m[key] = child.UpdateStrategy
 		}

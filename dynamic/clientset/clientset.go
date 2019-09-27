@@ -20,6 +20,7 @@ package clientset
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,39 +36,41 @@ import (
 // or more discovered API resource(s). Clientset has the ability to
 // provide dynamic client for specific resource.
 type Clientset struct {
-	config    rest.Config
-	resources *dynamicdiscovery.ResourceMap
-	dc        dynamic.Interface
+	config          rest.Config
+	resourceManager *dynamicdiscovery.APIResourceManager
+	dynamicClient   dynamic.Interface
 }
 
 // New returns a new instance of Clientset
-func New(config *rest.Config, resources *dynamicdiscovery.ResourceMap) (*Clientset, error) {
+func New(
+	config *rest.Config, resourceMgr *dynamicdiscovery.APIResourceManager,
+) (*Clientset, error) {
+
 	dc, err := dynamic.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"Failed to create dynamic client: %v", err,
-		)
+		return nil, errors.Wrapf(err, "New clientset failed")
 	}
+
 	return &Clientset{
-		config:    *config,
-		resources: resources,
-		dc:        dc,
+		config:          *config,
+		resourceManager: resourceMgr,
+		dynamicClient:   dc,
 	}, nil
 }
 
 // HasSynced flags if resources managed by this clientset have
 // synced i.e. refreshed from the API server
 func (cs *Clientset) HasSynced() bool {
-	return cs.resources.HasSynced()
+	return cs.resourceManager.HasSynced()
 }
 
-// Resource returns the specific dynamic client of the given
-// resource by its version & resource (i.e. plural of kind)
-func (cs *Clientset) Resource(apiVersion, resource string) (*ResourceClient, error) {
+// GetClientByResource returns the resource client corresponding to
+// the given version & resource name (i.e. plural of kind)
+func (cs *Clientset) GetClientByResource(apiVersion, resource string) (*ResourceClient, error) {
 	// Look up the requested resource in discovery.
-	apiResource := cs.resources.Get(apiVersion, resource)
+	apiResource := cs.resourceManager.GetByResource(apiVersion, resource)
 	if apiResource == nil {
-		return nil, fmt.Errorf(
+		return nil, errors.Errorf(
 			"Failed to initialise dynamic client for resource %q in apiVersion %q",
 			resource,
 			apiVersion,
@@ -76,11 +79,11 @@ func (cs *Clientset) Resource(apiVersion, resource string) (*ResourceClient, err
 	return cs.resource(apiResource), nil
 }
 
-// Kind returns the specific dynamic client of the given
+// GetClientByKind returns the specific dynamic client of the given
 // resource by its version & kind
-func (cs *Clientset) Kind(apiVersion, kind string) (*ResourceClient, error) {
+func (cs *Clientset) GetClientByKind(apiVersion, kind string) (*ResourceClient, error) {
 	// Look up the requested resource in discovery.
-	apiResource := cs.resources.GetKind(apiVersion, kind)
+	apiResource := cs.resourceManager.GetByKind(apiVersion, kind)
 	if apiResource == nil {
 		return nil, fmt.Errorf(
 			"Failed to initialise dynamic client for kind %q in apiVersion %q",
@@ -96,7 +99,7 @@ func (cs *Clientset) Kind(apiVersion, kind string) (*ResourceClient, error) {
 // NOTE:
 //	The returned client instance is specific to the given resource
 func (cs *Clientset) resource(apiResource *dynamicdiscovery.APIResource) *ResourceClient {
-	client := cs.dc.Resource(apiResource.GroupVersionResource())
+	client := cs.dynamicClient.Resource(apiResource.GroupVersionResource())
 	return &ResourceClient{
 		ResourceInterface: client,
 		APIResource:       apiResource,

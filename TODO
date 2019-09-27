@@ -1,0 +1,13 @@
+### Current Actions:
+- [IN-PROGRESS] test/integration
+- [IN-PROGRESS] test/unittest
+- [IN-PROGRESS] code comments, refactor
+
+### Future Actions:
+- Use Metac as a library to build Kubernetes controllers
+- Declarative Integration Testing via GenericController
+
+### Future References
+- https://kubernetes.io/docs/reference/using-api/api-concepts/#server-side-apply
+- https://groups.google.com/forum/#!forum/kubebuilder
+- Crossplane - https://docs.google.com/document/d/1q_sp2jLQsDEOX7Yug6TPOv7Fwrys6EwcF5Itxjkno7Y/

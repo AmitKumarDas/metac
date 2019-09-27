@@ -74,13 +74,13 @@ func (f *Fixture) CreateCRD(
 
 	f.t.Logf("Waiting for %v CRD to appear in API server discovery info...", kind)
 	err = f.Wait(func() (bool, error) {
-		return resourceMap.Get(APIVersion, plural) != nil, nil
+		return resourceManager.GetByResource(APIVersion, plural) != nil, nil
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
 
-	client, err := f.dynamic.Resource(APIVersion, plural)
+	client, err := f.dynamic.GetClientByResource(APIVersion, plural)
 	if err != nil {
 		f.t.Fatal(err)
 	}

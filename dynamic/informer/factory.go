@@ -79,7 +79,7 @@ func (f *SharedInformerFactory) GetOrCreate(apiVersion, resource string) (*Resou
 	}
 
 	// Create one if it doesn't exist.
-	client, err := f.clientset.Resource(apiVersion, resource)
+	client, err := f.clientset.GetClientByResource(apiVersion, resource)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"Failed to subscribe shared informer %v: %v", key, err,

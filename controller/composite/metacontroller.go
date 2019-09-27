@@ -29,9 +29,9 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
-	mcclientset "openebs.io/metac/client/generated/clientset/versioned"
-	mcinformers "openebs.io/metac/client/generated/informers/externalversions"
-	mclisters "openebs.io/metac/client/generated/listers/metacontroller/v1alpha1"
+	metaclientset "openebs.io/metac/client/generated/clientset/versioned"
+	metainformers "openebs.io/metac/client/generated/informers/externalversions"
+	metalisters "openebs.io/metac/client/generated/listers/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/common"
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 	dynamicdiscovery "openebs.io/metac/dynamic/discovery"
@@ -40,14 +40,14 @@ import (
 )
 
 type Metacontroller struct {
-	resources    *dynamicdiscovery.ResourceMap
-	mcClient     mcclientset.Interface
-	dynClient    *dynamicclientset.Clientset
-	dynInformers *dynamicinformer.SharedInformerFactory
+	resourceManager        *dynamicdiscovery.APIResourceManager
+	metaClientset          metaclientset.Interface
+	dynamicClientset       *dynamicclientset.Clientset
+	dynamicInformerFactory *dynamicinformer.SharedInformerFactory
 
-	ccLister         mclisters.CompositeControllerLister
-	ccInformer       cache.SharedIndexInformer
-	revisionLister   mclisters.ControllerRevisionLister
+	lister           metalisters.CompositeControllerLister
+	informer         cache.SharedIndexInformer
+	revisionLister   metalisters.ControllerRevisionLister
 	revisionInformer cache.SharedIndexInformer
 
 	queue             workqueue.RateLimitingInterface
@@ -57,28 +57,29 @@ type Metacontroller struct {
 }
 
 func NewMetacontroller(
-	resources *dynamicdiscovery.ResourceMap,
-	dynClient *dynamicclientset.Clientset,
-	dynInformers *dynamicinformer.SharedInformerFactory,
-	mcInformerFactory mcinformers.SharedInformerFactory,
-	mcClient mcclientset.Interface,
+	resourceMgr *dynamicdiscovery.APIResourceManager,
+	dynamicClientset *dynamicclientset.Clientset,
+	dynamicInformerFactory *dynamicinformer.SharedInformerFactory,
+	metaInformerFactory metainformers.SharedInformerFactory,
+	metaClientset metaclientset.Interface,
 ) *Metacontroller {
-	mc := &Metacontroller{
-		resources:    resources,
-		mcClient:     mcClient,
-		dynClient:    dynClient,
-		dynInformers: dynInformers,
 
-		ccLister:         mcInformerFactory.Metacontroller().V1alpha1().CompositeControllers().Lister(),
-		ccInformer:       mcInformerFactory.Metacontroller().V1alpha1().CompositeControllers().Informer(),
-		revisionLister:   mcInformerFactory.Metacontroller().V1alpha1().ControllerRevisions().Lister(),
-		revisionInformer: mcInformerFactory.Metacontroller().V1alpha1().ControllerRevisions().Informer(),
+	mc := &Metacontroller{
+		resourceManager:        resourceMgr,
+		metaClientset:          metaClientset,
+		dynamicClientset:       dynamicClientset,
+		dynamicInformerFactory: dynamicInformerFactory,
+
+		lister:           metaInformerFactory.Metacontroller().V1alpha1().CompositeControllers().Lister(),
+		informer:         metaInformerFactory.Metacontroller().V1alpha1().CompositeControllers().Informer(),
+		revisionLister:   metaInformerFactory.Metacontroller().V1alpha1().ControllerRevisions().Lister(),
+		revisionInformer: metaInformerFactory.Metacontroller().V1alpha1().ControllerRevisions().Informer(),
 
 		queue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "CompositeController"),
 		parentControllers: make(map[string]*parentController),
 	}
 
-	mc.ccInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	mc.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    mc.enqueueCompositeController,
 		UpdateFunc: mc.updateCompositeController,
 		DeleteFunc: mc.enqueueCompositeController,
@@ -98,7 +99,7 @@ func (mc *Metacontroller) Start() {
 		glog.Info("Starting CompositeController metacontroller")
 		defer glog.Info("Shutting down CompositeController metacontroller")
 
-		if !k8s.WaitForCacheSync("CompositeController", mc.stopCh, mc.ccInformer.HasSynced) {
+		if !k8s.WaitForCacheSync("CompositeController", mc.stopCh, mc.informer.HasSynced) {
 			return
 		}
 
@@ -153,7 +154,7 @@ func (mc *Metacontroller) sync(key string) error {
 
 	glog.V(4).Infof("sync CompositeController %v", name)
 
-	cc, err := mc.ccLister.Get(name)
+	cc, err := mc.lister.Get(name)
 	if apierrors.IsNotFound(err) {
 		glog.V(4).Infof("CompositeController %v has been deleted", name)
 		// Stop and remove the controller if it exists.
@@ -181,7 +182,7 @@ func (mc *Metacontroller) syncCompositeController(cc *v1alpha1.CompositeControll
 		delete(mc.parentControllers, cc.Name)
 	}
 
-	pc, err := newParentController(mc.resources, mc.dynClient, mc.dynInformers, mc.mcClient, mc.revisionLister, cc)
+	pc, err := newParentController(mc.resourceManager, mc.dynamicClientset, mc.dynamicInformerFactory, mc.metaClientset, mc.revisionLister, cc)
 	if err != nil {
 		return err
 	}

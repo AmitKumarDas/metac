@@ -31,7 +31,7 @@ import (
 	"openebs.io/metac/server"
 )
 
-var resourceMap *dynamicdiscovery.ResourceMap
+var resourceManager *dynamicdiscovery.APIResourceManager
 
 const installKubectl = `
 Cannot find kubectl, cannot run integration tests
@@ -132,9 +132,9 @@ func testMain(tests func() int) error {
 
 	// Periodically refresh discovery to pick up newly-installed resources.
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(ApiserverConfig())
-	resourceMap = dynamicdiscovery.NewResourceMap(discoveryClient)
+	resourceManager = dynamicdiscovery.NewAPIResourceManager(discoveryClient)
 	// We don't care about stopping this cleanly since it has no external effects.
-	resourceMap.Start(500 * time.Millisecond)
+	resourceManager.Start(500 * time.Millisecond)
 
 	// Now actually run the tests.
 	if exitCode := tests(); exitCode != 0 {

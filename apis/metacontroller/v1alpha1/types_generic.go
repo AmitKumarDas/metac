@@ -23,6 +23,7 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// GenericController defines GenericController API schema
 type GenericController struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
@@ -34,6 +35,14 @@ type GenericController struct {
 // GenericControllerSpec is the specifications for GenericController
 // API
 type GenericControllerSpec struct {
+	// TODO (@amitkumardas):
+	// Change this to an array of GenericControllerResource
+	//
+	// However, need to think if this is really needed.
+	// How to manage relations when attachments need to refer
+	// to a particular watch. We might continue to use a single
+	// watch per GenericController if it satisfies most of the
+	// use-cases and yet is simple to understand & use.
 	Watch       GenericControllerResource     `json:"watch"`
 	Attachments []GenericControllerAttachment `json:"sync,omitempty"`
 
@@ -52,9 +61,39 @@ type GenericControllerSpec struct {
 }
 
 // GenericControllerHooks holds the sync as well as finalize hooks
+//
+// TODO (@amitkumardas): Check if we need more than one sync or finalize
+// hooks
 type GenericControllerHooks struct {
-	Sync     *Hook `json:"sync"`
+	// Hook that gets invoked during create/update reconciliation
+	Sync *Hook `json:"sync,omitempty"`
+
+	// Hook that gets invoked during delete reconciliation
 	Finalize *Hook `json:"finalize,omitempty"`
+}
+
+// NameSelector is used to select resources based on
+// the names set here
+type NameSelector []string
+
+// Contains returns true if the provided search item
+// is present in the selector
+func (s NameSelector) Contains(search string) bool {
+	for _, name := range s {
+		if name == search {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsOrTrue returns true if nameselector is empty or
+// search item is available in nameselector
+func (s NameSelector) ContainsOrTrue(search string) bool {
+	if len(s) == 0 {
+		return true
+	}
+	return s.Contains(search)
 }
 
 // GenericControllerResource represent a resource that is understood
@@ -73,7 +112,7 @@ type GenericControllerHooks struct {
 // annotation selector.
 type GenericControllerResource struct {
 	ResourceRule       `json:",inline"`
-	NameSelector       []string              `json:"nameSelector,omitempty"`
+	NameSelector       NameSelector          `json:"nameSelector,omitempty"`
 	LabelSelector      *metav1.LabelSelector `json:"labelSelector,omitempty"`
 	AnnotationSelector *AnnotationSelector   `json:"annotationSelector,omitempty"`
 }
@@ -182,8 +221,21 @@ type GenericControllerCondition struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// GenericControllerList is a collection of GenericController API schemas
 type GenericControllerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
 	Items           []GenericController `json:"items"`
+}
+
+// Key formats the GenericController value into a
+// suitable key format
+func (gc GenericController) Key() string {
+	return GenericControllerKey(gc.Namespace, gc.Name)
+}
+
+// GenericControllerKey returns key formatted type for the
+// given namespace & name values
+func GenericControllerKey(namespace, name string) string {
+	return namespace + "/" + name
 }

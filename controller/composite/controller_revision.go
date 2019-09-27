@@ -84,8 +84,9 @@ func (pc *parentController) claimRevisions(
 
 func (pc *parentController) syncRevisions(
 	parent *unstructured.Unstructured,
-	observedChildren common.ChildMap,
+	observedChildren common.AnyUnstructRegistry,
 ) (*SyncHookResponse, error) {
+
 	// If no child resources use rolling updates, just sync the latest parent.
 	// Also, if the parent object is being deleted and we don't have a finalizer,
 	// just sync the latest parent to get the status since we won't manage
@@ -167,21 +168,22 @@ func (pc *parentController) syncRevisions(
 	var wg sync.WaitGroup
 	for _, pr := range parentRevisions {
 		wg.Add(1)
-		go func(pr *parentRevision) {
+		go func(rev *parentRevision) {
 			defer wg.Done()
 
 			syncRequest := &SyncHookRequest{
 				Controller: pc.api,
-				Parent:     pr.parent,
+				Parent:     rev.parent,
 				Children:   observedChildren,
 			}
 			syncResult, err := callSyncHook(pc.api, syncRequest)
 			if err != nil {
-				pr.syncError = err
+				rev.syncError = err
 				return
 			}
-			pr.syncResult = syncResult
-			pr.desiredChildMap = common.MakeChildMap(parent, syncResult.Children)
+			rev.syncResult = syncResult
+			rev.desiredChildMap =
+				common.MakeAnyUnstructRegistryByReference(parent, syncResult.Children)
 		}(pr)
 	}
 	wg.Wait()
@@ -225,9 +227,9 @@ func (pc *parentController) syncRevisions(
 	for _, pr := range parentRevisions[1:] {
 		for _, ck := range pr.revision.Children {
 			for _, name := range ck.Names {
-				child := pr.desiredChildMap.FindGroupKindName(ck.APIGroup, ck.Kind, name)
+				child := pr.desiredChildMap.FindByGroupKindName(ck.APIGroup, ck.Kind, name)
 				if child != nil {
-					desiredChildren.ReplaceChild(parent, child)
+					desiredChildren.ReplaceByReference(parent, child)
 				}
 			}
 		}
@@ -300,8 +302,8 @@ func (pc *parentController) manageRevisions(parent *unstructured.Unstructured, o
 			}
 		} else {
 			// Create
-			controllerRef := common.MakeControllerRef(parent)
-			revision.OwnerReferences = append(revision.OwnerReferences, *controllerRef)
+			ownerRef := common.MakeOwnerRef(parent)
+			revision.OwnerReferences = append(revision.OwnerReferences, *ownerRef)
 			glog.Infof("%v %v/%v: creating ControllerRevision %v", parent.GetKind(), parent.GetNamespace(), parent.GetName(), revision.GetName())
 			if _, err := client.Create(revision); err != nil {
 				return fmt.Errorf("can't create ControllerRevision %v for %v %v/%v: %v", revision.Name, pc.parentResource.Kind, parent.GetNamespace(), parent.GetName(), err)
@@ -408,7 +410,7 @@ type parentRevision struct {
 	syncResult *SyncHookResponse
 	syncError  error
 
-	desiredChildMap common.ChildMap
+	desiredChildMap common.AnyUnstructRegistry
 }
 
 func (pr *parentRevision) countChildren() int {
