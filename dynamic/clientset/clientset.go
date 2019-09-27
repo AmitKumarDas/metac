@@ -107,11 +107,14 @@ func (cs *Clientset) resource(apiResource *dynamicdiscovery.APIResource) *Resour
 	}
 }
 
-// ResourceClient is a combination of APIResource and a dynamic Client.
+// ResourceClient is the client for a particular resource. It is a
+// combination of APIResource and a dynamic client to ease invoking
+// CRUD ops against the resource.
 //
-// Passing this around makes it easier to write code that deals with arbitrary
-// resource types and often needs to know the API discovery details.
-// This wrapper also adds convenience functions that are useful for any client.
+// Passing this around makes it easier to write code that deals with
+// arbitrary resource types and often needs to know the API discovery
+// details. This wrapper also adds convenience functions that are
+// useful for any client.
 //
 // It can be used on either namespaced or cluster-scoped resources.
 // Call Namespace() to return a client that's scoped down to a given namespace.

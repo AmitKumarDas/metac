@@ -17,13 +17,13 @@ limitations under the License.
 package framework
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path"
 	"time"
 
+	"github.com/pkg/errors"
 	"k8s.io/client-go/discovery"
 	"k8s.io/klog"
 
@@ -33,7 +33,7 @@ import (
 
 var resourceManager *dynamicdiscovery.APIResourceManager
 
-const installKubectl = `
+const installKubectlMsg = `
 Cannot find kubectl, cannot run integration tests
 
 Please download kubectl and ensure it is somewhere in the PATH.
@@ -41,8 +41,9 @@ See hack/get-kube-binaries.sh
 
 `
 
-// manifestDir is the path from the integration test binary working dir to the
-// directory containing manifests to install Metacontroller.
+// manifestDir is the path from the integration test binary
+// working dir to the directory containing manifests to
+// install Metacontroller.
 const manifestDir = "../../../manifests"
 
 // getKubectlPath returns a path to a kube-apiserver executable.
@@ -77,22 +78,22 @@ func TestMain(tests func() int) {
 
 func testMain(tests func() int) error {
 	if _, err := getKubectlPath(); err != nil {
-		return errors.New(installKubectl)
+		return errors.New(installKubectlMsg)
 	}
 
 	stopEtcd, err := startEtcd()
 	if err != nil {
-		return fmt.Errorf("cannot run integration tests: unable to start etcd: %v", err)
+		return errors.Wrapf(err, "Can't start etcd")
 	}
 	defer stopEtcd()
 
 	stopApiserver, err := startApiserver()
 	if err != nil {
-		return fmt.Errorf("cannot run integration tests: unable to start kube-apiserver: %v", err)
+		return errors.Wrapf(err, "Can't start kube-apiserver")
 	}
 	defer stopApiserver()
 
-	klog.Info("Waiting for kube-apiserver to be ready...")
+	klog.Info("Waiting for kube-apiserver to be ready")
 	start := time.Now()
 	for {
 		kubectlErr := execKubectl("version")
@@ -100,45 +101,67 @@ func testMain(tests func() int) error {
 			break
 		}
 		if time.Since(start) > time.Minute {
-			return fmt.Errorf("timed out waiting for kube-apiserver to be ready: %v", kubectlErr)
+			return errors.Wrapf(err, "Timed out for kube-apiserver to be ready")
 		}
 		time.Sleep(time.Second)
 	}
+	klog.Info("kube-apiserver is ready")
 
 	// Create Metacontroller Namespace.
-	if err := execKubectl("apply", "-f", path.Join(manifestDir, "metacontroller-namespace.yaml")); err != nil {
-		return fmt.Errorf("cannot install metacontroller namespace: %v", err)
+	err = execKubectl(
+		"apply",
+		"-f",
+		path.Join(manifestDir, "metacontroller-namespace.yaml"),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "Can't install metacontroller namespace")
 	}
 
 	// Install Metacontroller RBAC.
-	if err := execKubectl("apply", "-f", path.Join(manifestDir, "metacontroller-rbac.yaml")); err != nil {
-		return fmt.Errorf("cannot install metacontroller RBAC: %v", err)
+	err = execKubectl(
+		"apply",
+		"-f",
+		path.Join(manifestDir, "metacontroller-rbac.yaml"),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "Can't install metacontroller RBAC")
 	}
 
 	// Install Metacontroller CRDs.
-	if err := execKubectl("apply", "-f", path.Join(manifestDir, "metacontroller.yaml")); err != nil {
-		return fmt.Errorf("cannot install metacontroller CRDs: %v", err)
+	err = execKubectl(
+		"apply",
+		"-f",
+		path.Join(manifestDir, "metacontroller.yaml"),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "Can't install metacontroller CRDs")
 	}
 
-	// In this integration test environment, there are no Nodes, so the
-	// metacontroller StatefulSet will not actually run anything.
-	// Instead, we start the Metacontroller server locally inside the test binary,
-	// since that's part of the code under test.
-	stopServer, err := server.Start(ApiserverConfig(), 500*time.Millisecond, 30*time.Minute)
+	// In this integration test environment, there are no Nodes,
+	// so the metacontroller StatefulSet will not actually run
+	// anything. Instead, we start the Metacontroller server
+	// locally inside the test binary, since that's part of the
+	// code under test.
+	stopServer, err := server.Start(
+		ApiserverConfig(), 500*time.Millisecond, 30*time.Minute,
+	)
 	if err != nil {
-		return fmt.Errorf("cannot start metacontroller server: %v", err)
+		return errors.Wrapf(err, "Can't start metacontroller server")
 	}
 	defer stopServer()
 
-	// Periodically refresh discovery to pick up newly-installed resources.
+	// Periodically refresh discovery to pick up newly-installed
+	// resources.
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(ApiserverConfig())
 	resourceManager = dynamicdiscovery.NewAPIResourceManager(discoveryClient)
-	// We don't care about stopping this cleanly since it has no external effects.
+
+	// We don't care about stopping this cleanly since it has no
+	// external effects.
 	resourceManager.Start(500 * time.Millisecond)
 
-	// Now actually run the tests.
+	// Now run the actual tests
 	if exitCode := tests(); exitCode != 0 {
-		return fmt.Errorf("one or more tests failed with exit code: %v", exitCode)
+		return errors.Errorf("One or more tests failed: Exit code %d", exitCode)
 	}
 	return nil
 }
@@ -146,8 +169,9 @@ func testMain(tests func() int) error {
 func execKubectl(args ...string) error {
 	execPath, err := exec.LookPath("kubectl")
 	if err != nil {
-		return fmt.Errorf("cannot exec kubectl: %v", err)
+		return errors.Wrapf(err, "Can't exec kubectl")
 	}
+
 	cmdline := append([]string{"--server", ApiserverURL()}, args...)
 	cmd := exec.Command(execPath, cmdline...)
 	return cmd.Run()

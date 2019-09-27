@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
 
@@ -55,10 +56,10 @@ func getEtcdPath() (string, error) {
 func getAvailablePort() (int, error) {
 	l, err := net.Listen("tcp", ":0")
 	if err != nil {
-		return 0, fmt.Errorf("could not bind to a port: %v", err)
+		return 0, errors.Wrapf(err, "Can't bind to port")
 	}
-	// It is possible but unlikely that someone else will bind this port before we
-	// get a chance to use it.
+	// It is possible but unlikely that someone else will bind this port
+	// before we get a chance to use it.
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
@@ -69,20 +70,20 @@ func startEtcd() (func(), error) {
 	etcdPath, err := getEtcdPath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, installEtcd)
-		return nil, fmt.Errorf("could not find etcd in PATH: %v", err)
+		return nil, errors.Wrapf(err, "Can't find etcd in PATH")
 	}
 	etcdPort, err := getAvailablePort()
 	if err != nil {
-		return nil, fmt.Errorf("could not get a port: %v", err)
+		return nil, err
 	}
 	etcdURL = fmt.Sprintf("http://127.0.0.1:%d", etcdPort)
-	klog.Infof("starting etcd on %s", etcdURL)
+	klog.Infof("Starting etcd on %s", etcdURL)
 
 	etcdDataDir, err := ioutil.TempDir(os.TempDir(), "integration_test_etcd_data")
 	if err != nil {
-		return nil, fmt.Errorf("unable to make temp etcd data dir: %v", err)
+		return nil, errors.Wrapf(err, "Can't make temp etcd data dir")
 	}
-	klog.Infof("storing etcd data in: %v", etcdDataDir)
+	klog.Infof("Storing etcd data in: %v", etcdDataDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(
@@ -100,17 +101,18 @@ func startEtcd() (func(), error) {
 	//cmd.Stderr = os.Stderr
 
 	stop := func() {
+		klog.Infof("Stopping etcd")
 		cancel()
 		err := cmd.Wait()
 		klog.Infof("etcd exit status: %v", err)
 		err = os.RemoveAll(etcdDataDir)
 		if err != nil {
-			klog.Warningf("error during etcd cleanup: %v", err)
+			klog.Warningf("Cleanup etcd failed: %v", err)
 		}
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to run etcd: %v", err)
+		return nil, errors.Wrapf(err, "Failed to run etcd")
 	}
 	return stop, nil
 }
