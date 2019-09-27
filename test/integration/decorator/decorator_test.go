@@ -1,5 +1,6 @@
 /*
 Copyright 2019 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -41,81 +42,128 @@ func TestMain(m *testing.M) {
 // TestSyncWebhook tests that the sync webhook triggers and passes the
 // request/response properly.
 func TestSyncWebhook(t *testing.T) {
-	ns := "test-sync-webhook"
+	testName := "dctl-test-sync-webhook"
 	labels := map[string]string{
-		"test": "test",
+		"test":                  "test",
+		"metac/controller-name": "decorator",
+		"metac/resource-type":   "customresource",
+		"metac/test-category":   "sync-webhook",
 	}
 
 	f := framework.NewFixture(t)
 	defer f.TearDown()
 
-	f.CreateNamespace(ns)
-	parentCRD, parentClient := f.CreateCRD("Parent", apiextensions.NamespaceScoped)
-	childCRD, childClient := f.CreateCRD("Child", apiextensions.NamespaceScoped)
+	f.CreateNamespace(testName)
 
+	// Setup  namespace scoped CRDs
+	parentCRD, parentClient := f.SetupCRD("DCtlSyncParent", apiextensions.NamespaceScoped)
+	childCRD, childClient := f.SetupCRD("DCtlSyncChild", apiextensions.NamespaceScoped)
+
+	// define the "reconcile logic" i.e. sync hook logic here
 	hook := f.ServeWebhook(func(body []byte) ([]byte, error) {
 		req := decorator.SyncHookRequest{}
 		if err := json.Unmarshal(body, &req); err != nil {
 			return nil, err
 		}
+
 		// As a simple test of request/response content,
-		// just create a child with the same name as the parent.
-		child := framework.UnstructuredCRD(childCRD, req.Object.GetName())
-		child.SetLabels(labels)
+		// just build a child with the same name as the parent.
+		//
+		// Note that this does not create the child in kubernetes.
+		// Creation of child in kubernetes is done by decorator
+		// controller on creation of parent resource.
+		childResource := framework.BuildUnstructObjFromCRD(
+			childCRD, req.Object.GetName(),
+		)
+		childResource.SetLabels(labels)
+
 		resp := decorator.SyncHookResponse{
-			Attachments: []*unstructured.Unstructured{child},
+			Attachments: []*unstructured.Unstructured{childResource},
 		}
 		return json.Marshal(resp)
 	})
 
-	f.CreateDecoratorController("dc", hook.URL, framework.CRDResourceRule(parentCRD), framework.CRDResourceRule(childCRD))
+	f.CreateDecoratorController(
+		testName,
+		hook.URL,
+		framework.BuildResourceRuleFromCRD(parentCRD),
+		framework.BuildResourceRuleFromCRD(childCRD),
+	)
 
-	parent := framework.UnstructuredCRD(parentCRD, "test-sync-webhook")
-	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
-	_, err := parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{})
+	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
+	unstructured.SetNestedStringMap(
+		parentResource.Object, labels, "spec", "selector", "matchLabels",
+	)
+
+	t.Logf(
+		"Creating %s %s/%s",
+		parentResource.GetKind(),
+		parentResource.GetNamespace(),
+		parentResource.GetName(),
+	)
+	_, err :=
+		parentClient.Namespace(testName).Create(parentResource, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf(
+		"Created %s %s/%s",
+		parentResource.GetKind(),
+		parentResource.GetNamespace(),
+		parentResource.GetName(),
+	)
 
-	t.Logf("Waiting for child object to be created...")
+	t.Logf("Waiting for child sync")
 	err = f.Wait(func() (bool, error) {
-		_, err = childClient.Namespace(ns).Get("test-sync-webhook", metav1.GetOptions{})
+		_, err =
+			childClient.Namespace(testName).Get(testName, metav1.GetOptions{})
 		return err == nil, err
 	})
 	if err != nil {
-		t.Errorf("didn't find expected child: %v", err)
+		t.Errorf("Child sync failed: %v", err)
 	}
+	t.Logf("Child sync was successful")
 }
 
 // TestResyncAfter tests that the resyncAfterSeconds field works.
 func TestResyncAfter(t *testing.T) {
-	ns := "test-resync-after"
+	testName := "dctl-test-resync-after"
 	labels := map[string]string{
-		"test": "test-sync-after",
+		"test":                  "test",
+		"metac/controller-name": "decorator",
+		"metac/resource-type":   "customresource",
+		"metac/test-category":   "resync-after",
 	}
 
 	f := framework.NewFixture(t)
 	defer f.TearDown()
 
-	f.CreateNamespace(ns)
-	parentCRD, parentClient := f.CreateCRD("TestResyncAfterParent", apiextensions.NamespaceScoped)
+	f.CreateNamespace(testName)
+	parentCRD, parentClient := f.SetupCRD(
+		"DCtlResyncAfterParent", apiextensions.NamespaceScoped,
+	)
 
 	var lastSync time.Time
 	done := false
+
+	// write the reconcile logic i.e. webhook sync logic here
 	hook := f.ServeWebhook(func(body []byte) ([]byte, error) {
 		req := decorator.SyncHookRequest{}
 		if err := json.Unmarshal(body, &req); err != nil {
 			return nil, err
 		}
+
 		resp := decorator.SyncHookResponse{}
 		if req.Object.Object["status"] == nil {
-			// If status hasn't been set yet, set it. This is the "zeroth" sync.
-			// Metacontroller will set our status and then the object should quiesce.
+			// If status hasn't been set yet, set it. This is the
+			// "zeroth" sync. Metacontroller will set our status
+			// and then the object should quiesce.
 			resp.Status = map[string]interface{}{}
 		} else if lastSync.IsZero() {
-			// This should be the final sync before quiescing. Do nothing except
-			// request a resync. Other than our resyncAfter request, there should be
-			// nothing that causes our object to get resynced.
+			// This should be the final sync before quiescing. Do
+			// nothing except request a resync. Other than our
+			// resyncAfter request, there should be nothing that
+			// causes our object to get resynced.
 			lastSync = time.Now()
 			resp.ResyncAfterSeconds = 0.1
 		} else if !done {
@@ -131,33 +179,64 @@ func TestResyncAfter(t *testing.T) {
 		return json.Marshal(resp)
 	})
 
-	f.CreateDecoratorController("test-resync-after", hook.URL, framework.CRDResourceRule(parentCRD), nil)
+	f.CreateDecoratorController(
+		testName,
+		hook.URL,
+		framework.BuildResourceRuleFromCRD(parentCRD),
+		nil,
+	)
 
-	parent := framework.UnstructuredCRD(parentCRD, "test-resync-after")
-	unstructured.SetNestedStringMap(parent.Object, labels, "spec", "selector", "matchLabels")
-	_, err := parentClient.Namespace(ns).Create(parent, metav1.CreateOptions{})
+	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
+	unstructured.SetNestedStringMap(
+		parentResource.Object, labels, "spec", "selector", "matchLabels",
+	)
+
+	t.Logf(
+		"Creating %s %s/%s",
+		parentResource.GetKind(),
+		parentResource.GetNamespace(),
+		parentResource.GetName(),
+	)
+	_, err :=
+		parentClient.Namespace(testName).Create(parentResource, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf(
+		"Created %s %s/%s",
+		parentResource.GetKind(),
+		parentResource.GetNamespace(),
+		parentResource.GetName(),
+	)
 
-	t.Logf("Waiting for elapsed time to be reported...")
+	t.Logf("Waiting for status.elapsedSeconds to be reported")
 	var elapsedSeconds float64
 	err = f.Wait(func() (bool, error) {
-		parent, err := parentClient.Namespace(ns).Get("test-resync-after", metav1.GetOptions{})
-		val, found, err := unstructured.NestedFloat64(parent.Object, "status", "elapsedSeconds")
+		parentResource, err :=
+			parentClient.Namespace(testName).Get(testName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		val, found, err :=
+			unstructured.NestedFloat64(parentResource.Object, "status", "elapsedSeconds")
 		if err != nil || !found {
 			// The value hasn't been populated. Keep waiting.
 			return false, err
 		}
+
 		elapsedSeconds = val
 		return true, nil
 	})
 	if err != nil {
-		t.Fatalf("didn't find expected status field: %v", err)
+		t.Fatalf("Didn't find status.elapsedSeconds: %v", err)
 	}
+	t.Logf("status.elapsedSeconds is %v", elapsedSeconds)
 
-	t.Logf("elapsedSeconds: %v", elapsedSeconds)
 	if elapsedSeconds > 1.0 {
-		t.Errorf("requested resyncAfter did not occur in time; elapsedSeconds: %v", elapsedSeconds)
+		t.Errorf(
+			"Requested resyncAfter did not occur in time; elapsedSeconds: %v",
+			elapsedSeconds,
+		)
 	}
 }

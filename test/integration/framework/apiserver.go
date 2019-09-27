@@ -1,5 +1,6 @@
 /*
 Copyright 2019 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,6 +34,7 @@ import (
 	"os/exec"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 )
@@ -58,20 +60,22 @@ func startApiserver() (func(), error) {
 	apiserverPath, err := getApiserverPath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, installApiserver)
-		return nil, fmt.Errorf("could not find kube-apiserver in PATH: %v", err)
+		return nil, errors.Wrapf(err, "Can't find kube-apiserver in PATH")
 	}
 	apiserverPort, err := getAvailablePort()
 	if err != nil {
-		return nil, fmt.Errorf("could not get a port: %v", err)
+		return nil, err
 	}
 	apiserverURL = fmt.Sprintf("http://127.0.0.1:%d", apiserverPort)
-	klog.Infof("starting kube-apiserver on %s", apiserverURL)
+	klog.Infof("Starting kube-apiserver on %s", apiserverURL)
 
-	apiserverDataDir, err := ioutil.TempDir(os.TempDir(), "integration_test_apiserver_data")
+	apiserverDataDir, err :=
+		ioutil.TempDir(os.TempDir(), "integration_test_apiserver_data")
 	if err != nil {
-		return nil, fmt.Errorf("unable to make temp kube-apiserver data dir: %v", err)
+		return nil,
+			errors.Wrapf(err, "Can't make temp kube-apiserver data dir")
 	}
-	klog.Infof("storing kube-apiserver data in: %v", apiserverDataDir)
+	klog.Infof("Storing kube-apiserver data in: %v", apiserverDataDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(
@@ -90,17 +94,18 @@ func startApiserver() (func(), error) {
 	//cmd.Stderr = os.Stderr
 
 	stop := func() {
+		klog.Infof("Stopping kube-apiserver")
 		cancel()
 		err := cmd.Wait()
 		klog.Infof("kube-apiserver exit status: %v", err)
 		err = os.RemoveAll(apiserverDataDir)
 		if err != nil {
-			klog.Warningf("error during kube-apiserver cleanup: %v", err)
+			klog.Warningf("Cleanup of kube-apiserver failed: %v", err)
 		}
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to run kube-apiserver: %v", err)
+		return nil, errors.Wrapf(err, "Failed to run kube-apiserver")
 	}
 	return stop, nil
 }

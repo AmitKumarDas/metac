@@ -1,5 +1,6 @@
 /*
 Copyright 2019 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +23,6 @@ import (
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/json"
 
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 )
@@ -35,14 +34,27 @@ const (
 	APIVersion = APIGroup + "/v1"
 )
 
-// CreateCRD generates a quick-and-dirty CRD for use in tests,
+// SetupCRD generates a quick-and-dirty CRD for use in tests,
 // and installs it in the test environment's API server.
-func (f *Fixture) CreateCRD(
+//
+// It accepts the singular name of the resource i.e. kind and
+// this resource's scope i.e. whether this resource is namespace
+// scoped or cluster scoped.
+//
+// NOTE:
+//	This method takes care of teardown as well
+func (f *Fixture) SetupCRD(
 	kind string,
 	scope v1beta1.ResourceScope,
 ) (*v1beta1.CustomResourceDefinition, *dynamicclientset.ResourceClient) {
+
 	singular := strings.ToLower(kind)
+
+	// this may not work always. For example singular StorageClass
+	// becomes storageclasses. Hence, this method is annotated as
+	// quick & dirty logic
 	plural := singular + "s"
+
 	crd := &v1beta1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s.%s", plural, APIGroup),
@@ -64,62 +76,43 @@ func (f *Fixture) CreateCRD(
 			},
 		},
 	}
-	crd, err := f.apiextensions.CustomResourceDefinitions().Create(crd)
+
+	f.t.Logf("Creating %s CRD", kind)
+
+	crd, err := f.crdClient.CustomResourceDefinitions().Create(crd)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.deferTeardown(func() error {
-		return f.apiextensions.CustomResourceDefinitions().Delete(crd.Name, nil)
+
+	// add to teardown functions
+	f.addToTeardown(func() error {
+		return f.crdClient.CustomResourceDefinitions().Delete(crd.Name, nil)
 	})
 
-	f.t.Logf("Waiting for %v CRD to appear in API server discovery info...", kind)
+	f.t.Logf("Discovering %s CRD server API", kind)
 	err = f.Wait(func() (bool, error) {
 		return resourceManager.GetByResource(APIVersion, plural) != nil, nil
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	f.t.Logf("Discovered %s CRD server API", kind)
 
-	client, err := f.dynamic.GetClientByResource(APIVersion, plural)
+	crdClient, err := f.dynamicClientset.GetClientByResource(APIVersion, plural)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 
-	f.t.Logf("Waiting for %v CRD client List() to succeed...", kind)
+	f.t.Logf("Listing CRDs")
 	err = f.Wait(func() (bool, error) {
-		_, err := client.List(metav1.ListOptions{})
+		_, err := crdClient.List(metav1.ListOptions{})
 		return err == nil, err
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	f.t.Logf("Listed CRDs")
 
-	return crd, client
-}
-
-// UnstructuredCRD creates a new Unstructured object for the given CRD.
-func UnstructuredCRD(
-	crd *v1beta1.CustomResourceDefinition,
-	name string,
-) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetAPIVersion(crd.Spec.Group + "/" + crd.Spec.Versions[0].Name)
-	obj.SetKind(crd.Spec.Names.Kind)
-	obj.SetName(name)
-	return obj
-}
-
-// UnstructuredJSON creates a new Unstructured object from the given JSON.
-// It panics on a decode error because it's meant for use with hard-coded test
-// data.
-func UnstructuredJSON(apiVersion, kind, name, jsonStr string) *unstructured.Unstructured {
-	obj := map[string]interface{}{}
-	if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
-		panic(err)
-	}
-	u := &unstructured.Unstructured{Object: obj}
-	u.SetAPIVersion(apiVersion)
-	u.SetKind(kind)
-	u.SetName(name)
-	return u
+	f.t.Logf("Created %s CRD", kind)
+	return crd, crdClient
 }

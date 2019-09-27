@@ -17,27 +17,21 @@ limitations under the License.
 package framework
 
 import (
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	pointer "openebs.io/metac/third_party/kubernetes"
 )
 
-// CRDResourceRule returns a new instance of ResourceRule
-func CRDResourceRule(crd *apiextensions.CustomResourceDefinition) *v1alpha1.ResourceRule {
-	return &v1alpha1.ResourceRule{
-		APIVersion: crd.Spec.Group + "/" + crd.Spec.Versions[0].Name,
-		Resource:   crd.Spec.Names.Plural,
-	}
-}
-
 // CreateCompositeController generates a test CompositeController and installs
 // it in the test API server.
 func (f *Fixture) CreateCompositeController(
-	name, syncHookURL string,
-	parentRule, childRule *v1alpha1.ResourceRule,
+	name string,
+	syncHookURL string,
+	parentRule *v1alpha1.ResourceRule,
+	childRule *v1alpha1.ResourceRule,
 ) *v1alpha1.CompositeController {
+
 	childResources := []v1alpha1.CompositeControllerChildResourceRule{}
 	if childRule != nil {
 		childResources = append(
@@ -45,13 +39,15 @@ func (f *Fixture) CreateCompositeController(
 			v1alpha1.CompositeControllerChildResourceRule{ResourceRule: *childRule},
 		)
 	}
+
 	cc := &v1alpha1.CompositeController{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 			Name:      name,
 		},
 		Spec: v1alpha1.CompositeControllerSpec{
-			// Set a big resyncPeriod so tests can precisely control when syncs happen.
+			// Set a big resyncPeriod so tests can precisely control
+			// when syncs happen.
 			ResyncPeriodSeconds: pointer.Int32Ptr(3600),
 			ParentResource: v1alpha1.CompositeControllerParentResourceRule{
 				ResourceRule: *parentRule,
@@ -67,13 +63,17 @@ func (f *Fixture) CreateCompositeController(
 		},
 	}
 
-	cc, err := f.metacontroller.MetacontrollerV1alpha1().CompositeControllers().Create(cc)
+	cc, err := f.metaClientset.MetacontrollerV1alpha1().
+		CompositeControllers().
+		Create(cc)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.deferTeardown(func() error {
-		return f.metacontroller.
-			MetacontrollerV1alpha1().CompositeControllers().Delete(cc.Name, nil)
+
+	f.addToTeardown(func() error {
+		return f.metaClientset.MetacontrollerV1alpha1().
+			CompositeControllers().
+			Delete(cc.Name, nil)
 	})
 
 	return cc
@@ -82,9 +82,12 @@ func (f *Fixture) CreateCompositeController(
 // CreateDecoratorController generates a test DecoratorController and installs
 // it in the test API server.
 func (f *Fixture) CreateDecoratorController(
-	name, syncHookURL string,
-	parentRule, childRule *v1alpha1.ResourceRule,
+	name string,
+	syncHookURL string,
+	parentRule *v1alpha1.ResourceRule,
+	childRule *v1alpha1.ResourceRule,
 ) *v1alpha1.DecoratorController {
+
 	childResources := []v1alpha1.DecoratorControllerAttachmentRule{}
 	if childRule != nil {
 		childResources = append(
@@ -92,13 +95,15 @@ func (f *Fixture) CreateDecoratorController(
 			v1alpha1.DecoratorControllerAttachmentRule{ResourceRule: *childRule},
 		)
 	}
+
 	dc := &v1alpha1.DecoratorController{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 			Name:      name,
 		},
 		Spec: v1alpha1.DecoratorControllerSpec{
-			// Set a big resyncPeriod so tests can precisely control when syncs happen.
+			// Set a big resyncPeriod so tests can precisely control
+			// when syncs happen.
 			ResyncPeriodSeconds: pointer.Int32Ptr(3600),
 			Resources: []v1alpha1.DecoratorControllerResourceRule{
 				{
@@ -116,13 +121,77 @@ func (f *Fixture) CreateDecoratorController(
 		},
 	}
 
-	dc, err := f.metacontroller.MetacontrollerV1alpha1().DecoratorControllers().Create(dc)
+	dc, err := f.metaClientset.MetacontrollerV1alpha1().
+		DecoratorControllers().
+		Create(dc)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.deferTeardown(func() error {
-		return f.metacontroller.MetacontrollerV1alpha1().DecoratorControllers().Delete(dc.Name, nil)
+
+	f.addToTeardown(func() error {
+		return f.metaClientset.MetacontrollerV1alpha1().
+			DecoratorControllers().
+			Delete(dc.Name, nil)
 	})
 
 	return dc
+}
+
+// CreateGenericController generates a test GenericController and installs
+// it in the test API server.
+func (f *Fixture) CreateGenericController(
+	name string,
+	syncHookURL string,
+	watchRule *v1alpha1.ResourceRule,
+	attachmentRule *v1alpha1.ResourceRule,
+) *v1alpha1.GenericController {
+
+	attachments := []v1alpha1.GenericControllerAttachment{}
+	if attachmentRule != nil {
+		attachments = append(
+			attachments,
+			v1alpha1.GenericControllerAttachment{
+				GenericControllerResource: v1alpha1.GenericControllerResource{
+					ResourceRule: *attachmentRule,
+				},
+			},
+		)
+	}
+
+	gc := &v1alpha1.GenericController{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      name,
+		},
+		Spec: v1alpha1.GenericControllerSpec{
+			// Set a big resyncPeriod so tests can precisely control
+			// when syncs happen.
+			ResyncPeriodSeconds: pointer.Int32Ptr(3600),
+			Watch: v1alpha1.GenericControllerResource{
+				ResourceRule: *watchRule,
+			},
+			Attachments: attachments,
+			Hooks: &v1alpha1.GenericControllerHooks{
+				Sync: &v1alpha1.Hook{
+					Webhook: &v1alpha1.Webhook{
+						URL: &syncHookURL,
+					},
+				},
+			},
+		},
+	}
+
+	gc, err := f.metaClientset.MetacontrollerV1alpha1().
+		GenericControllers("default").Create(gc)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+
+	f.addToTeardown(func() error {
+		return f.metaClientset.MetacontrollerV1alpha1().
+			GenericControllers("default").
+			Delete(gc.Name, nil)
+	})
+
+	return gc
 }

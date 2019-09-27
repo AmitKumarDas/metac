@@ -1,5 +1,6 @@
 /*
 Copyright 2019 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,23 +18,35 @@ limitations under the License.
 package framework
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 )
 
 // ServeWebhook is a helper for quickly creating a webhook server in tests.
-func (f *Fixture) ServeWebhook(handler func(request []byte) (response []byte, err error)) *httptest.Server {
+func (f *Fixture) ServeWebhook(
+	handler func(request []byte) (response []byte, err error),
+) *httptest.Server {
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
+			http.Error(
+				w,
+				fmt.Sprintf("Unsupported method: %s", r.Method),
+				http.StatusMethodNotAllowed,
+			)
 			return
 		}
 
 		body, err := ioutil.ReadAll(r.Body)
 		r.Body.Close()
 		if err != nil {
-			http.Error(w, "can't read body", http.StatusBadRequest)
+			http.Error(
+				w,
+				fmt.Sprintf("Can't read body: %v", err),
+				http.StatusBadRequest,
+			)
 			return
 		}
 
@@ -45,7 +58,8 @@ func (f *Fixture) ServeWebhook(handler func(request []byte) (response []byte, er
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(resp)
 	}))
-	f.deferTeardown(func() error {
+
+	f.addToTeardown(func() error {
 		srv.Close()
 		return nil
 	})

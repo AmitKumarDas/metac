@@ -1,5 +1,6 @@
 /*
 Copyright 2019 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,65 +23,82 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
+	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	mcclientset "openebs.io/metac/client/generated/clientset/versioned"
+	metaclientset "openebs.io/metac/client/generated/clientset/versioned"
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 )
 
 const (
+	// testing involves some amount of wait & retry i.e. polling
+	// these variables are tunables used during polling
 	defaultWaitTimeout  = 30 * time.Second
 	defaultWaitInterval = 250 * time.Millisecond
 )
 
-// Fixture is a collection of scaffolding for each integration
-// test method. This is used by individual test cases to handle their
-// respective teardown as well as their common logic.
+// Fixture is the base structure that various test cases will make use
+// to build integration test logic. Individual test logic use this
+// to handle respective teardown as well as their common logic.
 type Fixture struct {
 	t *testing.T
 
 	teardownFuncs []func() error
 
-	dynamic        *dynamicclientset.Clientset
-	kubernetes     kubernetes.Interface
-	apiextensions  apiextensionsclient.ApiextensionsV1beta1Interface
-	metacontroller mcclientset.Interface
+	// clientsets to invoke CRUD operations using:
+	//
+	// 1/ dynamic approach,
+	// 2/ kubernetes typed approach
+	dynamicClientset *dynamicclientset.Clientset
+	typedClientset   kubernetes.Interface
+
+	// crdClient is based on k8s.io/apiextensions-apiserver &
+	// is all about invoking CRUD ops against CRDs
+	crdClient apiextensionsclientset.ApiextensionsV1beta1Interface
+
+	// meta clientset to invoke CRUD operations against various
+	// meta controllers i.e. Metac's custom resources
+	metaClientset metaclientset.Interface
 }
 
 // NewFixture returns a new instance of Fixture
 func NewFixture(t *testing.T) *Fixture {
+	// get the config that is created just for the purposes
+	// of integration testing of this project
 	config := ApiserverConfig()
-	apiextensions, err := apiextensionsclient.NewForConfig(config)
+
+	crdClient, err := apiextensionsclientset.NewForConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dynClient, err := dynamicclientset.New(config, resourceManager)
+	dynamicClientset, err := dynamicclientset.New(config, resourceManager)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mcClient, err := mcclientset.NewForConfig(config)
+	metaClientset, err := metaclientset.NewForConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientset, err := kubernetes.NewForConfig(config)
+	typedClientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	return &Fixture{
-		t:              t,
-		dynamic:        dynClient,
-		kubernetes:     clientset,
-		apiextensions:  apiextensions,
-		metacontroller: mcClient,
+		t:                t,
+		dynamicClientset: dynamicClientset,
+		typedClientset:   typedClientset,
+		crdClient:        crdClient,
+		metaClientset:    metaClientset,
 	}
 }
 
-// Clientset returns the Kubernetes clientset.
-func (f *Fixture) Clientset() kubernetes.Interface {
-	return f.kubernetes
+// GetTypedClientset returns the Kubernetes clientset that is
+// used to invoke CRUD operations against Kubernetes native
+// resources.
+func (f *Fixture) GetTypedClientset() kubernetes.Interface {
+	return f.typedClientset
 }
 
 // CreateNamespace creates a namespace that will be deleted
@@ -91,12 +109,14 @@ func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
 			Name: namespace,
 		},
 	}
-	ns, err := f.kubernetes.CoreV1().Namespaces().Create(ns)
+	ns, err := f.typedClientset.CoreV1().Namespaces().Create(ns)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.deferTeardown(func() error {
-		return f.kubernetes.CoreV1().Namespaces().Delete(ns.Name, nil)
+
+	// add this to teardown that gets executed during cleanup
+	f.addToTeardown(func() error {
+		return f.typedClientset.CoreV1().Namespaces().Delete(ns.Name, nil)
 	})
 	return ns
 }
@@ -104,10 +124,11 @@ func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
 // TearDown cleans up resources created through this instance
 // of the test fixture.
 func (f *Fixture) TearDown() {
+	// cleanup in descending order
 	for i := len(f.teardownFuncs) - 1; i >= 0; i-- {
 		teardown := f.teardownFuncs[i]
 		if err := teardown(); err != nil {
-			f.t.Logf("Error during teardown: %v", err)
+			f.t.Logf("Teardown %d failed: %v", i, err)
 			// Mark the test as failed, but continue trying to tear down.
 			f.t.Fail()
 		}
@@ -126,23 +147,31 @@ func (f *Fixture) TearDown() {
 // If the condition function returns a non-nil error, Wait will log the error
 // and continue retrying until the timeout.
 func (f *Fixture) Wait(condition func() (bool, error)) error {
+	// mark the start time
 	start := time.Now()
 	for {
-		ok, err := condition()
-		if err == nil && ok {
+		done, err := condition()
+		if err == nil && done {
+			f.t.Logf("Wait condition succeeded")
 			return nil
+		}
+		if time.Since(start) > defaultWaitTimeout {
+			return fmt.Errorf(
+				"Wait condition timed out %s: %v", defaultWaitTimeout, err,
+			)
 		}
 		if err != nil {
 			// Log error, but keep trying until timeout.
-			f.t.Logf("error while waiting for condition: %v", err)
-		}
-		if time.Since(start) > defaultWaitTimeout {
-			return fmt.Errorf("timed out waiting for condition (%v)", err)
+			f.t.Logf("Wait condition failed: Will retry: %v", err)
+		} else {
+			f.t.Logf("Waiting for condition to succeed: Will retry")
 		}
 		time.Sleep(defaultWaitInterval)
 	}
 }
 
-func (f *Fixture) deferTeardown(teardown func() error) {
+// addToTeardown adds the given teardown func to the list of
+// teardown functions
+func (f *Fixture) addToTeardown(teardown func() error) {
 	f.teardownFuncs = append(f.teardownFuncs, teardown)
 }

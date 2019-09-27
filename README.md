@@ -24,6 +24,8 @@ on how to install, use, or contribute to Metacontroller.
 
 Please file [GitHub issues](issues) for bugs, feature requests, and proposals.
 
+Use the [meeting notes/agenda](https://docs.google.com/document/d/1HV_Fr0wIW9tr5OZwK_6oGux_OhcGtxxWWV6dCYJR9Cw/) to discuss specific features/topics with the community.
+
 Use the [mailing list](https://groups.google.com/forum/#!forum/metacontroller)
 for questions and comments, or join the
 [#metacontroller](https://kubernetes.slack.com/messages/metacontroller/) channel on
