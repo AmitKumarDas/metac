@@ -25,21 +25,45 @@ import (
 
 // SyncHookRequest is the object sent as JSON to the sync hook.
 type SyncHookRequest struct {
-	Controller  *v1alpha1.GenericController `json:"controller"`
-	Object      *unstructured.Unstructured  `json:"object"`
-	Attachments common.AnyUnstructRegistry  `json:"attachments"`
-	Finalizing  bool                        `json:"finalizing"`
+	// refers to this generic controller schema
+	Controller *v1alpha1.GenericController `json:"controller"`
+
+	// refers to the observed watch object due to the declaration
+	// at the geneirc controller specs
+	Watch *unstructured.Unstructured `json:"watch"`
+
+	// refers to the filtered attachment objects due to the
+	// declaration at the generic controller specs
+	Attachments common.AnyUnstructRegistry `json:"attachments"`
+
+	// Flag indicating if this request is for delete reconcile
+	// and not create/update reconcile. This flag helps in
+	// having single reconcile hook for create/update & delete.
+	// It is upto the reconcile logic implementation to separate
+	// create/update from delete logic.
+	Finalizing bool `json:"finalizing"`
 }
 
-// SyncHookResponse is the expected format of the JSON response from the sync hook.
+// SyncHookResponse is the expected format of the JSON response
+// from the sync hook.
 type SyncHookResponse struct {
-	Labels      map[string]*string           `json:"labels"`
-	Annotations map[string]*string           `json:"annotations"`
-	Status      map[string]interface{}       `json:"status"`
+	// desired labels to set against the watch resource
+	Labels map[string]*string `json:"labels"`
+
+	// desired annotations to set against the watch resource
+	Annotations map[string]*string `json:"annotations"`
+
+	// desired status to set against the watch resource
+	Status map[string]interface{} `json:"status"`
+
+	// desired state of all attachments
 	Attachments []*unstructured.Unstructured `json:"attachments"`
 
+	// indicate the controller if a resync is required after
+	// the specified interval
 	ResyncAfterSeconds float64 `json:"resyncAfterSeconds"`
 
-	// Finalized is only used by the finalize hook.
+	// Finalized should only be used by the finalize hook. If
+	// true then this response will be applied by metacontroller.
 	Finalized bool `json:"finalized"`
 }
