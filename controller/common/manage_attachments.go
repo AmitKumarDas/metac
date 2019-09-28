@@ -355,7 +355,7 @@ func (e *AttachmentResourcesExecutor) Update() error {
 
 			// We claim attachments we create if watch should be the
 			// owner
-			if *e.IsWatchOwner {
+			if e.IsWatchOwner != nil && *e.IsWatchOwner {
 				watchAsOwnerRef := MakeOwnerRef(e.Watch)
 
 				// fetch existing owner references of this attachment

@@ -28,7 +28,6 @@ import (
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/golang/glog"
 	"go.opencensus.io/stats/view"
-
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 

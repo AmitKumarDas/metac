@@ -35,16 +35,13 @@ type GenericController struct {
 // GenericControllerSpec is the specifications for GenericController
 // API
 type GenericControllerSpec struct {
-	// TODO (@amitkumardas):
-	// Change this to an array of GenericControllerResource
-	//
-	// However, need to think if this is really needed.
-	// How to manage relations when attachments need to refer
-	// to a particular watch. We might continue to use a single
-	// watch per GenericController if it satisfies most of the
-	// use-cases and yet is simple to understand & use.
-	Watch       GenericControllerResource     `json:"watch"`
-	Attachments []GenericControllerAttachment `json:"sync,omitempty"`
+	// Resource that is under watch by GenericController
+	Watch GenericControllerResource `json:"watch"`
+
+	// Attachments are the resources that get created/updated/deleted
+	// as part of formation of the desired state due to the changes
+	// in watched (i.e. above) resource
+	Attachments []GenericControllerAttachment `json:"attachments,omitempty"`
 
 	// Hooks to be invoked to get at the desired state
 	Hooks *GenericControllerHooks `json:"hooks,omitempty"`
@@ -61,9 +58,6 @@ type GenericControllerSpec struct {
 }
 
 // GenericControllerHooks holds the sync as well as finalize hooks
-//
-// TODO (@amitkumardas): Check if we need more than one sync or finalize
-// hooks
 type GenericControllerHooks struct {
 	// Hook that gets invoked during create/update reconciliation
 	Sync *Hook `json:"sync,omitempty"`

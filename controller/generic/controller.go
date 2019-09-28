@@ -48,7 +48,7 @@ import (
 const (
 	// genericControllerNameAnnotation is the annotation key to hold
 	// the name of the specific genericController instance
-	genericControllerNameAnnotation = "genericcontroller.metac.openebs.io/name"
+	genericControllerNameAnnotation = "gctl.metac.openebs.io/name"
 )
 
 // Manager that handles a GenericController API resource
@@ -130,7 +130,9 @@ func newGenericControllerManager(
 
 		finalizer: &finalizer.Manager{
 			// finalizer manager is entrusted with this finalizer name
-			Name: "genericcontroller.metac.openebs.io/" + ctrl.Namespace + "-" + ctrl.Name,
+			// this gets applied against the watch during finalize i.e.
+			// handling deletion of watch resource
+			Name: "protect.gctl.metac.openebs.io/" + ctrl.Namespace + "-" + ctrl.Name,
 			// gets enabled if Finalize property is set
 			Enabled: ctrl.Spec.Hooks.Finalize != nil,
 		},
@@ -513,7 +515,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	// Call the sync hook
 	syncRequest := &SyncHookRequest{
 		Controller:  mgr.Controller,
-		Object:      watch,
+		Watch:       watch,
 		Attachments: observedAttachments,
 	}
 	syncResult, err := mgr.callSyncHook(syncRequest)
@@ -530,9 +532,10 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 		)
 	}
 
-	// Set desired labels and annotations on parent.
+	// Logic to set desired labels, annotations & status on watch.
 	// Also remove finalizer if requested.
-	// Make a copy since parent is from the cache.
+
+	// Make a copy since watch is from the cache.
 	watchCopy = watch.DeepCopy()
 
 	finalWatchLabels := watchCopy.GetLabels()
@@ -545,9 +548,12 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 		finalWatchAnnotations = make(map[string]string)
 	}
 
+	// initialize the desired status by overriding the
+	// sync result's status
 	finalWatchStatus := k8s.GetNestedObject(watchCopy.Object, "status")
 	if syncResult.Status == nil {
-		// A null .status in the sync response means leave it unchanged.
+		// A null .status in the sync response means leave it unchanged
+		// i.e. use the existing status
 		syncResult.Status = finalWatchStatus
 	}
 
@@ -557,7 +563,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 
 	// Only update the watch if anything changed
 	//
-	// Updating a watch is done only if its meta information changes.
+	// Updating a watch is done only if its meta information changes
+	// i.e. labels, annotations &/or status
 	if labelsChanged || annotationsChanged || statusChanged ||
 		(syncResult.Finalized && dynamicobject.HasFinalizer(watch, mgr.finalizer.Name)) {
 
@@ -598,23 +605,28 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 				mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
 			)
 		}
+		glog.V(4).Infof(
+			"%s: Updated watch %s/%s of %s",
+			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
+		)
 	}
 
-	// Add an annotation to all desired attachments to remember that they
-	// were managed by GenericController.
+	// Add an generic controller name annotation to all desired attachments
+	// to remember/indicate that they are managed by this instance of
+	// GenericController.
 	for _, group := range desiredAttachments {
 		for _, attachment := range group {
 			ann := attachment.GetAnnotations()
-			if ann[genericControllerNameAnnotation] ==
-				mgr.Controller.Namespace+"-"+mgr.Controller.Name {
+			gctlNamespaceName :=
+				mgr.Controller.Namespace + "-" + mgr.Controller.Name
+
+			if ann[genericControllerNameAnnotation] == gctlNamespaceName {
 				continue
 			}
-
 			if ann == nil {
 				ann = make(map[string]string)
 			}
-			ann[genericControllerNameAnnotation] =
-				mgr.Controller.Namespace + "-" + mgr.Controller.Name
+			ann[genericControllerNameAnnotation] = gctlNamespaceName
 			attachment.SetAnnotations(ann)
 		}
 	}
@@ -627,6 +639,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	//	2. if watch is pending deletion and controller has a 'finalize' hook
 	if watch.GetDeletionTimestamp() == nil || mgr.finalizer.ShouldFinalize(watch) {
 
+		// build a new instance of attachment update strategy manager
 		updateStrategyMgr, err := newAttachmentUpdateStrategyManager(
 			mgr.ResourceManager,
 			mgr.Controller.Spec.Attachments,
@@ -635,7 +648,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 			return err
 		}
 
-		// Reconcile children.
+		// Reconcile attachments via attachment manager
 		attMgr := &common.AttachmentManager{
 			AttachmentExecuteBase: common.AttachmentExecuteBase{
 				GetChildUpdateStrategyByGK: updateStrategyMgr.GetByGKOrDefault,
@@ -738,8 +751,8 @@ func (mgr *genericControllerManager) callSyncHook(
 	// This allows the controller to clean up after itself if the object has been
 	// updated to disable the functionality added by the controller.
 	if mgr.Controller.Spec.Hooks.Finalize != nil &&
-		(request.Object.GetDeletionTimestamp() != nil ||
-			!mgr.selector.Matches(request.Object)) {
+		(request.Watch.GetDeletionTimestamp() != nil ||
+			!mgr.selector.Matches(request.Watch)) {
 
 		// Finalize
 		request.Finalizing = true
