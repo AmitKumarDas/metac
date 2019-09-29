@@ -116,8 +116,6 @@ type GenericControllerResource struct {
 type GenericControllerAttachment struct {
 	// This represents a single resource that participates in the
 	// sync/finalize
-	//
-	// One can either use this or Group but not both
 	GenericControllerResource `json:",inline"`
 
 	// UpdateStrategy is the strategy to be used for the attachments
