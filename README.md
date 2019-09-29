@@ -1,24 +1,20 @@
 # Metac `pronounced [meta-see]`
-It is metacontroller and more. This has additional custom resources as required by OpenEBS. It will also package itself to be imported as a library by other Kubernetes operator based projects.
+It is [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller) and more. This has additional custom resources as required by OpenEBS. It will also package itself to be imported as a library by other Kubernetes operator based projects.
 
-Metac follows the same licensing as that of Metacontroller i.e. [Apache License 2.0](LICENSE).
+Metac tries to be compatible with the original one. However, there may be breaking changes that one needs to be careful about. If one has been using the original metacontroller and tries to use metac, then one should be aware of below changes:
+- Metac uses a different api group for the custom resources
+    - i.e. `apiVersion: metac.openebs.io/v1alpha1`
+- Metac is by default installed in `metac` namespace
 
-The original metacontroller project details is listed below.
+Licensing, documentation and thought processes remain same.
 
-## Metacontroller
+## Motivation
 
-Metacontroller is an add-on for Kubernetes
-that makes it easy to write and deploy [custom controllers](https://kubernetes.io/docs/concepts/api-extension/custom-resources/#custom-controllers)
-in the form of [simple scripts](https://metacontroller.app).
-
-This is not an officially supported Google product.
-Although this open-source project was started by [GKE](https://cloud.google.com/kubernetes-engine/),
-the add-on works the same in any Kubernetes cluster.
+Metacontroller is an add-on for Kubernetes that makes it easy to write and deploy [custom controllers](https://kubernetes.io/docs/concepts/api-extension/custom-resources/#custom-controllers) in the form of [simple scripts](https://metacontroller.app).
 
 ## Documentation
 
-Please see the [documentation site](https://metacontroller.app) for details
-on how to install, use, or contribute to Metacontroller.
+Please see the [documentation site](https://metacontroller.app) for details on how to install, use, or contribute to Metacontroller.
 
 ## Contact
 
@@ -36,8 +32,7 @@ for low-frequency project updates like new releases.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[contributor guide](https://metacontroller.app/contrib/).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [contributor guide](https://metacontroller.app/contrib/).
 
 ## Licensing
 

@@ -1,24 +1,45 @@
-### Current Actions:
-- [IN-PROGRESS] test/integration
-- [IN-PROGRESS] code comments, refactor
-- [TODO] test/unittest
-
-### Future Actions:
-- If multiple meta controllers work against a resource then apply function might be buggy
-    - Provide last-applied-configuration per meta controller resource
-    - <ctrl-ns>-<ctrl-name>.dctl.metac.openebs.io/last-applied-configuration
-    - <ctrl-ns>-<ctrl-name>.gctl.metac.openebs.io/last-applied-configuration
-    - <ctrl-ns>-<ctrl-name>.cctl.metac.openebs.io/last-applied-configuration
-
-- Use Metac as a library to build Kubernetes controllers
+### TODO:
+- make gctl integration test work
+    - code refactoring - one .go file per test
+    - log levels
+- make examples work & better 
+- restructure examples to enable community
+- code to use klog
+- test/unittest
+- find bugs & fix
+- all ctrl enhancements
     - https://github.com/GoogleCloudPlatform/metacontroller/issues/154
-- Declarative Integration Testing via GenericController
+    - make Metac run based on either of following: 
+        - CustomResource, or # current mode
+        - Config # default mode
+    - make gctl work for a list of configs i.e. configs/gctl/
+    - make cctl work for a list of configs i.e. configs/cctl/
+    - make dctl work for a list of configs i.e. configs/dctl/
+- gctl - enhancements
+    - enableCreate *bool
+    - enableDelete *bool
+    - enableApply  *bool
+    - add gctl annotation to the attachments it creates
+    - add gctl annotation to the attachments it updates
+- usecases
+    - ConformanceTest
+    - CStorConfigController
+    - DDP
+    - Install
+    - UnInstall
+    - Upgrade
 - Use latest stable Kubernetes version & etcd for integration testing
 
-### Community
+### Future Actions:
+- Make metacontroller watch resources from specific namespace if required
+- If multiple meta controllers work against a resource then apply function might be buggy
+    - Provide last-applied-configuration per meta controller resource
+    - <ctrl-ns>-<ctrl-name>.dctl.metac.openebs.io/last-applied-config
+    - <ctrl-ns>-<ctrl-name>.gctl.metac.openebs.io/last-applied-config
+    - <ctrl-ns>-<ctrl-name>.cctl.metac.openebs.io/last-applied-config
+- Should Metac support UDS?
+    - https://eli.thegreenplace.net/2019/unix-domain-sockets-in-go/
+
+### Meeting Notes & Agenda
 - https://docs.google.com/document/d/1HV_Fr0wIW9tr5OZwK_6oGux_OhcGtxxWWV6dCYJR9Cw/
 
-### References
-- https://kubernetes.io/docs/reference/using-api/api-concepts/#server-side-apply
-- https://groups.google.com/forum/#!forum/kubebuilder
-- Crossplane - https://docs.google.com/document/d/1q_sp2jLQsDEOX7Yug6TPOv7Fwrys6EwcF5Itxjkno7Y/
