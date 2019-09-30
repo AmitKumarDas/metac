@@ -1,5 +1,5 @@
 # Metac `pronounced [meta-see]`
-It is [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller) and more. This has additional custom resources as required by OpenEBS. It will also package itself to be imported as a library by other Kubernetes operator based projects.
+It is [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller) and more. This has additional custom resources derived from production needs of projects like [OpenEBS](https://github.com/openebs) & [LitmusChaos](https://github.com/litmuschaos). It will also package itself to be imported as a library by other Kubernetes operator based projects.
 
 Metac tries to be compatible with the original one. However, there may be breaking changes that one needs to be careful about. If one has been using the original metacontroller and tries to use metac, then one should be aware of below changes:
 - Metac uses a different api group for the custom resources

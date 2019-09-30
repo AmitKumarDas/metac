@@ -1,6 +1,6 @@
 ## Service-Per-Pod Decorator
 
-This is an example DecoratorController that adds a Service for each Pod in a
+This is an example of DecoratorController that adds a Service for each Pod in a
 StatefulSet, for any StatefulSet that requests this by adding an annotation
 that specifies the name of the label containing the Pod name.
 
@@ -44,14 +44,13 @@ is removed to opt out of the decorator, any Services created will be cleaned up.
 
 ### Prerequisites
 
-* Kubernetes 1.8+ is recommended for its improved CRD support,
-  especially garbage collection.
-* Install [Metacontroller](https://github.com/GoogleCloudPlatform/metacontroller).
+* Kubernetes 1.8+ is recommended for its improved CRD support, especially garbage collection.
+* Install Metac using yamls from manifests folder
 
 ### Deploy the DecoratorControllers
 
 ```sh
-kubectl create configmap service-per-pod-hooks -n metacontroller --from-file=hooks
+kubectl create configmap service-per-pod-hooks -n metac --from-file=hooks
 kubectl apply -f service-per-pod.yaml
 ```
 

@@ -1,5 +1,5 @@
 commonLabels:
-  app.kubernetes.io/name: metacontroller
+  metac.openebs.io/name: metacontroller
 
 resources:
 - manifests/metacontroller-rbac.yaml

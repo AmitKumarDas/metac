@@ -58,6 +58,9 @@ unit-test: generated_files
 integration-dependencies:
 	@./hack/get-kube-binaries.sh
 
+# Integration test makes use of kube-apiserver, etcd & kubectl
+# binaries. This does not require metac binary or docker image.
+# This can be run on one's laptop or Travis like CI environments.
 .PHONY: integration-test
 integration-test: generated_files integration-dependencies
-	@PATH="$(PWD)/hack/bin:$(PATH)" go test ./test/integration/... -v -timeout 5m -args -v=6
+	@PATH="$(PWD)/hack/bin:$(PATH)" go test ./test/integration/... -v -timeout 5m -args --logtostderr -v=4

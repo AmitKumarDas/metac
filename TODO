@@ -1,13 +1,13 @@
 ### TODO:
 - make gctl integration test work
     - code refactoring - one .go file per test
-    - log levels
-- make examples work & better 
+    - proper logs, informative logs, proper log levels
+- make all examples to work & then make it better
 - restructure examples to enable community
 - code to use klog
 - test/unittest
 - find bugs & fix
-- all ctrl enhancements
+- all controller enhancements
     - https://github.com/GoogleCloudPlatform/metacontroller/issues/154
     - make Metac run based on either of following: 
         - CustomResource, or # current mode

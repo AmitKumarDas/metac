@@ -102,11 +102,32 @@ func (f *Fixture) GetTypedClientset() kubernetes.Interface {
 }
 
 // CreateNamespace creates a namespace that will be deleted
-// after this test finishes.
+// when this fixture's teardown is invoked.
 func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
+		},
+	}
+	ns, err := f.typedClientset.CoreV1().Namespaces().Create(ns)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+
+	// add this to teardown that gets executed during cleanup
+	f.addToTeardown(func() error {
+		return f.typedClientset.CoreV1().Namespaces().Delete(ns.Name, nil)
+	})
+	return ns
+}
+
+// CreateNamespaceGen creates a namespace with its name prefixed
+// with the provided name. This namespace gets deleted when this
+// fixture's teardown is invoked
+func (f *Fixture) CreateNamespaceGen(name string) *v1.Namespace {
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: name + "-",
 		},
 	}
 	ns, err := f.typedClientset.CoreV1().Namespaces().Create(ns)
