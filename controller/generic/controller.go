@@ -46,12 +46,14 @@ import (
 )
 
 const (
-	// genericControllerNameAnnotation is the annotation key to hold
-	// the name of the specific genericController instance
-	genericControllerNameAnnotation = "gctl.metac.openebs.io/name"
+	gctlAnnotationKeyPrefix = "gctl.metac.openebs.io/"
 )
 
 // Manager that handles a GenericController API resource
+//
+// TODO (@amitkumardas):
+// Rename this to watchController & this file
+// to watchcontroller.go
 type genericControllerManager struct {
 	// Controller resource / yaml
 	Controller *v1alpha1.GenericController
@@ -95,11 +97,13 @@ type genericControllerManager struct {
 // String implements Stringer interface
 func (mgr *genericControllerManager) String() string {
 	if mgr.Controller == nil {
-		return "GenericControllerManager"
+		// TODO (@amitkumardas):
+		// Rename this to GenericWatchController
+		return "GCtl-WatchCtl"
 	}
 	return fmt.Sprintf(
-		"%s/%s of %s",
-		mgr.Controller.Namespace, mgr.Controller.Name, mgr.Controller.Kind,
+		"GCtl %s/%s: WatchCtl",
+		mgr.Controller.Namespace, mgr.Controller.Name,
 	)
 }
 
@@ -346,7 +350,7 @@ func (mgr *genericControllerManager) processNextWorkItem() bool {
 	}
 	defer mgr.watchQ.Done(key)
 
-	// reconcile logic is invoked
+	// actual reconcile logic is invoked
 	err := mgr.syncWatch(key.(string))
 	if err != nil {
 		utilruntime.HandleError(
@@ -377,7 +381,7 @@ func (mgr *genericControllerManager) enqueueWatch(obj interface{}) {
 		hasFinalizer := dynamicobject.HasFinalizer(watchObj, mgr.finalizer.Name)
 		if !isMatch && !hasFinalizer {
 			glog.V(4).Infof(
-				"%s: Will not enqueue %s/%s of %s: IsMatch=%t: HasFinalizer=%t",
+				"%s: Will not enqueue %s/%s of kind:%s: IsMatch=%t: HasFinalizer=%t",
 				mgr, watchObj.GetNamespace(), watchObj.GetName(), watchObj.GetKind(),
 				isMatch, hasFinalizer,
 			)
@@ -385,8 +389,13 @@ func (mgr *genericControllerManager) enqueueWatch(obj interface{}) {
 		}
 	}
 
+	glog.V(4).Infof("%s: Will try to enqueue %v", mgr, obj)
+
 	key, err := makeWatchQueueKey(obj)
 	if err != nil {
+		glog.V(4).Infof(
+			"%s: Enqueue failed: Can't make key from %+v: %v", mgr, obj, err,
+		)
 		utilruntime.HandleError(
 			errors.Wrapf(err, "%s: Enqueue failed: Can't make key from %+v", mgr, obj),
 		)
@@ -398,6 +407,9 @@ func (mgr *genericControllerManager) enqueueWatch(obj interface{}) {
 func (mgr *genericControllerManager) enqueueWatchAfter(obj interface{}, delay time.Duration) {
 	key, err := makeWatchQueueKey(obj)
 	if err != nil {
+		glog.V(4).Infof(
+			"%s: Enqueue failed: Can't make key from %+v: %v", mgr, obj, err,
+		)
 		utilruntime.HandleError(
 			errors.Wrapf(err, "%s: Enqueue failed: Can't make key from %+v", mgr, obj),
 		)
@@ -413,7 +425,23 @@ func (mgr *genericControllerManager) updateWatch(old, cur interface{}) {
 
 // syncWatch reconciles the watch resource represented by this provided
 // key
+//
+// NOTE:
+//	Errors are logged as debug messages since errors may auto correct
+// eventually
 func (mgr *genericControllerManager) syncWatch(key string) error {
+	var err error
+	defer func() {
+		if !glog.V(4) {
+			return
+		}
+		if err != nil {
+			glog.Warningf("%s: Can't sync watch %s: %v", mgr, key, err)
+			return
+		}
+		glog.Infof("%s: Watch %s sync completed", mgr, key)
+	}()
+
 	apiVersion, kind, namespace, name, err := splitWatchQueueKey(key)
 	if err != nil {
 		return err
@@ -421,33 +449,29 @@ func (mgr *genericControllerManager) syncWatch(key string) error {
 
 	watchResource := mgr.ResourceManager.GetByKind(apiVersion, kind)
 	if watchResource == nil {
-		return errors.Errorf(
-			"%s: Can't find resource %q of %q", mgr, kind, apiVersion,
-		)
+		return errors.Errorf("%s: Can't find resource %s", mgr, key)
 	}
 
 	watchInformer := mgr.watchInformers.Get(apiVersion, watchResource.Name)
 	if watchInformer == nil {
-		return errors.Errorf(
-			"%s: Can't find informer %q of %q",
-			mgr, kind, apiVersion,
-		)
+		return errors.Errorf("%s: Can't find informer %s", mgr, key)
 	}
 
 	watchObj, err := watchInformer.Lister().Get(namespace, name)
 	if apierrors.IsNotFound(err) {
 		// Swallow the error since there's no point retrying if the
 		// watch is gone.
-		glog.V(4).Infof(
-			"%s: Will not sync %q/%q of %q: Watch doesn't exist",
-			mgr, namespace, name, kind,
-		)
+		glog.V(4).Infof("%s: Can't sync %s: Watch doesn't exist: %v", mgr, key, err)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	return mgr.syncWatchObj(watchObj)
+
+	// remember we use a defer statement to intercept error as debug log.
+	// Hence, we dont return below invocation directly.
+	err = mgr.syncWatchObj(watchObj)
+	return err
 }
 
 func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructured) error {
@@ -457,17 +481,13 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	hasFinalizer := dynamicobject.HasFinalizer(watch, mgr.finalizer.Name)
 	if !isMatch && !hasFinalizer {
 		glog.V(4).Infof(
-			"%s: Will not sync %s/%s of %s: IsMatch=%t: HasFinalizer=%t",
-			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
-			isMatch, hasFinalizer,
+			"%s: Will not sync watch %s: IsMatch=%t: HasFinalizer=%t",
+			mgr, common.DescObjectAsKey(watch), isMatch, hasFinalizer,
 		)
 		return nil
 	}
 
-	glog.V(4).Infof(
-		"%s: Will sync %s/%s of %s",
-		mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
-	)
+	glog.V(4).Infof("%s: Will sync watch %s", mgr, common.DescObjectAsKey(watch))
 
 	watchClient, err := mgr.DynamicClientSet.GetClientByKind(
 		watch.GetAPIVersion(), watch.GetKind(),
@@ -475,8 +495,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	if err != nil {
 		return errors.Wrapf(
 			err,
-			"%s: Failed to get client for %s/%s of %s",
-			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
+			"%s: Failed to get client for watch %s",
+			mgr, common.DescObjectAsKey(watch),
 		)
 	}
 
@@ -487,8 +507,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 		// If we fail to do this, abort before doing anything else and requeue.
 		return errors.Wrapf(
 			err,
-			"%s: Can't sync finalizer for %s/%s of %s",
-			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
+			"%s: Can't sync finalizer for watch %s",
+			mgr, common.DescObjectAsKey(watch),
 		)
 	}
 	watch = watchCopy
@@ -498,9 +518,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	hasFinalizer = dynamicobject.HasFinalizer(watch, mgr.finalizer.Name)
 	if !isMatch && !hasFinalizer {
 		glog.V(4).Infof(
-			"%s: Will not sync %s/%s of %s: IsMatch=%t: HasFinalizer=%t",
-			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
-			isMatch, hasFinalizer,
+			"%s: Will not sync watch %s: IsMatch=%t: HasFinalizer=%t",
+			mgr, common.DescObjectAsKey(watch), isMatch, hasFinalizer,
 		)
 		return nil
 	}
@@ -522,6 +541,13 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	if err != nil {
 		return err
 	}
+
+	if glog.V(4) && len(syncResult.Attachments) == 0 {
+		glog.Infof("%s: Nil attachments in hook response for watch %s",
+			mgr, common.DescObjectAsKey(watch),
+		)
+	}
+
 	desiredAttachments :=
 		common.MakeAnyUnstructRegistryByReference(watch, syncResult.Attachments)
 
@@ -580,8 +606,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 			if err != nil {
 				return errors.Wrapf(
 					err,
-					"%s: Failed to update status for watch %s/%s of %s",
-					mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
+					"%s: Failed to update status for watch %s",
+					mgr, common.DescObjectAsKey(watch),
 				)
 			}
 			// The Update below needs to use the latest ResourceVersion.
@@ -593,40 +619,33 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 			dynamicobject.RemoveFinalizer(watchCopy, mgr.finalizer.Name)
 		}
 
-		glog.V(4).Infof(
-			"%s: Updating watch %s/%s of %s",
-			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
-		)
+		glog.V(4).Infof("%s: Updating watch %s", mgr, common.DescObjectAsKey(watch))
+
 		_, err = watchClient.
 			Namespace(watch.GetNamespace()).Update(watchCopy, metav1.UpdateOptions{})
 		if err != nil {
 			return errors.Wrapf(err,
-				"%s: Failed to update watch %s/%s of %s",
-				mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
+				"%s: Failed to update watch %s", mgr, common.DescObjectAsKey(watch),
 			)
 		}
-		glog.V(4).Infof(
-			"%s: Updated watch %s/%s of %s",
-			mgr, watch.GetNamespace(), watch.GetName(), watch.GetKind(),
-		)
+
+		glog.V(4).Infof("%s: Updated watch %s", mgr, common.DescObjectAsKey(watch))
 	}
 
 	// Add an generic controller name annotation to all desired attachments
-	// to remember/indicate that they are managed by this instance of
-	// GenericController.
+	// to remember/indicate that they are reconciled by this watch resource
 	for _, group := range desiredAttachments {
 		for _, attachment := range group {
 			ann := attachment.GetAnnotations()
-			gctlNamespaceName :=
-				mgr.Controller.Namespace + "-" + mgr.Controller.Name
+			watchKey := common.MakeAnnotationKeyFromObj(watch)
 
-			if ann[genericControllerNameAnnotation] == gctlNamespaceName {
+			if ann[watchKey] == "MetaGenericController" {
 				continue
 			}
 			if ann == nil {
 				ann = make(map[string]string)
 			}
-			ann[genericControllerNameAnnotation] = gctlNamespaceName
+			ann[watchKey] = "MetaGenericController"
 			attachment.SetAnnotations(ann)
 		}
 	}
@@ -703,13 +722,20 @@ func (mgr *genericControllerManager) getAttachments(
 			)
 		}
 
+		if len(attachmentObjs) == 0 {
+			glog.V(4).Infof(
+				"%s: No attachments found for %s of %s",
+				mgr, attachmentKind.Resource, attachmentKind.APIVersion,
+			)
+		}
+
 		// steps to initialize the attachment registry
 		disAttachRes := mgr.ResourceManager.GetByResource(
 			attachmentKind.APIVersion, attachmentKind.Resource,
 		)
 		if disAttachRes == nil {
 			return nil, errors.Errorf(
-				"%s: Can't find attachment resource %s of %s",
+				"%s: Can't find discovered attachment %s of %s",
 				mgr, attachmentKind.Resource, attachmentKind.APIVersion,
 			)
 		}
@@ -720,8 +746,8 @@ func (mgr *genericControllerManager) getAttachments(
 		for _, attObj := range attachmentObjs {
 			// Do not consider if match fails
 			if !mgr.selector.Matches(attObj) {
-				glog.V(5).Infof(
-					"%s: Ignore attachment %s/%s of %s: Doesn't match",
+				glog.V(4).Infof(
+					"%s: Ignore attachment %s/%s of kind %s: Selector doesn't match",
 					mgr, attObj.GetNamespace(), attObj.GetName(), attObj.GetKind(),
 				)
 				continue

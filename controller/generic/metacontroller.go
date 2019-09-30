@@ -88,7 +88,7 @@ func NewMetacontroller(
 
 // String implements Stringer interface
 func (mc *MetaController) String() string {
-	return "GenericMetaController"
+	return "GCtl"
 }
 
 // Start starts this MetaController
@@ -145,7 +145,7 @@ func (mc *MetaController) processNextWorkItem() bool {
 	err := mc.sync(key.(string))
 	if err != nil {
 		utilruntime.HandleError(
-			errors.Wrapf(err, "%s: Failed to sync %q: Will re-queue", mc, key),
+			errors.Wrapf(err, "%s: Failed to sync key %s: Will re-queue", mc, key),
 		)
 		// requeue
 		mc.queue.AddRateLimited(key)
@@ -163,13 +163,13 @@ func (mc *MetaController) sync(key string) error {
 		return err
 	}
 
-	glog.V(4).Infof("%s: Will sync %s/%s of GenericController", mc, ns, name)
+	glog.V(4).Infof("%s: Try sync-ing key %s", mc, key)
 
 	ctrl, err := mc.lister.GenericControllers(ns).Get(name)
 	if apierrors.IsNotFound(err) {
-		glog.V(4).Infof(
-			"%s: Ignore sync %s/%s of GenericController: No longer exist",
-			mc, ns, name,
+		glog.V(3).Infof(
+			"%s: Sync key %s ignored: No longer exist: Will stop controller: %v",
+			mc, key, err,
 		)
 
 		// cleanup this GenericController instance if exists
@@ -222,7 +222,7 @@ func (mc *MetaController) enqueueGenericController(obj interface{}) {
 	key, err := common.KeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(
-			errors.Wrapf(err, "%s: Enqueue failed for %+v", mc, obj),
+			errors.Wrapf(err, "%s: Enqueue failed: %+v", mc, obj),
 		)
 		return
 	}

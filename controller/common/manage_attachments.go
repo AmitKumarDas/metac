@@ -19,6 +19,7 @@ package common
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -54,6 +55,19 @@ type AttachmentExecuteBase struct {
 	// during the process of reconciliation and if these attachments
 	// should be claimed by the watch.
 	IsWatchOwner *bool
+}
+
+// String implements Stringer interface
+func (m AttachmentExecuteBase) String() string {
+	var strs []string
+	strs = append(strs, "AttachmentExecutor")
+	if m.Watch != nil {
+		strs = append(strs, DescObjectAsKey(m.Watch))
+	}
+	if m.IsWatchOwner != nil {
+		strs = append(strs, fmt.Sprintf("IsWatchOwner=%t", *m.IsWatchOwner))
+	}
+	return strings.Join(strs, " ")
 }
 
 // AttachmentManager manages applying the attachment resources
@@ -163,6 +177,11 @@ func appendErrIfNotNil(holder []error, given error) []error {
 	return append(holder, given)
 }
 
+// String implements Stringer interface
+func (m AttachmentManager) String() string {
+	return m.AttachmentExecuteBase.String()
+}
+
 // SetDefaultsIfNil sets various default options against this
 // ControllerManager instance if applicable
 func (m *AttachmentManager) SetDefaultsIfNil() *AttachmentManager {
@@ -184,15 +203,8 @@ func (m *AttachmentManager) SetDefaultsIfNil() *AttachmentManager {
 // the child resources set against this manager instance
 func (m *AttachmentManager) Apply() error {
 	var errs []error
-
-	if m.Deleter != nil {
-		errs = appendErrIfNotNil(errs, m.Deleter.Delete())
-	}
-
-	if m.Updater != nil {
-		errs = appendErrIfNotNil(errs, m.Updater.Update())
-	}
-
+	errs = appendErrIfNotNil(errs, m.Deleter.Delete())
+	errs = appendErrIfNotNil(errs, m.Updater.Update())
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -217,14 +229,9 @@ type AttachmentResourcesExecutor struct {
 	Desired  map[string]*unstructured.Unstructured
 }
 
-func (e *AttachmentResourcesExecutor) String() string {
-	if e.Watch == nil {
-		return "AttachmentResourcesExecutor"
-	}
-	return fmt.Sprintf(
-		"AttachmentResourcesExecutor %s:",
-		describeObject(e.Watch),
-	)
+// String implements Stringer interface
+func (e AttachmentResourcesExecutor) String() string {
+	return e.AttachmentExecuteBase.String()
 }
 
 // Update will update the child resources specified in
@@ -236,6 +243,7 @@ func (e *AttachmentResourcesExecutor) Update() error {
 	// instance before carrying out the update
 	// operation
 	for name, dObj := range e.Desired {
+
 		ns := dObj.GetNamespace()
 		if ns == "" {
 			ns = e.Watch.GetNamespace()
@@ -243,6 +251,35 @@ func (e *AttachmentResourcesExecutor) Update() error {
 
 		// update since this object is observed to exist
 		if oObj := e.Observed[name]; oObj != nil {
+			// -------------------------------------------
+			// try update since object already exists
+			// -------------------------------------------
+
+			// Leave it alone if it's pending deletion
+			if oObj.GetDeletionTimestamp() != nil {
+				glog.V(4).Infof(
+					"%s: Can't update %s: Pending deletion",
+					e, DescObjectAsKey(dObj),
+				)
+				continue
+			}
+
+			// Check the update strategy for this child kind.
+			method := e.GetChildUpdateStrategyByGK(
+				e.DynamicResourceClient.Group, e.DynamicResourceClient.Kind,
+			)
+
+			if method == v1alpha1.ChildUpdateOnDelete || method == "" {
+				// This means we don't try to update anything unless
+				// it gets deleted by someone else i.e. we won't delete it
+				// ourselves
+				glog.V(4).Infof(
+					"%s: Can't update %s: OnDelete update strategy",
+					e, DescObjectAsKey(dObj),
+				)
+				continue
+			}
+
 			// 3-way merge
 			uObj, err := ApplyMerge(oObj, dObj)
 			if err != nil {
@@ -256,9 +293,13 @@ func (e *AttachmentResourcesExecutor) Update() error {
 				uObj.UnstructuredContent(),
 				oObj.UnstructuredContent(),
 			) {
-				// Nothing changed.
+				glog.V(4).Infof(
+					"%s: Can't update %s: Nothing changed.",
+					e, DescObjectAsKey(dObj),
+				)
 				continue
 			}
+
 			if glog.V(5) {
 				glog.Infof(
 					"%s: Diff: a=observed, b=desired:\n%s",
@@ -270,38 +311,11 @@ func (e *AttachmentResourcesExecutor) Update() error {
 				)
 			}
 
-			// Leave it alone if it's pending deletion.
-			//
-			// TODO (@amitkumardas):
-			// Should this be moved before applying update
-			if oObj.GetDeletionTimestamp() != nil {
-				glog.Infof(
-					"%s: Not updating %s: Pending deletion",
-					e, describeObject(dObj),
-				)
-				continue
-			}
-
-			// Check the update strategy for this child kind.
-			method := e.GetChildUpdateStrategyByGK(
-				e.DynamicResourceClient.Group, e.DynamicResourceClient.Kind,
-			)
+			// Act based on the update strategy for this child kind.
 			switch method {
-			case v1alpha1.ChildUpdateOnDelete, "":
-				// This means we don't try to update anything unless
-				// it gets deleted by someone else
-				// (we won't delete it ourselves).
-				//
-				// TODO (@amitkumardas):
-				// Should this be moved before applying update
-				glog.V(5).Infof(
-					"%s: Not updating %s: OnDelete update strategy",
-					e, describeObject(dObj),
-				)
-				continue
 			case v1alpha1.ChildUpdateRecreate, v1alpha1.ChildUpdateRollingRecreate:
 				// Delete the object (now) and recreate it (on the next sync).
-				glog.Infof("%s: Deleting %s for update", e, describeObject(dObj))
+				glog.V(4).Infof("%s: Deleting %s for update", e, DescObjectAsKey(dObj))
 
 				uid := oObj.GetUID()
 				// Explicitly request deletion propagation, which is what users expect,
@@ -318,9 +332,11 @@ func (e *AttachmentResourcesExecutor) Update() error {
 					errs = append(errs, err)
 					continue
 				}
+
+				glog.Infof("%s: Deleted %s for update", e, DescObjectAsKey(dObj))
 			case v1alpha1.ChildUpdateInPlace, v1alpha1.ChildUpdateRollingInPlace:
 				// Update the object in-place.
-				glog.Infof("%s: Updating %s", e, describeObject(dObj))
+				glog.V(4).Infof("%s: Updating %s", e, DescObjectAsKey(dObj))
 
 				_, err := e.DynamicResourceClient.Namespace(ns).Update(
 					uObj, metav1.UpdateOptions{},
@@ -329,18 +345,23 @@ func (e *AttachmentResourcesExecutor) Update() error {
 					errs = append(errs, err)
 					continue
 				}
+
+				glog.V(2).Infof("%s: Updated %s", e, DescObjectAsKey(dObj))
 			default:
 				errs = append(errs,
 					fmt.Errorf(
 						"%s: Invalid update strategy %s for %s",
-						e, method, describeObject(dObj),
+						e, method, DescObjectAsKey(dObj),
 					),
 				)
 				continue
 			}
 		} else {
-			// Create since this object is not observed in cluster
-			glog.Infof("%s: Creating %s", e, describeObject(dObj))
+			// ----------------------------------------------------
+			// try create since this object is not observed in cluster
+			// ----------------------------------------------------
+
+			glog.V(4).Infof("%s: Creating %s", e, DescObjectAsKey(dObj))
 
 			// The controller should return a partial object containing only the
 			// fields it cares about. We save this partial object so we can do
@@ -371,6 +392,8 @@ func (e *AttachmentResourcesExecutor) Update() error {
 				errs = append(errs, err)
 				continue
 			}
+
+			glog.Infof("%s: Created %s", e, DescObjectAsKey(dObj))
 		}
 	}
 
@@ -381,15 +404,20 @@ func (e *AttachmentResourcesExecutor) Update() error {
 // & owned child resources that are no longer desired
 func (e *AttachmentResourcesExecutor) Delete() error {
 	var errs []error
+
 	for name, obj := range e.Observed {
 		if obj.GetDeletionTimestamp() != nil {
 			// Skip objects that are already pending deletion.
+			glog.V(4).Infof("%s: Can't delete %s: Pending deletion",
+				e, DescObjectAsKey(obj),
+			)
 			continue
 		}
 		if e.Desired == nil || e.Desired[name] == nil {
 			// This observed object wasn't listed as desired.
 			// Hence, this is the right candidate to be deleted.
-			glog.Infof("%v: deleting %v", describeObject(e.Watch), describeObject(obj))
+			glog.Infof("%s: Deleting %s", e, DescObjectAsKey(obj))
+
 			uid := obj.GetUID()
 			// Explicitly request deletion propagation, which is what
 			// users expect, since some objects default to orphaning
@@ -405,12 +433,15 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 			if err != nil {
 				errs = append(
 					errs,
-					errors.Wrapf(err, "can't delete %v", describeObject(obj)),
+					errors.Wrapf(err, "%s: Can't delete %s", e, DescObjectAsKey(obj)),
 				)
 				continue
 			}
+
+			glog.Infof("%s: Deleted %s", e, DescObjectAsKey(obj))
 		}
 	}
+
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -436,6 +467,7 @@ type AnyAttachmentsUpdater []*AttachmentResourcesExecutor
 // this instance
 func (list AnyAttachmentsUpdater) Update() error {
 	var errs []error
+
 	for _, updater := range list {
 		errs = appendErrIfNotNil(errs, updater.Update())
 	}

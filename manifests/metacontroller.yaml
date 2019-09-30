@@ -81,7 +81,7 @@ spec:
         command: ["/usr/bin/metac"]
         args:
         - --logtostderr
-        - -v=6
+        - -v=1
         - --discovery-interval=20s
       imagePullSecrets:
       - name: amitkumardas-pull-secret

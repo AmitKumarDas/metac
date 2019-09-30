@@ -1,4 +1,4 @@
-apiVersion: metacontroller.k8s.io/v1alpha1
+apiVersion: metac.openebs.io/v1alpha1
 kind: DecoratorController
 metadata:
   name: service-per-pod
@@ -16,12 +16,12 @@ spec:
   hooks:
     sync:
       webhook:
-        url: http://service-per-pod.metacontroller/sync-service-per-pod
+        url: http://service-per-pod.metac/sync-service-per-pod
     finalize:
       webhook:
-        url: http://service-per-pod.metacontroller/finalize-service-per-pod
+        url: http://service-per-pod.metac/finalize-service-per-pod
 ---
-apiVersion: metacontroller.k8s.io/v1alpha1
+apiVersion: metac.openebs.io/v1alpha1
 kind: DecoratorController
 metadata:
   name: pod-name-label
@@ -38,13 +38,13 @@ spec:
   hooks:
     sync:
       webhook:
-        url: http://service-per-pod.metacontroller/sync-pod-name-label
+        url: http://service-per-pod.metac/sync-pod-name-label
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
   name: service-per-pod
-  namespace: metacontroller
+  namespace: metac
 spec:
   replicas: 1
   selector:
@@ -57,6 +57,8 @@ spec:
     spec:
       containers:
       - name: hooks
+        # this deployment is all about exposing jsonnet as a webhook
+        # that understands metac request & response payload
         image: metacontroller/jsonnetd:0.1
         imagePullPolicy: Always
         workingDir: /hooks
@@ -72,7 +74,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: service-per-pod
-  namespace: metacontroller
+  namespace: metac
 spec:
   selector:
     app: service-per-pod

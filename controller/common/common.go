@@ -44,6 +44,11 @@ var (
 // instances in a way that is easy to find / filter later.
 type AnyUnstructRegistry map[string]map[string]*unstructured.Unstructured
 
+// IsEmpty returns true if this registry is empty
+func (m AnyUnstructRegistry) IsEmpty() bool {
+	return len(m) == 0
+}
+
 // InitGroupByVK initialises (or re-initializes) a group within the
 // registry. Group is initialized based on the provided apiVersion & kind.
 //
@@ -133,12 +138,43 @@ func namespacedNameOrName(obj *unstructured.Unstructured) string {
 	return obj.GetName()
 }
 
-// describeObject returns a human-readable string to identify a given object.
+// describeObject returns a human-readable string to identify a
+// given object.
 func describeObject(obj *unstructured.Unstructured) string {
 	if ns := obj.GetNamespace(); ns != "" {
-		return fmt.Sprintf("%s/%s of %s", ns, obj.GetName(), obj.GetKind())
+		return fmt.Sprintf("%s/%s of kind %s", ns, obj.GetName(), obj.GetKind())
 	}
-	return fmt.Sprintf("%s of %s", obj.GetName(), obj.GetKind())
+	return fmt.Sprintf("%s of kind %s", obj.GetName(), obj.GetKind())
+}
+
+// DescObjectAsKey returns a machine readable string of the provided
+// object. It can be used to identify the given object.
+func DescObjectAsKey(obj *unstructured.Unstructured) string {
+	ns := obj.GetNamespace()
+	if ns != "" {
+		return fmt.Sprintf("%s:%s:%s:%s",
+			obj.GetAPIVersion(), obj.GetKind(), ns, obj.GetName(),
+		)
+	}
+
+	return fmt.Sprintf("%s:%s:%s",
+		obj.GetAPIVersion(), obj.GetKind(), obj.GetName(),
+	)
+}
+
+// MakeAnnotationKeyFromObj returns a sanitised name from the
+// given object that can be used as annotation value
+func MakeAnnotationKeyFromObj(obj *unstructured.Unstructured) string {
+	ns := obj.GetNamespace()
+	if ns != "" {
+		return fmt.Sprintf("%s-%s-%s-%s",
+			obj.GetAPIVersion(), obj.GetKind(), ns, obj.GetName(),
+		)
+	}
+
+	return fmt.Sprintf("%s-%s-%s",
+		obj.GetAPIVersion(), obj.GetKind(), obj.GetName(),
+	)
 }
 
 // List expands the registry map into a flat list of unstructured

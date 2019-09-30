@@ -26,16 +26,13 @@ You can customize the verbosity of the Metacontroller server's logs with the
 At all log levels, Metacontroller will log the progress of server startup and
 shutdown, as well as major changes like starting and stopping hosted controllers.
 
-At level 4 and above, Metacontroller will log actions (like create/update/delete)
-on individual objects (like Pods) that it takes on behalf of hosted controllers.
-It will also log when it decides to sync a given controller as well as events
-that may trigger a sync.
-
-At level 5 and above, Metacontroller will log the diffs between existing objects
-and the desired state of those objects returned by controller hooks.
-
-At level 6 and above, Metacontroller will log every hook invocation as well as
-the JSON request and response bodies.
+Metacontroller will log the following events based on log levels:
+- level 1: startup, shutdown, error, create & delete actions
+- level 2: update actions
+- level 3: ignore/skip actions due to specifics
+- level 4: creating, updating, deleting, debugging, ignore/skip actions due to defaults
+- level 5: diff of objects
+- level 6: hook invocation along with JSON req & response bodies
 
 ### Common Log Messages
 

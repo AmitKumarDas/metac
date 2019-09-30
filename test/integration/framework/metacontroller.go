@@ -137,10 +137,11 @@ func (f *Fixture) CreateDecoratorController(
 	return dc
 }
 
-// CreateGenericController generates a test GenericController and installs
-// it in the test API server.
+// CreateGenericController creates a GenericController and installs
+// it in the API server.
 func (f *Fixture) CreateGenericController(
 	name string,
+	namespace string,
 	syncHookURL string,
 	watchRule *v1alpha1.ResourceRule,
 	attachmentRule *v1alpha1.ResourceRule,
@@ -160,7 +161,7 @@ func (f *Fixture) CreateGenericController(
 
 	gc := &v1alpha1.GenericController{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
+			Namespace: namespace,
 			Name:      name,
 		},
 		Spec: v1alpha1.GenericControllerSpec{
@@ -181,16 +182,15 @@ func (f *Fixture) CreateGenericController(
 		},
 	}
 
-	gc, err := f.metaClientset.MetacontrollerV1alpha1().
-		GenericControllers("default").Create(gc)
+	gc, err :=
+		f.metaClientset.MetacontrollerV1alpha1().GenericControllers(namespace).Create(gc)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 
 	f.addToTeardown(func() error {
 		return f.metaClientset.MetacontrollerV1alpha1().
-			GenericControllers("default").
-			Delete(gc.Name, nil)
+			GenericControllers(namespace).Delete(gc.Name, nil)
 	})
 
 	return gc
