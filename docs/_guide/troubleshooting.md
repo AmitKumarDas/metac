@@ -36,6 +36,7 @@ Metacontroller will log the following events based on log levels:
 
 ### Common Log Messages
 
+#### Errors due to new CRDs
 Since API discovery info is refreshed periodically, you may see log messages
 like this when you start a controller that depends on a recently-installed CRD:
 
@@ -47,6 +48,7 @@ Usually, this should fix itself within about 30s when the new CRD is discovered.
 If this message continues indefinitely, check that the resource name and API
 group/version are correct.
 
+#### Messages due to periodic flush
 You may also notice periodic log messages like this:
 
 ```
@@ -56,6 +58,20 @@ Watch close - *unstructured.Unstructured total <X> items received
 This comes from the underlying client-go library, and just indicates when the
 shared caches are periodically flushed to place an upper bound on cache
 inconsistency due to potential silent failures in long-running watches.
+
+#### Errors connecting to WebHook service
+
+```
+E1001 06:41:20.115843       1 controller.go:330] failed to sync service-per-pod "apps/v1:StatefulSet:default:nginx": Sync hook failed: Webhook url=http://jsonnetd.metac/sync-service-per-pod timeout=10000000000: Invoke failed: Post http://jsonnetd.metac/sync-service-per-pod: dial tcp: lookup jsonnetd.metac on 127.0.0.53:53: read udp 127.0.0.1:38446->127.0.0.53:53: read: connection refused
+```
+- Check the services of your Kubernetes cluster
+- I got above error while trying with micro.kubectl
+
+```
+E1001 07:21:35.763117       1 controller.go:330] failed to sync pod-name-label "v1:Pod:default:nginx-2": can't update Pod default/nginx-2: Operation cannot be fulfilled on pods "nginx-2": the object has been modified; please apply your changes to the latest version and try again
+```
+- <To fill up>
+
 
 ## Webhook Logs
 

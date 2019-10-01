@@ -25,14 +25,14 @@ trap cleanup EXIT
 
 finalizer="protect.dctl.metac.openebs.io/service-per-pod-test"
 
-echo -e "\n++ Installing meta controllers & webhook service"
+echo -e "\n++ Installing decorator controllers & webhook service"
 kubectl create configmap service-per-pod-hooks -n metac --from-file=hooks
-kubectl apply -f service-per-pod.yaml
+kubectl apply -f operator.yaml
 
 echo -e "\n++ Applying STS that will get watched by metac"
 kubectl apply -f my-statefulset.yaml
 
-echo -e "\n++ Waiting for per-pod Service..."
+echo -e "\n++ Waiting for per-pod service..."
 until [[ "$(kubectl get svc nginx-2 -o 'jsonpath={.spec.selector.pod-name}')" == "nginx-2" ]]; \
   do echo "++ Will retry" && sleep 1; \
 done

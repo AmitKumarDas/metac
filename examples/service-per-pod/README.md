@@ -47,11 +47,31 @@ is removed to opt out of the decorator, any Services created will be cleaned up.
 * Kubernetes 1.8+ is recommended for its improved CRD support, especially garbage collection.
 * Install Metac using yamls from manifests folder
 
+```sh
+# cd to metac's root folder
+
+kubectl apply -f ./manifests/metacontroller-namespace.yaml
+kubectl apply -f ./manifests/metacontroller-rbac.yaml
+kubectl apply -f ./manifests/metacontroller.yaml
+
+kubectl get crd
+```
+
 ### Deploy the DecoratorControllers
 
 ```sh
+# cd to examples/service-per-pod/
+
+# any change in any of the hooks should be accompanied
+# by deleting configmap & operator & re-applying the same
 kubectl create configmap service-per-pod-hooks -n metac --from-file=hooks
-kubectl apply -f service-per-pod.yaml
+kubectl apply -f operator.yaml
+
+# verify
+kubectl get dctl
+kubectl get cm -n metac
+kubectl get deploy -n metac
+kubectl get svc -n metac
 ```
 
 ### Create an Example StatefulSet

@@ -4,7 +4,7 @@ metadata:
   name: service-per-pod
 spec:
   resources:
-  - apiVersion: apps/v1beta1
+  - apiVersion: apps/v1
     resource: statefulsets
     annotationSelector:
       matchExpressions:
@@ -16,10 +16,10 @@ spec:
   hooks:
     sync:
       webhook:
-        url: http://service-per-pod.metac/sync-service-per-pod
+        url: http://jsonnetd.metac/sync-service-per-pod
     finalize:
       webhook:
-        url: http://service-per-pod.metac/finalize-service-per-pod
+        url: http://jsonnetd.metac/finalize-service-per-pod
 ---
 apiVersion: metac.openebs.io/v1alpha1
 kind: DecoratorController
@@ -38,22 +38,22 @@ spec:
   hooks:
     sync:
       webhook:
-        url: http://service-per-pod.metac/sync-pod-name-label
+        url: http://jsonnetd.metac/sync-pod-name-label
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-per-pod
+  name: jsonnetd
   namespace: metac
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: service-per-pod
+      app: jsonnetd
   template:
     metadata:
       labels:
-        app: service-per-pod
+        app: jsonnetd
     spec:
       containers:
       - name: hooks
@@ -68,16 +68,20 @@ spec:
       volumes:
       - name: hooks
         configMap:
+          # this configmap provides the jsonnet files that
+          # get executed as webhooks
           name: service-per-pod-hooks
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-per-pod
+  # this name is used to build the webhook url
+  name: jsonnetd
+  # this namespace is used to build the webhook url
   namespace: metac
 spec:
   selector:
-    app: service-per-pod
+    app: jsonnetd
   ports:
   - port: 80
     targetPort: 8080
