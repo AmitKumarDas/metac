@@ -68,7 +68,8 @@ func (pc *parentController) syncRollingUpdate(
 				// The child wasn't observed, so we don't know if it'll match latest.
 				continue
 			}
-			updated, err := common.ApplyMerge(child, desiredChild)
+			apply := common.Apply{}
+			updated, err := apply.Merge(child, desiredChild)
 			if err != nil {
 				// We can't prove it'll be a no-op, so don't move it to latest.
 				continue
@@ -176,7 +177,8 @@ func (pc *parentController) shouldContinueRolling(
 			// Is this child up-to-date with what the latest revision wants?
 			// Apply the latest update to it and see if anything changes.
 			update := latest.desiredChildMap.FindByGroupKindName(ck.APIGroup, ck.Kind, name)
-			updated, err := common.ApplyMerge(child, update)
+			apply := &common.Apply{}
+			updated, err := apply.Merge(child, update)
 			if err != nil {
 				return fmt.Errorf("can't check if child %v %v is updated: %v", ck.Kind, name, err)
 			}

@@ -45,10 +45,6 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-const (
-	gctlAnnotationKeyPrefix = "gctl.metac.openebs.io/"
-)
-
 // Manager that handles a GenericController API resource
 //
 // TODO (@amitkumardas):
@@ -632,22 +628,18 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 		glog.V(4).Infof("%s: Updated watch %s", mgr, common.DescObjectAsKey(watch))
 	}
 
-	// Add an generic controller name annotation to all desired attachments
-	// to remember/indicate that they are reconciled by this watch resource
-	for _, group := range desiredAttachments {
-		for _, attachment := range group {
-			ann := attachment.GetAnnotations()
-			watchKey := common.MakeAnnotationKeyFromObj(watch)
-
-			if ann[watchKey] == "MetaGenericController" {
-				continue
-			}
-			if ann == nil {
-				ann = make(map[string]string)
-			}
-			ann[watchKey] = "MetaGenericController"
-			attachment.SetAnnotations(ann)
-		}
+	// more checks if generic controller should create/delete/update
+	// any kind of attachments
+	readOnly := false
+	if mgr.Controller.Spec.ReadOnly != nil {
+		readOnly = *mgr.Controller.Spec.ReadOnly
+	}
+	if readOnly {
+		// this controller instance is only meant for watch related changes
+		glog.V(4).Infof(
+			"%s: Won't update attachments: ReadOnly %t", mgr, readOnly,
+		)
+		return nil
 	}
 
 	// Reconcile attachment objects belonging to this watch.
@@ -672,13 +664,14 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 			AttachmentExecuteBase: common.AttachmentExecuteBase{
 				GetChildUpdateStrategyByGK: updateStrategyMgr.GetByGKOrDefault,
 				Watch:                      watch,
+				UpdateAny:                  mgr.Controller.Spec.UpdateAny,
 			},
 
 			DynamicClientSet: mgr.DynamicClientSet,
 			Observed:         observedAttachments,
 			Desired:          desiredAttachments,
 		}
-		return attMgr.SetDefaultsIfNil().Apply()
+		return attMgr.Apply()
 	}
 
 	return nil

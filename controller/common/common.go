@@ -127,9 +127,9 @@ func relativeName(ref metav1.Object, obj *unstructured.Unstructured) string {
 	return obj.GetName()
 }
 
-// namespacedNameOrName returns the name of the resource based on its
+// namespaceNameOrName returns the name of the resource based on its
 // scope
-func namespacedNameOrName(obj *unstructured.Unstructured) string {
+func namespaceNameOrName(obj *unstructured.Unstructured) string {
 	if obj.GetNamespace() != "" {
 		return fmt.Sprintf(
 			"%s/%s", obj.GetNamespace(), obj.GetName(),
@@ -147,6 +147,18 @@ func describeObject(obj *unstructured.Unstructured) string {
 	return fmt.Sprintf("%s of kind %s", obj.GetName(), obj.GetKind())
 }
 
+// sanitiseAPIVersion will make the apiVersion suitable to be used
+// as value field in labels or annotations
+func sanitiseAPIVersion(version string) string {
+	return strings.ReplaceAll(version, "/", "-")
+}
+
+// DescObjAsSanitisedNSName will return the sanitised namespace name
+// format corresponding to the given object
+func DescObjAsSanitisedNSName(obj *unstructured.Unstructured) string {
+	return strings.ReplaceAll(namespaceNameOrName(obj), "/", "-")
+}
+
 // DescObjectAsKey returns a machine readable string of the provided
 // object. It can be used to identify the given object.
 func DescObjectAsKey(obj *unstructured.Unstructured) string {
@@ -162,18 +174,19 @@ func DescObjectAsKey(obj *unstructured.Unstructured) string {
 	)
 }
 
-// MakeAnnotationKeyFromObj returns a sanitised name from the
-// given object that can be used as annotation value
-func MakeAnnotationKeyFromObj(obj *unstructured.Unstructured) string {
+// DescObjectAsSanitisedKey returns a sanitised name from the
+// given object that can be used in annotation as key or value
+func DescObjectAsSanitisedKey(obj *unstructured.Unstructured) string {
+	ver := sanitiseAPIVersion(obj.GetAPIVersion())
 	ns := obj.GetNamespace()
 	if ns != "" {
 		return fmt.Sprintf("%s-%s-%s-%s",
-			obj.GetAPIVersion(), obj.GetKind(), ns, obj.GetName(),
+			ver, obj.GetKind(), ns, obj.GetName(),
 		)
 	}
 
 	return fmt.Sprintf("%s-%s-%s",
-		obj.GetAPIVersion(), obj.GetKind(), obj.GetName(),
+		ver, obj.GetKind(), obj.GetName(),
 	)
 }
 
