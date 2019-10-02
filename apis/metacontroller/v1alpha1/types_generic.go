@@ -35,25 +35,70 @@ type GenericController struct {
 // GenericControllerSpec is the specifications for GenericController
 // API
 type GenericControllerSpec struct {
-	// Resource that is under watch by GenericController
+	// Resource that is under watch by GenericController. Any actions
+	// i.e. 'create', 'update' or 'delete' of this resource will trigger
+	// this GenericController's sync process.
 	Watch GenericControllerResource `json:"watch"`
 
-	// Attachments are the resources that get created/updated/deleted
-	// as part of formation of the desired state due to the changes
-	// in watched (i.e. above) resource
+	// Attachments are the resources that may be read, created, updated,
+	// or deleted as part of formation of the desired state. Attachments
+	// are provided along with the watch resource to the sync hooks.
+	//
+	// NOTE:
+	//	GenericController is by default limited to only update & delete
+	// the attachments that were created by its controller instance. Other
+	// attachments (i.e. the ones created via some other means) are used
+	// for readonly purposes during reconciliation.
 	Attachments []GenericControllerAttachment `json:"attachments,omitempty"`
 
-	// Hooks to be invoked to get at the desired state
+	// Hooks to be invoked to arrive at the desired state
 	Hooks *GenericControllerHooks `json:"hooks,omitempty"`
 
 	// ResyncPeriodSeconds is the time interval in seconds after which
 	// the GenericController's reconcile gets triggered. In other words
 	// this is the interval of reconciliation which runs as a continuous
 	// loop
+	//
+	// NOTE:
+	//	This is optional
 	ResyncPeriodSeconds *int32 `json:"resyncPeriodSeconds,omitempty"`
 
-	// Parameters represent a set of optional key value pairs that
-	// can take part while arriving at the desired state
+	// ReadOnly disables this controller from executing create, delete &
+	// update operations against any attachments.
+	//
+	// In other words, when set to true, GenericController can update
+	// only the watch resource & is disabled to perform any operation
+	// i.e. 'create', 'delete' or 'update' against any attachments.
+	//
+	// This can be used by sync / finalize hook implementations to read
+	// the attachments & update the watch. One should be able to perform
+	// sync operations faster in this mode, if the requirement fits this
+	// tunable.
+	//
+	// NOTE:
+	//	This is optional. However this should not be set to true if
+	// UpdateAny is set to true.
+	ReadOnly *bool `json:"readOnly,omitempty"`
+
+	// UpdateAny enables this controller to execute update operations
+	// against any attachments.
+	//
+	// NOTE:
+	//	This tunable changes the default working mode of GenericController.
+	// When set to true, the controller instance is granted with the
+	// permission to update any attachments even if these attachments
+	// were not created by this controller instance.
+	//
+	// NOTE:
+	//	This is optional. However this should not be set to true if
+	// ReadOnly is set to true.
+	UpdateAny *bool `json:"updateAny,omitempty"`
+
+	// Parameters represent a set of key value pairs that can be used by
+	// the sync hook implementation logic.
+	//
+	// NOTE:
+	//	This is optional
 	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
@@ -64,30 +109,6 @@ type GenericControllerHooks struct {
 
 	// Hook that gets invoked during delete reconciliation
 	Finalize *Hook `json:"finalize,omitempty"`
-}
-
-// NameSelector is used to select resources based on
-// the names set here
-type NameSelector []string
-
-// Contains returns true if the provided search item
-// is present in the selector
-func (s NameSelector) Contains(search string) bool {
-	for _, name := range s {
-		if name == search {
-			return true
-		}
-	}
-	return false
-}
-
-// ContainsOrTrue returns true if nameselector is empty or
-// search item is available in nameselector
-func (s NameSelector) ContainsOrTrue(search string) bool {
-	if len(s) == 0 {
-		return true
-	}
-	return s.Contains(search)
 }
 
 // GenericControllerResource represent a resource that is understood
@@ -105,21 +126,27 @@ func (s NameSelector) ContainsOrTrue(search string) bool {
 // 	A watch as well as any attachment will have its own label selector &/
 // annotation selector.
 type GenericControllerResource struct {
-	ResourceRule       `json:",inline"`
-	NameSelector       NameSelector          `json:"nameSelector,omitempty"`
-	LabelSelector      *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	AnnotationSelector *AnnotationSelector   `json:"annotationSelector,omitempty"`
+	ResourceRule `json:",inline"`
+
+	// Include the resource if name selector matches
+	NameSelector NameSelector `json:"nameSelector,omitempty"`
+
+	// Include the resource if label selector matches
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
+
+	// Include the resource if annotation selector matches
+	AnnotationSelector *AnnotationSelector `json:"annotationSelector,omitempty"`
 }
 
 // GenericControllerAttachment represents a resources that takes
-// part in sync &/or finalize actions
+// part in sync &/or finalize.
 type GenericControllerAttachment struct {
-	// This represents a single resource that participates in the
+	// This represents the resource that should participates in
 	// sync/finalize
 	GenericControllerResource `json:",inline"`
 
-	// UpdateStrategy is the strategy to be used for the attachments
-	// after the sync/finalize process
+	// UpdateStrategy to be used for the resource to take into
+	// account the changes due to sync/finalize
 	UpdateStrategy *GenericControllerAttachmentUpdateStrategy `json:"updateStrategy,omitempty"`
 }
 

@@ -1,42 +1,53 @@
 ### TODO:
-- make gctl integration test work
-    - code refactoring - one .go file per test
-    - proper logs, informative logs, proper log levels
+- gctl add integration tests:
+    - check if finalizer works
+    - check if attachments not created by gctl are not updated
+    - check if attachments not created by gctl are not deleted
+    - check if ReadOnly works
+    - check if UpdateAny works
+    - check if same watch can update an attachment via multiple gctl specs
+
+- gctl - read & review
+    - https://github.com/GoogleCloudPlatform/metacontroller/issues/98
+    - https://github.com/GoogleCloudPlatform/metacontroller/pull/143
+    - https://github.com/GoogleCloudPlatform/metacontroller/pull/168
+
+
+- all controller enhancements
+  - https://github.com/GoogleCloudPlatform/metacontroller/issues/154
+  - make Metac run based on either of following: 
+      - CustomResource, or # current mode
+      - Config # default mode
+  - make cctl, dctl & gctl work from config files vs. current way that depends on CRDs
+
+- explore the one binary sidecars
+    - jsonnetd service + hooks as a docker image
+
+- gctl integration test
+  - code refactoring - one .go file per test
+  - proper logs, informative logs, proper log levels  
+- Use latest stable Kubernetes version & etcd for integration testing
 - make all examples to work & then make it better
 - restructure examples to enable community
 - code to use klog
 - test/unittest
 - find bugs & fix
-- all controller enhancements
-    - https://github.com/GoogleCloudPlatform/metacontroller/issues/154
-    - make Metac run based on either of following: 
-        - CustomResource, or # current mode
-        - Config # default mode
-    - make gctl work for a list of configs i.e. configs/gctl/
-    - make cctl work for a list of configs i.e. configs/cctl/
-    - make dctl work for a list of configs i.e. configs/dctl/
-- gctl - enhancements
-    - enableCreate *bool
-    - enableDelete *bool
-    - enableApply  *bool
-    - add gctl annotation to the attachments it creates
-    - add gctl annotation to the attachments it updates
-- usecases
-    - ConformanceTest
-    - CStorConfigController
-    - DDP
-    - Install
-    - UnInstall
-    - Upgrade
-- Use latest stable Kubernetes version & etcd for integration testing
+
+- targeted usecases
+  - ConformanceTest
+  - CStorConfigController
+  - DDP
+  - Install
+  - UnInstall
+  - Upgrade
 
 ### Future Actions:
 - Make metacontroller watch resources from specific namespace if required
 - If multiple meta controllers work against a resource then apply function might be buggy
-    - Provide last-applied-configuration per meta controller resource
-    - <ctrl-ns>-<ctrl-name>.dctl.metac.openebs.io/last-applied-config
-    - <ctrl-ns>-<ctrl-name>.gctl.metac.openebs.io/last-applied-config
-    - <ctrl-ns>-<ctrl-name>.cctl.metac.openebs.io/last-applied-config
+  - Provide last-applied-configuration per meta controller resource
+  - <ctrl-ns>-<ctrl-name>.dctl.metac.openebs.io/last-applied-config
+  - <ctrl-ns>-<ctrl-name>.gctl.metac.openebs.io/last-applied-config
+  - <ctrl-ns>-<ctrl-name>.cctl.metac.openebs.io/last-applied-config
 - Should Metac support UDS?
     - https://eli.thegreenplace.net/2019/unix-domain-sockets-in-go/
 

@@ -832,6 +832,16 @@ func (in *GenericControllerSpec) DeepCopyInto(out *GenericControllerSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.ReadOnly != nil {
+		in, out := &in.ReadOnly, &out.ReadOnly
+		*out = new(bool)
+		**out = **in
+	}
+	if in.UpdateAny != nil {
+		in, out := &in.UpdateAny, &out.UpdateAny
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Parameters != nil {
 		in, out := &in.Parameters, &out.Parameters
 		*out = make(map[string]string, len(*in))

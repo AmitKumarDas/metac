@@ -14,9 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO (@amitkumardas):
-// Some functions in this file should be deprecated in favour of
-// manage_attachments.go
 package common
 
 import (
@@ -36,14 +33,65 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// ApplyMerge applies the update against the original object in the
+// TODO (@amitkumardas):
+//
+// Some functions in this file should be deprecated in favour of
+// manage_attachments.go
+
+// Apply provides kubectl style apply logic
+type Apply struct {
+	// GetLastAppliedFn returns the last applied configuration
+	// of the provided unstruct instance
+	GetLastAppliedFn func(*unstructured.Unstructured) (map[string]interface{}, error)
+
+	// SetLastAppliedFn sets the last applied configuration against
+	// the provided unstruct instance
+	SetLastAppliedFn func(obj *unstructured.Unstructured, lastApplied map[string]interface{}) error
+}
+
+// NewApplyFromAnnKey returns a new instance of Apply based on the provided
+// annotation key
+func NewApplyFromAnnKey(key string) *Apply {
+	return &Apply{
+		GetLastAppliedFn: func(o *unstructured.Unstructured) (map[string]interface{}, error) {
+			return dynamicapply.GetLastAppliedByAnnKey(o, key)
+		},
+		SetLastAppliedFn: func(o *unstructured.Unstructured, last map[string]interface{}) error {
+			return dynamicapply.SetLastAppliedByAnnKey(o, last, key)
+		},
+	}
+}
+
+// Merge applies the update against the original object in the
+// style of kubectl apply
+func (a *Apply) Merge(
+	orig, update *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+
+	if a.GetLastAppliedFn == nil {
+		// defaults to old way
+		a.GetLastAppliedFn = dynamicapply.GetLastApplied
+	}
+	if a.SetLastAppliedFn == nil {
+		// defaults to old way
+		a.SetLastAppliedFn = dynamicapply.SetLastApplied
+	}
+
+	return a.merge(orig, update)
+}
+
+// merge applies the update against the original object in the
 // style of kubectl apply
 //
-// TODO(@amitkumardas): ApplyMerge along with reflect.DeepEqual can be
-// used to build assert logic based on observed yaml vs. desired yaml
-func ApplyMerge(orig, update *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+// TODO(@amitkumardas):
+// ApplyMerge along with reflect.DeepEqual may be used to build
+// assert logic based on observed yaml vs. desired yaml
+func (a *Apply) merge(
+	orig, update *unstructured.Unstructured,
+) (*unstructured.Unstructured, error) {
+
 	// state that was last applied by this controller
-	lastApplied, err := dynamicapply.GetLastApplied(orig)
+	lastApplied, err := a.GetLastAppliedFn(orig)
 	if err != nil {
 		return nil, err
 	}
@@ -59,23 +107,28 @@ func ApplyMerge(orig, update *unstructured.Unstructured) (*unstructured.Unstruct
 	}
 
 	// Revert metadata fields that are known to be read-only, system fields,
-	// so that attempts to change those fields will never cause a diff to be found
-	// by DeepEqual, which would cause needless, no-op updates or recreates.
+	// so that attempts to change those fields will never cause a diff to
+	// be found by DeepEqual, which would cause needless, no-op updates or
+	// recreates.
+	//
 	// See: https://github.com/GoogleCloudPlatform/metacontroller/issues/76
 	if err := revertObjectMetaSystemFields(newObj, orig); err != nil {
 		return nil, fmt.Errorf("failed to revert ObjectMeta system fields: %v", err)
 	}
-	// Revert status because we don't currently support a parent changing status of
-	// its children, so we need to ensure no diffs on the children involve status.
+
+	// Revert status because we don't currently support a parent changing
+	// status of its children, so we need to ensure no diffs on the children
+	// involve status.
 	if err := revertField(newObj, orig, "status"); err != nil {
 		return nil, fmt.Errorf("failed to revert .status: %v", err)
 	}
-	dynamicapply.SetLastApplied(newObj, update.UnstructuredContent())
+
+	a.SetLastAppliedFn(newObj, update.UnstructuredContent())
 	return newObj, nil
 }
 
-// objectMetaSystemFields is a list of JSON field names within ObjectMeta that
-// are both read-only and system-populated according to the comments in
+// objectMetaSystemFields is a list of JSON field names within ObjectMeta
+// that are both read-only and system-populated according to the comments in
 // k8s.io/apimachinery/pkg/apis/meta/v1/types.go.
 var objectMetaSystemFields = []string{
 	"selfLink",
@@ -241,7 +294,8 @@ func updateChildren(
 		}
 		if oldObj := observed[name]; oldObj != nil {
 			// Update
-			newObj, err := ApplyMerge(oldObj, obj)
+			a := Apply{}
+			newObj, err := a.Merge(oldObj, obj)
 			if err != nil {
 				errs = append(errs, err)
 				continue

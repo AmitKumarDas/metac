@@ -27,6 +27,7 @@ package apply
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -39,31 +40,62 @@ const (
 // SetLastApplied sets the last applied state against a predefined annotation
 // key
 func SetLastApplied(obj *unstructured.Unstructured, lastApplied map[string]interface{}) error {
+	return SetLastAppliedByAnnKey(obj, lastApplied, lastAppliedAnnotation)
+}
+
+// SetLastAppliedByAnnKey sets the last applied state against the
+// provided annotation key
+func SetLastAppliedByAnnKey(
+	obj *unstructured.Unstructured,
+	lastApplied map[string]interface{},
+	annKey string,
+) error {
+
 	lastAppliedJSON, err := json.Marshal(lastApplied)
 	if err != nil {
-		return fmt.Errorf("can't marshal last applied config: %v", err)
+		return errors.Wrapf(
+			err,
+			"Failed to marshal last applied config: Annotation %q", annKey,
+		)
 	}
 
 	ann := obj.GetAnnotations()
 	if ann == nil {
 		ann = make(map[string]string, 1)
 	}
-	ann[lastAppliedAnnotation] = string(lastAppliedJSON)
+	ann[annKey] = string(lastAppliedJSON)
 	obj.SetAnnotations(ann)
+
 	return nil
 }
 
-// GetLastApplied returns the last applied state from a predefined annotation
+// GetLastApplied returns the last applied state fo the given
+// object based on a predefined annotation
 func GetLastApplied(obj *unstructured.Unstructured) (map[string]interface{}, error) {
-	lastAppliedJSON := obj.GetAnnotations()[lastAppliedAnnotation]
+	return GetLastAppliedByAnnKey(obj, lastAppliedAnnotation)
+}
+
+// GetLastAppliedByAnnKey returns the last applied state of the given
+// object based on the provided annotation
+func GetLastAppliedByAnnKey(
+	obj *unstructured.Unstructured, annKey string,
+) (map[string]interface{}, error) {
+
+	lastAppliedJSON := obj.GetAnnotations()[annKey]
 	if lastAppliedJSON == "" {
 		return nil, nil
 	}
+
 	lastApplied := make(map[string]interface{})
 	err := json.Unmarshal([]byte(lastAppliedJSON), &lastApplied)
 	if err != nil {
-		return nil, fmt.Errorf("can't unmarshal %q annotation: %v", lastAppliedAnnotation, err)
+		return nil,
+			errors.Wrapf(
+				err,
+				"Failed to unmarshal last applied config: Annotation %q", annKey,
+			)
 	}
+
 	return lastApplied, nil
 }
 
