@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaclientset "openebs.io/metac/client/generated/clientset/versioned"
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 )
@@ -34,7 +35,7 @@ import (
 const (
 	// testing involves some amount of wait & retry i.e. polling
 	// these variables are tunables used during polling
-	defaultWaitTimeout  = 30 * time.Second
+	defaultWaitTimeout  = 15 * time.Second
 	defaultWaitInterval = 250 * time.Millisecond
 )
 
@@ -47,11 +48,12 @@ type Fixture struct {
 	teardownFuncs []func() error
 
 	// clientsets to invoke CRUD operations using:
-	//
-	// 1/ dynamic approach,
-	// 2/ kubernetes typed approach
+	// -- dynamic approach
 	dynamicClientset *dynamicclientset.Clientset
-	typedClientset   kubernetes.Interface
+
+	// clientsets to invoke CRUD operations using:
+	// -- kubernetes typed approach
+	typedClientset kubernetes.Interface
 
 	// crdClient is based on k8s.io/apiextensions-apiserver &
 	// is all about invoking CRUD ops against CRDs
@@ -101,6 +103,12 @@ func (f *Fixture) GetTypedClientset() kubernetes.Interface {
 	return f.typedClientset
 }
 
+// GetCRDClient returns the CRD client that can be used to invoke
+// CRUD operations against CRDs itself
+func (f *Fixture) GetCRDClient() apiextensionsclientset.ApiextensionsV1beta1Interface {
+	return f.crdClient
+}
+
 // CreateNamespace creates a namespace that will be deleted
 // when this fixture's teardown is invoked.
 func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
@@ -116,7 +124,11 @@ func (f *Fixture) CreateNamespace(namespace string) *v1.Namespace {
 
 	// add this to teardown that gets executed during cleanup
 	f.addToTeardown(func() error {
-		return f.typedClientset.CoreV1().Namespaces().Delete(ns.Name, nil)
+		_, err := f.typedClientset.CoreV1().Namespaces().Get(ns.GetName(), metav1.GetOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
+		return f.typedClientset.CoreV1().Namespaces().Delete(ns.GetName(), nil)
 	})
 	return ns
 }
@@ -137,7 +149,11 @@ func (f *Fixture) CreateNamespaceGen(name string) *v1.Namespace {
 
 	// add this to teardown that gets executed during cleanup
 	f.addToTeardown(func() error {
-		return f.typedClientset.CoreV1().Namespaces().Delete(ns.Name, nil)
+		_, err := f.typedClientset.CoreV1().Namespaces().Get(ns.GetName(), metav1.GetOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
+		return f.typedClientset.CoreV1().Namespaces().Delete(ns.GetName(), nil)
 	})
 	return ns
 }
@@ -148,7 +164,8 @@ func (f *Fixture) TearDown() {
 	// cleanup in descending order
 	for i := len(f.teardownFuncs) - 1; i >= 0; i-- {
 		teardown := f.teardownFuncs[i]
-		if err := teardown(); err != nil {
+		err := teardown()
+		if err != nil && !apierrors.IsNotFound(err) {
 			f.t.Logf("Teardown %d failed: %v", i, err)
 			// Mark the test as failed, but continue trying to tear down.
 			f.t.Fail()

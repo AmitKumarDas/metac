@@ -19,7 +19,7 @@ package generic
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/golang/glog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/common"
@@ -94,12 +94,14 @@ func newAttachmentUpdateStrategyManager(
 			// this is done to map resource name to kind name
 			resource := resourceMgr.GetByResource(attachment.APIVersion, attachment.Resource)
 			if resource == nil {
-				return nil, errors.Errorf(
-					"%s: Can't find resource %s/%s",
-					mgr,
-					attachment.APIVersion,
-					attachment.Resource,
-				)
+				if glog.V(2) {
+					glog.Warningf("%s: Can't find resource %s/%s",
+						mgr,
+						attachment.APIVersion,
+						attachment.Resource,
+					)
+				}
+				continue
 			}
 			// Ignore API version.
 			apiGroup, _ := common.ParseAPIVersionToGroupVersion(attachment.APIVersion)

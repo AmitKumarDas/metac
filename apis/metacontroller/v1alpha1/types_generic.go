@@ -77,7 +77,10 @@ type GenericControllerSpec struct {
 	//
 	// NOTE:
 	//	This is optional. However this should not be set to true if
-	// UpdateAny is set to true.
+	// UpdateAny or DeleteAny is set to true.
+	//
+	// NOTE:
+	// 	ReadOnly overrides UpdateAny and DeleteAny tunables
 	ReadOnly *bool `json:"readOnly,omitempty"`
 
 	// UpdateAny enables this controller to execute update operations
@@ -93,6 +96,20 @@ type GenericControllerSpec struct {
 	//	This is optional. However this should not be set to true if
 	// ReadOnly is set to true.
 	UpdateAny *bool `json:"updateAny,omitempty"`
+
+	// DeleteAny enables this controller to execute delete operations
+	// against any attachments.
+	//
+	// NOTE:
+	//	This tunable changes the default working mode of GenericController.
+	// When set to true, the controller instance is granted with the
+	// permission to delete any attachments even if these attachments
+	// were not created by this controller instance.
+	//
+	// NOTE:
+	//	This is optional. However this should not be set to true if
+	// ReadOnly is set to true.
+	DeleteAny *bool `json:"deleteAny,omitempty"`
 
 	// Parameters represent a set of key value pairs that can be used by
 	// the sync hook implementation logic.

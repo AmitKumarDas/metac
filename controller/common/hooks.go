@@ -29,7 +29,7 @@ import (
 // caller logic based on the provided schema
 //
 // NOTE:
-//	This logic is expected to have multiple if conditions to support
+//	This logic is expected to have multiple **if conditions** to support
 // different hook types e.g. Webhook, gRPCHook, GoTemplateHook etc
 // when they are supported in future
 func SetCallFnFromSchema(schema *v1alpha1.Hook) hooks.HookCallerOption {

@@ -30,6 +30,7 @@ import (
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
 	"openebs.io/metac/test/integration/framework"
+	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
 // This will be run only once when go test is invoked against this package.
@@ -105,9 +106,13 @@ func TestGCtlSyncWebhook(t *testing.T) {
 	f.CreateGenericController(
 		testName,
 		ns.Name,
-		hook.URL,
-		framework.BuildResourceRuleFromCRD(watchCRD),
-		framework.BuildResourceRuleFromCRD(attachmentCRD),
+		generic.WithWebhookSyncURL(k8s.StringPtr(hook.URL)),
+		generic.WithAttachmentRules(
+			[]*v1alpha1.ResourceRule{
+				framework.BuildResourceRuleFromCRD(attachmentCRD),
+			},
+		),
+		generic.WithWatchRule(framework.BuildResourceRuleFromCRD(watchCRD)),
 	)
 
 	watchResource := framework.BuildUnstructObjFromCRD(watchCRD, testName)
@@ -211,9 +216,15 @@ func TestGCtlCascadingDelete(t *testing.T) {
 	f.CreateGenericController(
 		controllerName,
 		ns.Name,
-		hook.URL,
-		framework.BuildResourceRuleFromCRD(watchCRD),
-		&v1alpha1.ResourceRule{APIVersion: "batch/v1", Resource: "jobs"},
+		generic.WithWebhookSyncURL(k8s.StringPtr(hook.URL)),
+		generic.WithWatchRule(
+			framework.BuildResourceRuleFromCRD(watchCRD),
+		),
+		generic.WithAttachmentRules(
+			[]*v1alpha1.ResourceRule{
+				&v1alpha1.ResourceRule{APIVersion: "batch/v1", Resource: "jobs"},
+			},
+		),
 	)
 
 	watchResource := framework.BuildUnstructObjFromCRD(watchCRD, resourceName)
@@ -344,9 +355,10 @@ func TestGCtlResyncAfter(t *testing.T) {
 	f.CreateGenericController(
 		testName,
 		ns.Name,
-		hook.URL,
-		framework.BuildResourceRuleFromCRD(watchCRD),
-		nil,
+		generic.WithWebhookSyncURL(k8s.StringPtr(hook.URL)),
+		generic.WithWatchRule(
+			framework.BuildResourceRuleFromCRD(watchCRD),
+		),
 	)
 
 	watchResource := framework.BuildUnstructObjFromCRD(watchCRD, testName)

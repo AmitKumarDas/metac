@@ -22,10 +22,11 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/diff"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
@@ -64,11 +65,17 @@ type AttachmentExecuteBase struct {
 	// should be claimed by the watch.
 	IsWatchOwner *bool
 
-	// UpdateAny follows the GenericController specifications. When set
+	// UpdateAny follows the GenericController's spec.UpdateAny. When set
 	// to true it grants this executor to update any attachments even if
 	// these attachments were not created due to the watch set in this
 	// executor.
 	UpdateAny *bool
+
+	// DeleteAny follows the GenericController's spec.DeleteAny. When set
+	// to true it grants this executor to delete any attachments even if
+	// these attachments were not created due to the watch set in this
+	// executor.
+	DeleteAny *bool
 }
 
 // String implements Stringer interface
@@ -213,9 +220,9 @@ func (m *AttachmentManager) preApply() {
 		)
 	}
 	if m.IsWatchOwner == nil {
-		// defaults to set this watch as the owner
+		// defaults to set this watch as not the owner
 		// of the attachments
-		m.IsWatchOwner = kubernetes.BoolPtr(true)
+		m.IsWatchOwner = kubernetes.BoolPtr(false)
 	}
 }
 
@@ -321,7 +328,7 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		// it gets deleted by someone else i.e. we won't delete it
 		// ourselves
 		glog.V(4).Infof(
-			"%s: Can't update %s: It's OnDelete update strategy",
+			"%s: Can't update %s: It's OnDelete update strategy or resource not available",
 			e, DescObjectAsKey(dObj),
 		)
 		return nil
@@ -367,7 +374,7 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		glog.Infof(
 			"%s: Diff: a=observed, b=desired:\n%s",
 			e,
-			diff.ObjectReflectDiff(
+			cmp.Diff(
 				oObj.UnstructuredContent(),
 				uObj.UnstructuredContent(),
 			),
@@ -509,6 +516,12 @@ func (e *AttachmentResourcesExecutor) CreateOrUpdate() error {
 func (e *AttachmentResourcesExecutor) Delete() error {
 	var errs []error
 
+	// check if controller has rights to delete any attachments
+	deleteAny := false
+	if e.DeleteAny != nil {
+		deleteAny = *e.DeleteAny
+	}
+
 	for name, obj := range e.Observed {
 		if obj.GetDeletionTimestamp() != nil {
 			// Skip objects that are already pending deletion.
@@ -518,20 +531,24 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 			continue
 		}
 
+		// check which watch created this resource in the first place
 		ann := obj.GetAnnotations()
 		wantWatch := string(e.Watch.GetUID())
 		gotWatch := ""
 		if ann != nil {
 			gotWatch = ann[attachmentCreateAnnotationKey]
 		}
-		if gotWatch != wantWatch {
+
+		if gotWatch != wantWatch && !deleteAny {
 			// Skip objects that was not created due to this watch
-			glog.V(4).Infof("%s: Can't delete %s: Annotation %s has %q want %q",
+			glog.V(4).Infof(
+				"%s: Can't delete %s: Annotation %s has %q want %q: DeleteAny %t",
 				e,
 				DescObjectAsKey(obj),
 				attachmentCreateAnnotationKey,
 				gotWatch,
 				wantWatch,
+				deleteAny,
 			)
 			continue
 		}
@@ -539,7 +556,7 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 		if e.Desired == nil || e.Desired[name] == nil {
 			// This observed object wasn't listed as desired.
 			// Hence, this is the right candidate to be deleted.
-			glog.Infof("%s: Deleting %s", e, DescObjectAsKey(obj))
+			glog.V(4).Infof("%s: Deleting %s", e, DescObjectAsKey(obj))
 
 			uid := obj.GetUID()
 			// Explicitly request deletion propagation, which is what
@@ -554,6 +571,12 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 				},
 			)
 			if err != nil {
+				if apierrors.IsNotFound(err) {
+					glog.V(4).Infof(
+						"%s: Can't delete %s: Is not found: %v",
+						e, DescObjectAsKey(obj), err)
+					continue
+				}
 				errs = append(
 					errs,
 					errors.Wrapf(err, "%s: Failed to delete %s", e, DescObjectAsKey(obj)),
