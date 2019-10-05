@@ -130,8 +130,9 @@ func newGenericControllerManager(
 
 		finalizer: &finalizer.Manager{
 			// finalizer manager is entrusted with this finalizer name
-			// this gets applied against the watch during finalize i.e.
-			// handling deletion of watch resource
+			// this gets applied against the watch s.t GenericController
+			// has a chance to handle finalize hook i.e.handle deletion
+			// of watch resource
 			Name: "protect.gctl.metac.openebs.io/" + ctrl.Namespace + "-" + ctrl.Name,
 			// gets enabled if Finalize property is set
 			Enabled: ctrl.Spec.Hooks.Finalize != nil,
@@ -522,7 +523,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 
 	// List all attachments related to this parent.
 	// This only lists the children we created. Existing children are ignored.
-	observedAttachments, err := mgr.getAttachments(watch)
+	observedAttachments, err := mgr.getObservedAttachments(watch)
 	if err != nil {
 		return err
 	}
@@ -538,11 +539,10 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 		return err
 	}
 
-	if glog.V(4) && len(syncResult.Attachments) == 0 {
-		glog.Infof("%s: Nil attachments in hook response for watch %s",
-			mgr, common.DescObjectAsKey(watch),
-		)
-	}
+	glog.V(4).Infof(
+		"%s: %d attachment(s) received from hook response for watch %s",
+		mgr, len(syncResult.Attachments), common.DescObjectAsKey(watch),
+	)
 
 	desiredAttachments :=
 		common.MakeAnyUnstructRegistryByReference(watch, syncResult.Attachments)
@@ -659,12 +659,17 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 			return err
 		}
 
+		glog.V(4).Infof("%s: Will apply attachments: Observed %s: Desired %s",
+			mgr, observedAttachments, desiredAttachments,
+		)
+
 		// Reconcile attachments via attachment manager
 		attMgr := &common.AttachmentManager{
 			AttachmentExecuteBase: common.AttachmentExecuteBase{
 				GetChildUpdateStrategyByGK: updateStrategyMgr.GetByGKOrDefault,
 				Watch:                      watch,
 				UpdateAny:                  mgr.Controller.Spec.UpdateAny,
+				DeleteAny:                  mgr.Controller.Spec.DeleteAny,
 			},
 
 			DynamicClientSet: mgr.DynamicClientSet,
@@ -677,7 +682,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	return nil
 }
 
-// getAttachments returns the attachments as declared
+// getObservedAttachments returns the attachments as declared
 // in GenericController resource
 //
 // TODO (@amitkumardas):
@@ -686,7 +691,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 // IMO this should support a variety of combinations to
 // filter each attachment kind. Each attachment kind
 // might require its own combination of filters/selectors.
-func (mgr *genericControllerManager) getAttachments(
+func (mgr *genericControllerManager) getObservedAttachments(
 	watch *unstructured.Unstructured,
 ) (common.AnyUnstructRegistry, error) {
 
@@ -698,7 +703,7 @@ func (mgr *genericControllerManager) getAttachments(
 		)
 		if attachmentInformer == nil {
 			return nil, errors.Errorf(
-				"%s: No informer for attachment %q of %q",
+				"%s: No attachment informer for %q with ver %q",
 				mgr, attachmentKind.Resource, attachmentKind.APIVersion,
 			)
 		}
@@ -710,29 +715,31 @@ func (mgr *genericControllerManager) getAttachments(
 		if err != nil {
 			return nil, errors.Wrapf(
 				err,
-				"%s: Can't list attachments for %s of %s",
+				"%s: Can't list attachments for %s with ver %s",
 				mgr, attachmentKind.Resource, attachmentKind.APIVersion,
 			)
 		}
 
-		if len(attachmentObjs) == 0 {
-			glog.V(4).Infof(
-				"%s: No attachments found for %s of %s",
-				mgr, attachmentKind.Resource, attachmentKind.APIVersion,
-			)
-		}
+		glog.V(4).Infof(
+			"%s: %d attachment(s) listed for %s with ver %s",
+			mgr, len(attachmentObjs), attachmentKind.Resource, attachmentKind.APIVersion,
+		)
 
 		// steps to initialize the attachment registry
-		disAttachRes := mgr.ResourceManager.GetByResource(
+		attachResAPI := mgr.ResourceManager.GetByResource(
 			attachmentKind.APIVersion, attachmentKind.Resource,
 		)
-		if disAttachRes == nil {
-			return nil, errors.Errorf(
-				"%s: Can't find discovered attachment %s of %s",
-				mgr, attachmentKind.Resource, attachmentKind.APIVersion,
-			)
+		if attachResAPI == nil {
+			if glog.V(2) {
+				glog.Warningf("%s: Can't find attachment resource api for %s with ver %s",
+					mgr, attachmentKind.Resource, attachmentKind.APIVersion,
+				)
+			}
+			continue
 		}
-		attachmentRegistry.InitGroupByVK(attachmentKind.APIVersion, disAttachRes.Kind)
+
+		// add to registry with this observed attachment resource api
+		attachmentRegistry.InitGroupByVK(attachmentKind.APIVersion, attachResAPI.Kind)
 
 		// TODO
 		// @amitkumardas: Need to think more on this !!
@@ -740,8 +747,8 @@ func (mgr *genericControllerManager) getAttachments(
 			// Do not consider if match fails
 			if !mgr.selector.Matches(attObj) {
 				glog.V(4).Infof(
-					"%s: Ignore attachment %s/%s of kind %s: Selector doesn't match",
-					mgr, attObj.GetNamespace(), attObj.GetName(), attObj.GetKind(),
+					"%s: Ignore attachment %s: Selector doesn't match",
+					mgr, common.DescObjectAsKey(attObj),
 				)
 				continue
 			}
@@ -756,7 +763,8 @@ func (mgr *genericControllerManager) callSyncHook(
 ) (*SyncHookResponse, error) {
 
 	if mgr.Controller.Spec.Hooks == nil {
-		return nil, errors.Errorf("%s: No hooks defined", mgr)
+		return nil,
+			errors.Errorf("%s: Invalid controller spec: Missing hooks", mgr)
 	}
 
 	var response SyncHookResponse
@@ -773,23 +781,37 @@ func (mgr *genericControllerManager) callSyncHook(
 		(request.Watch.GetDeletionTimestamp() != nil ||
 			!mgr.selector.Matches(request.Watch)) {
 
+		glog.V(4).Infof("%s: Invoking finalize hook", mgr)
+
 		// Finalize
 		request.Finalizing = true
+		if mgr.Controller.Spec.Hooks.Finalize == nil {
+			return nil,
+				errors.Errorf("%s: Invalid controller spec: Missing finalize hook", mgr)
+		}
 		err := common.CallHook(mgr.Controller.Spec.Hooks.Finalize, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Finalize hook failed")
 		}
+
+		glog.V(3).Infof("%s: Finalize hook completed", mgr)
 	} else {
+
+		glog.V(4).Infof("%s: Invoking sync hook", mgr)
+
 		// Sync
 		request.Finalizing = false
 		if mgr.Controller.Spec.Hooks.Sync == nil {
-			return nil, errors.Errorf("Sync hook not defined")
+			return nil,
+				errors.Errorf("%s: Invalid controller spec: Missing sync hook", mgr)
 		}
 
 		err := common.CallHook(mgr.Controller.Spec.Hooks.Sync, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Sync hook failed")
 		}
+
+		glog.V(3).Infof("%s: Sync hook completed", mgr)
 	}
 
 	return &response, nil

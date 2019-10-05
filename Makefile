@@ -63,4 +63,4 @@ integration-dependencies:
 # This can be run on one's laptop or Travis like CI environments.
 .PHONY: integration-test
 integration-test: generated_files integration-dependencies
-	@PATH="$(PWD)/hack/bin:$(PATH)" go test ./test/integration/... -v -timeout 5m -args --logtostderr -v=4
+	@PATH="$(PWD)/hack/bin:$(PATH)" go test ./test/integration/... -v -timeout 5m -args --logtostderr -v=1

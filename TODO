@@ -1,11 +1,17 @@
 ### TODO:
+- test metac with changes to rbac
+
 - gctl add integration tests:
     - check if finalizer works
     - check if attachments not created by gctl are not updated
     - check if attachments not created by gctl are not deleted
     - check if ReadOnly works
     - check if UpdateAny works
+    - check if DeleteAny works
     - check if same watch can update an attachment via multiple gctl specs
+    - check for 2-way merge as well as 3-way merge
+        - default to 2-way merge if only finalize hook is present
+        - default to 3-way merge if both sync & finalize hooks are present
 
 - gctl - read & review
     - https://github.com/GoogleCloudPlatform/metacontroller/issues/98

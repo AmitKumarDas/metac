@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
+	"openebs.io/metac/controller/generic"
 	pointer "openebs.io/metac/third_party/kubernetes"
 )
 
@@ -142,23 +143,10 @@ func (f *Fixture) CreateDecoratorController(
 func (f *Fixture) CreateGenericController(
 	name string,
 	namespace string,
-	syncHookURL string,
-	watchRule *v1alpha1.ResourceRule,
-	attachmentRule *v1alpha1.ResourceRule,
+	opts ...generic.Option,
 ) *v1alpha1.GenericController {
 
-	attachments := []v1alpha1.GenericControllerAttachment{}
-	if attachmentRule != nil {
-		attachments = append(
-			attachments,
-			v1alpha1.GenericControllerAttachment{
-				GenericControllerResource: v1alpha1.GenericControllerResource{
-					ResourceRule: *attachmentRule,
-				},
-			},
-		)
-	}
-
+	// initialize the controller instance
 	gc := &v1alpha1.GenericController{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
@@ -168,18 +156,12 @@ func (f *Fixture) CreateGenericController(
 			// Set a big resyncPeriod so tests can precisely control
 			// when syncs happen.
 			ResyncPeriodSeconds: pointer.Int32Ptr(3600),
-			Watch: v1alpha1.GenericControllerResource{
-				ResourceRule: *watchRule,
-			},
-			Attachments: attachments,
-			Hooks: &v1alpha1.GenericControllerHooks{
-				Sync: &v1alpha1.Hook{
-					Webhook: &v1alpha1.Webhook{
-						URL: &syncHookURL,
-					},
-				},
-			},
 		},
+	}
+
+	// set other options if any
+	for _, o := range opts {
+		o(gc)
 	}
 
 	gc, err :=

@@ -21,6 +21,7 @@ import (
 	"reflect"
 
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -47,6 +48,13 @@ type Apply struct {
 	// SetLastAppliedFn sets the last applied configuration against
 	// the provided unstruct instance
 	SetLastAppliedFn func(obj *unstructured.Unstructured, lastApplied map[string]interface{}) error
+
+	// SanitizeLastAppliedFn sanitizes the last applied configuration
+	// to avoid recursive diff while executing apply logic
+	//
+	// NOTE:
+	//	This is typically invoked before calling SetLastAppliedFn
+	SanitizeLastAppliedFn func(lastApplied map[string]interface{})
 }
 
 // NewApplyFromAnnKey returns a new instance of Apply based on the provided
@@ -59,6 +67,15 @@ func NewApplyFromAnnKey(key string) *Apply {
 		SetLastAppliedFn: func(o *unstructured.Unstructured, last map[string]interface{}) error {
 			return dynamicapply.SetLastAppliedByAnnKey(o, last, key)
 		},
+		SanitizeLastAppliedFn: func(last map[string]interface{}) {
+			// delete the key that stores the last applied configuration
+			// from the last applied configuration itself. This is needed
+			// to break the chain of last applied states. In other words
+			// this avoids last applied config storing details about previous
+			// last applied state that in turn stores the details of its
+			// previous last applied state & so on.
+			dynamicapply.SanitizeLastAppliedByAnnKey(last, key)
+		},
 	}
 }
 
@@ -68,13 +85,16 @@ func (a *Apply) Merge(
 	orig, update *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 
+	// defaults to old way
 	if a.GetLastAppliedFn == nil {
-		// defaults to old way
 		a.GetLastAppliedFn = dynamicapply.GetLastApplied
 	}
 	if a.SetLastAppliedFn == nil {
-		// defaults to old way
 		a.SetLastAppliedFn = dynamicapply.SetLastApplied
+	}
+	if a.SanitizeLastAppliedFn == nil {
+		// a no-op
+		a.SanitizeLastAppliedFn = func(l map[string]interface{}) {}
 	}
 
 	return a.merge(orig, update)
@@ -113,17 +133,21 @@ func (a *Apply) merge(
 	//
 	// See: https://github.com/GoogleCloudPlatform/metacontroller/issues/76
 	if err := revertObjectMetaSystemFields(newObj, orig); err != nil {
-		return nil, fmt.Errorf("failed to revert ObjectMeta system fields: %v", err)
+		return nil, errors.Wrapf(err, "Failed to revert ObjectMeta system fields")
 	}
 
 	// Revert status because we don't currently support a parent changing
 	// status of its children, so we need to ensure no diffs on the children
 	// involve status.
 	if err := revertField(newObj, orig, "status"); err != nil {
-		return nil, fmt.Errorf("failed to revert .status: %v", err)
+		return nil, errors.Wrapf(err, "Failed to revert .status")
 	}
 
+	// sanitize the last applied state before storing the same
+	// in the newly formed object
+	a.SanitizeLastAppliedFn(update.UnstructuredContent())
 	a.SetLastAppliedFn(newObj, update.UnstructuredContent())
+
 	return newObj, nil
 }
 
@@ -154,16 +178,22 @@ func revertObjectMetaSystemFields(newObj, orig *unstructured.Unstructured) error
 
 // revertField reverts field in newObj to match what it was in orig.
 func revertField(newObj, orig *unstructured.Unstructured, fieldPath ...string) error {
-	field, found, err := unstructured.NestedFieldNoCopy(orig.UnstructuredContent(), fieldPath...)
+	// check the field in original
+	fieldVal, found, err :=
+		unstructured.NestedFieldNoCopy(orig.UnstructuredContent(), fieldPath...)
 	if err != nil {
-		return fmt.Errorf("can't traverse UnstructuredContent to look for field %v: %v", fieldPath, err)
+		return errors.Wrapf(
+			err,
+			"Can't traverse UnstructuredContent to look for field %v", fieldPath,
+		)
 	}
 	if found {
 		// The original had this field set, so make sure it remains the same.
 		// SetNestedField will recursively ensure the field and all its parent
 		// fields exist, and then set the value.
-		if err := unstructured.SetNestedField(newObj.UnstructuredContent(), field, fieldPath...); err != nil {
-			return fmt.Errorf("can't revert field %v: %v", fieldPath, err)
+		err := unstructured.SetNestedField(newObj.UnstructuredContent(), fieldVal, fieldPath...)
+		if err != nil {
+			return errors.Wrapf(err, "Can't revert field %v", fieldPath)
 		}
 	} else {
 		// The original had this field unset, so make sure it remains unset.

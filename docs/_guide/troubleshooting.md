@@ -27,12 +27,13 @@ At all log levels, Metacontroller will log the progress of server startup and
 shutdown, as well as major changes like starting and stopping hosted controllers.
 
 Metacontroller will log the following events based on log levels:
-- level 1: startup, shutdown, error, create & delete actions
-- level 2: update actions
-- level 3: ignore/skip actions due to specifics
-- level 4: creating, updating, deleting, debugging, ignore/skip actions due to defaults
+- level 1: startup, shutdown, error, created & deleted events
+- level 2: updated, warning events
+- level 3: synced, finalized, ignore/skip actions due to user specified values
+- level 4: syncing, finalizing, creating, updating, deleting, debugging, ignore/skip actions due to defaults
 - level 5: diff of objects
 - level 6: hook invocation along with JSON req & response bodies
+- level 7: resource discovery
 
 ### Common Log Messages
 

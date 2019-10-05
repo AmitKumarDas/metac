@@ -44,9 +44,41 @@ var (
 // instances in a way that is easy to find / filter later.
 type AnyUnstructRegistry map[string]map[string]*unstructured.Unstructured
 
+// String implements Stringer interface
+func (m AnyUnstructRegistry) String() string {
+	var message []string
+	title := "Resource Instances:-"
+	for vk, list := range m {
+		for nsname, obj := range list {
+			message = append(message, fmt.Sprintf("\t%s:%s %s", vk, nsname, obj.GetUID()))
+		}
+	}
+	return fmt.Sprintf("%s\n%s\n", title, strings.Join(message, "\n"))
+}
+
 // IsEmpty returns true if this registry is empty
 func (m AnyUnstructRegistry) IsEmpty() bool {
-	return len(m) == 0
+	for _, list := range m {
+		for _, obj := range list {
+			if obj != nil {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// Len returns count of not nil items in this registry
+func (m AnyUnstructRegistry) Len() int {
+	var count int
+	for _, list := range m {
+		for _, obj := range list {
+			if obj != nil {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // InitGroupByVK initialises (or re-initializes) a group within the

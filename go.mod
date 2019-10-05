@@ -4,7 +4,9 @@ go 1.12
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
+	github.com/ghodss/yaml v0.0.0-20180820084758-c7ce16629ff4
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+	github.com/google/go-cmp v0.3.0
 	github.com/google/go-jsonnet v0.13.0
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/pkg/errors v0.8.1

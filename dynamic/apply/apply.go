@@ -1,5 +1,6 @@
 /*
 Copyright 2018 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,6 +28,7 @@ package apply
 import (
 	"fmt"
 
+	"github.com/golang/glog"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,11 +53,20 @@ func SetLastAppliedByAnnKey(
 	annKey string,
 ) error {
 
+	if len(lastApplied) == 0 {
+		return nil
+	}
+
 	lastAppliedJSON, err := json.Marshal(lastApplied)
 	if err != nil {
 		return errors.Wrapf(
 			err,
-			"Failed to marshal last applied config: Annotation %q", annKey,
+			"%s:%s:%s:%s: Failed to marshal last applied config against annotation %q",
+			obj.GetAPIVersion(),
+			obj.GetKind(),
+			obj.GetNamespace(),
+			obj.GetName(),
+			annKey,
 		)
 	}
 
@@ -66,7 +77,27 @@ func SetLastAppliedByAnnKey(
 	ann[annKey] = string(lastAppliedJSON)
 	obj.SetAnnotations(ann)
 
+	glog.V(4).Infof(
+		"%s:%s:%s:%s: Will be set with following annotations: \n%v",
+		obj.GetAPIVersion(),
+		obj.GetKind(),
+		obj.GetNamespace(),
+		obj.GetName(),
+		ann,
+	)
+
 	return nil
+}
+
+// SanitizeLastAppliedByAnnKey sanitizes the last applied state
+// by removing last applied state related info (i.e. its own info)
+// to avoid building up of a chain of last applied state storing
+// the previous last applied state & so on.
+func SanitizeLastAppliedByAnnKey(last map[string]interface{}, annKey string) {
+	if len(last) == 0 {
+		return
+	}
+	unstructured.RemoveNestedField(last, "metadata", "annotations", annKey)
 }
 
 // GetLastApplied returns the last applied state fo the given
@@ -92,7 +123,12 @@ func GetLastAppliedByAnnKey(
 		return nil,
 			errors.Wrapf(
 				err,
-				"Failed to unmarshal last applied config: Annotation %q", annKey,
+				"%s:%s:%s:%s: Failed to unmarshal last applied config against annotation %q",
+				obj.GetAPIVersion(),
+				obj.GetKind(),
+				obj.GetNamespace(),
+				obj.GetName(),
+				annKey,
 			)
 	}
 
@@ -106,25 +142,36 @@ func Merge(observed, lastApplied, desired map[string]interface{}) (map[string]in
 	destination := runtime.DeepCopyJSON(observed)
 
 	if _, err := merge("", destination, lastApplied, desired); err != nil {
-		return nil, fmt.Errorf("can't merge desired changes: %v", err)
+		return nil, errors.Wrapf(err, "Can't merge desired changes")
 	}
 	return destination, nil
 }
 
 // merge finds the diff from lastApplied to desired,
-// and applies it to destination, returning the replacement destination value.
+// and applies it to destination, returning the replacement
+// destination value.
 func merge(fieldPath string, destination, lastApplied, desired interface{}) (interface{}, error) {
+	glog.V(7).Infof("Will try merge for field %q", fieldPath)
+
 	switch destVal := destination.(type) {
 	case map[string]interface{}:
 		// destination is an object.
 		// Make sure the others are objects too (or null).
 		lastVal, ok := lastApplied.(map[string]interface{})
 		if !ok && lastVal != nil {
-			return nil, fmt.Errorf("lastApplied%s: expecting map[string]interface, got %T", fieldPath, lastApplied)
+			return nil,
+				errors.Errorf(
+					"lastApplied%s: expecting map[string]interface, got %T",
+					fieldPath, lastApplied,
+				)
 		}
 		desVal, ok := desired.(map[string]interface{})
 		if !ok && desVal != nil {
-			return nil, fmt.Errorf("desired%s: expecting map[string]interface, got %T", fieldPath, desired)
+			return nil,
+				errors.Errorf(
+					"desired%s: expecting map[string]interface, got %T",
+					fieldPath, desired,
+				)
 		}
 		return mergeObject(fieldPath, destVal, lastVal, desVal)
 	case []interface{}:
@@ -132,11 +179,19 @@ func merge(fieldPath string, destination, lastApplied, desired interface{}) (int
 		// Make sure the others are arrays too (or null).
 		lastVal, ok := lastApplied.([]interface{})
 		if !ok && lastVal != nil {
-			return nil, fmt.Errorf("lastApplied%s: expecting []interface, got %T", fieldPath, lastApplied)
+			return nil,
+				errors.Errorf(
+					"lastApplied%s: expecting []interface, got %T",
+					fieldPath, lastApplied,
+				)
 		}
 		desVal, ok := desired.([]interface{})
 		if !ok && desVal != nil {
-			return nil, fmt.Errorf("desired%s: expecting []interface, got %T", fieldPath, desired)
+			return nil,
+				fmt.Errorf(
+					"desired%s: expecting []interface, got %T",
+					fieldPath, desired,
+				)
 		}
 		return mergeArray(fieldPath, destVal, lastVal, desVal)
 	default:
@@ -147,9 +202,12 @@ func merge(fieldPath string, destination, lastApplied, desired interface{}) (int
 }
 
 func mergeObject(fieldPath string, destination, lastApplied, desired map[string]interface{}) (interface{}, error) {
+	glog.V(7).Infof("Will try merge object for field %q", fieldPath)
+
 	// Remove fields that were present in lastApplied, but no longer in desired.
 	for key := range lastApplied {
 		if _, present := desired[key]; !present {
+			glog.V(4).Infof("%s merge operation: Will delete key %s", fieldPath, key)
 			delete(destination, key)
 		}
 	}
@@ -167,6 +225,8 @@ func mergeObject(fieldPath string, destination, lastApplied, desired map[string]
 }
 
 func mergeArray(fieldPath string, destination, lastApplied, desired []interface{}) (interface{}, error) {
+	glog.V(7).Infof("Will try merge array for field %q", fieldPath)
+
 	// If it looks like a list map, use the special merge.
 	if mergeKey := detectListMapKey(destination, lastApplied, desired); mergeKey != "" {
 		return mergeListMap(fieldPath, mergeKey, destination, lastApplied, desired)

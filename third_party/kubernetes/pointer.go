@@ -16,14 +16,20 @@ package kubernetes
 // This is copied from k8s.io/kubernetes to avoid a dependency on all of Kubernetes.
 // TODO(enisoc): Move the upstream code to somewhere better.
 
-// BoolPtr returns a pointer to a bool
+// BoolPtr returns a pointer to the given bool
 func BoolPtr(b bool) *bool {
 	o := b
 	return &o
 }
 
-// Int32Ptr returns a pointer to an int32
+// Int32Ptr returns a pointer to the given int32
 func Int32Ptr(i int32) *int32 {
 	o := i
+	return &o
+}
+
+// StringPtr returns a pointer to the given string
+func StringPtr(s string) *string {
+	o := s
 	return &o
 }

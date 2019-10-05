@@ -22,7 +22,9 @@ import (
 	"strings"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 )
@@ -48,6 +50,7 @@ func (f *Fixture) SetupCRD(
 	scope v1beta1.ResourceScope,
 ) (*v1beta1.CustomResourceDefinition, *dynamicclientset.ResourceClient) {
 
+	// singular name must be lower cased
 	singular := strings.ToLower(kind)
 
 	// this may not work always. For example singular StorageClass
@@ -86,6 +89,10 @@ func (f *Fixture) SetupCRD(
 
 	// add to teardown functions
 	f.addToTeardown(func() error {
+		_, err := f.crdClient.CustomResourceDefinitions().Get(crd.GetName(), metav1.GetOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
 		return f.crdClient.CustomResourceDefinitions().Delete(crd.Name, nil)
 	})
 
@@ -115,4 +122,66 @@ func (f *Fixture) SetupCRD(
 
 	f.t.Logf("Created %s CRD", kind)
 	return crd, crdClient
+}
+
+// SetupNSCRDAndDeployOneCR will install a namespace scoped
+// CRD, & then create corresponding resource of this CRD
+func (f *Fixture) SetupNSCRDAndDeployOneCR(
+	kind string,
+	namespace string,
+	name string,
+) (*v1beta1.CustomResourceDefinition,
+	*dynamicclientset.ResourceClient,
+	*unstructured.Unstructured,
+) {
+	crd, resClient := f.SetupCRD(kind, v1beta1.NamespaceScoped)
+
+	res := BuildUnstructObjFromCRD(crd, name)
+
+	res, err := resClient.Namespace(namespace).Create(res, metav1.CreateOptions{})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+
+	// add to teardown functions
+	f.addToTeardown(func() error {
+		_, err := resClient.Namespace(namespace).Get(res.GetName(), metav1.GetOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
+		return resClient.Namespace(namespace).Delete(res.GetName(), &metav1.DeleteOptions{})
+	})
+
+	return crd, resClient, res
+}
+
+// SetupCRDAndDeployOneCR will install a cluster scoped CRD,
+// then create corresponding resource of this CRD
+func (f *Fixture) SetupCRDAndDeployOneCR(
+	kind string,
+	name string,
+) (*v1beta1.CustomResourceDefinition,
+	*dynamicclientset.ResourceClient,
+	*unstructured.Unstructured,
+) {
+
+	crd, resClient := f.SetupCRD(kind, v1beta1.ClusterScoped)
+
+	res := BuildUnstructObjFromCRD(crd, name)
+
+	res, err := resClient.Create(res, metav1.CreateOptions{})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+
+	// add to teardown functions
+	f.addToTeardown(func() error {
+		_, err := resClient.Get(res.GetName(), metav1.GetOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
+		return resClient.Delete(res.GetName(), &metav1.DeleteOptions{})
+	})
+
+	return crd, resClient, res
 }

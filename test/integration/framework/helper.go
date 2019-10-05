@@ -17,11 +17,32 @@ limitations under the License.
 package framework
 
 import (
+	"fmt"
+
+	"github.com/ghodss/yaml"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/json"
+
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 )
+
+// PrettyYml returns yaml formatted string corresponding
+// to the given object
+func PrettyYml(obj runtime.Object) string {
+	if obj == nil {
+		return fmt.Sprintf("\n{nil}")
+	}
+
+	b, err := yaml.Marshal(obj)
+	if err != nil {
+		// swallow the error
+		return fmt.Sprintf("\n%v", obj)
+	}
+
+	return fmt.Sprintf("\n%s", string(b))
+}
 
 // BuildUnstructObjFromCRD builds an unstructured instance
 // from the given CRD instance
@@ -35,7 +56,7 @@ func BuildUnstructObjFromCRD(
 	obj.SetAPIVersion(crd.Spec.Group + "/" + crd.Spec.Versions[0].Name)
 	obj.SetKind(crd.Spec.Names.Kind)
 
-	// resource set is only set
+	// resource name is only set
 	obj.SetName(name)
 	return obj
 }

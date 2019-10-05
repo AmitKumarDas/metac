@@ -24,7 +24,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -151,9 +153,21 @@ func (mgr *APIResourceManager) GetByKind(
 // 	We do this before acquiring the lock so we don't block readers.
 func (mgr *APIResourceManager) refresh() {
 
+	var err error
+
 	glog.V(7).Info("Discovering API resources")
+	defer func() {
+		if err == nil {
+			glog.V(7).Info("API resources discovery completed")
+		}
+	}()
+
 	apiResourceSetList, err := mgr.Client.ServerResources()
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			glog.Warningf("Can't discover api resource: %v", err)
+			return
+		}
 		glog.Errorf("API resource discovery failed: %v", err)
 		return
 	}
@@ -166,7 +180,7 @@ func (mgr *APIResourceManager) refresh() {
 		if err != nil {
 			// This shouldn't happen because we get these values
 			// from the server.
-			panic(fmt.Errorf(
+			panic(errors.Errorf(
 				"API resource discovery failed: Invalid group version %q: %v",
 				apiResourceSet.GroupVersion, err,
 			))
