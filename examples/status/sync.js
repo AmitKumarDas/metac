@@ -1,5 +1,6 @@
 /*
 Copyright 2017 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,5 +17,15 @@ limitations under the License.
 
 
 module.exports = async function (context) {
-  return {status: 200, body: { status: { message: "success"} }, headers: {'Content-Type': 'application/json'}};
+  return {
+    status: 200, 
+    body: {
+      // Noop resource will have this status set
+      // after the sync operation
+      status: { 
+        message: "success",
+      }, 
+    }, 
+    headers: {'Content-Type': 'application/json'},
+  };
 };

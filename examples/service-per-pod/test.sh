@@ -11,7 +11,7 @@ cleanup() {
 
   kubectl patch statefulset nginx --type=merge -p '{"metadata":{"finalizers":[]}}' || true
   kubectl delete -f my-statefulset.yaml || true
-  kubectl delete -f service-per-pod.yaml || true
+  kubectl delete -f operator.yaml || true
   kubectl delete svc -l app=service-per-pod || true
   kubectl delete configmap service-per-pod-hooks -n metac || true
   
