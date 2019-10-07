@@ -1,9 +1,9 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: noops.metacontroller.k8s.io
+  name: noops.metac.openebs.io
 spec:
-  group: metacontroller.k8s.io
+  group: metac.openebs.io
   version: v1
   scope: Namespaced
   names:
@@ -13,24 +13,25 @@ spec:
   subresources:
     status: {}
 ---
-apiVersion: metacontroller.k8s.io/v1alpha1
+apiVersion: metac.openebs.io/v1alpha1
 kind: DecoratorController
 metadata:
   name: noop-controller
 spec:
   resources:
-  - apiVersion: metacontroller.k8s.io/v1
+  # we are interested for noops resource only
+  - apiVersion: metac.openebs.io/v1
     resource: noops
   hooks:
     sync:
       webhook:
-        url: http://noop-controller.metacontroller/sync
+        url: http://noop-controller.metac/sync
 ---
 apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
   name: noop-controller
-  namespace: metacontroller
+  namespace: metac
 spec:
   replicas: 1
   selector:
@@ -58,7 +59,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: noop-controller
-  namespace: metacontroller
+  namespace: metac
 spec:
   selector:
     app: noop-controller

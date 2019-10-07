@@ -12,6 +12,12 @@
     - check for 2-way merge as well as 3-way merge
         - default to 2-way merge if only finalize hook is present
         - default to 3-way merge if both sync & finalize hooks are present
+    - send specific parts of attachments:
+        - send - []string{Name, MetaData, Labels, Annotations, Spec, Status} 
+        - default sends everything
+    - special annotation & label expressions:
+        - operator - WatchIsOwner, WatchIsCreator, WatchIsUpdater
+        - operator - WatchInKey, WatchInValue, ValueContainsWatch, KeyContainsWatch
 
 - gctl - read & review
     - https://github.com/GoogleCloudPlatform/metacontroller/issues/98
@@ -49,11 +55,6 @@
 
 ### Future Actions:
 - Make metacontroller watch resources from specific namespace if required
-- If multiple meta controllers work against a resource then apply function might be buggy
-  - Provide last-applied-configuration per meta controller resource
-  - <ctrl-ns>-<ctrl-name>.dctl.metac.openebs.io/last-applied-config
-  - <ctrl-ns>-<ctrl-name>.gctl.metac.openebs.io/last-applied-config
-  - <ctrl-ns>-<ctrl-name>.cctl.metac.openebs.io/last-applied-config
 - Should Metac support UDS?
     - https://eli.thegreenplace.net/2019/unix-domain-sockets-in-go/
 

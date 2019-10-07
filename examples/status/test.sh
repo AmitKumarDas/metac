@@ -2,27 +2,40 @@
 
 cleanup() {
   set +e
-  echo "Clean up..."
+    echo ""
+
+  echo "--------------------------"
+  echo "++ Clean up started"
+  echo "--------------------------"
+
   kubectl delete -f my-noop.yaml
   kubectl delete rs,svc -l app=noop-controller 
-  kubectl delete -f noop-controller.yaml
-  kubectl delete configmap noop-controller -n metacontroller
+  kubectl delete -f operator.yaml
+  kubectl delete configmap noop-controller -n metac
+
+  echo "--------------------------"
+  echo "++ Clean up completed"
+  echo "--------------------------"
 }
+# Comment below if you want to check manually
+# the state of the cluster and intended resources
 trap cleanup EXIT
 
-set -ex
+# Uncomment below if debug / verbose execution is needed
+#set -ex
 
-np="noops.metacontroller.k8s.io"
+# noop crd name
+np="noops.metac.openebs.io"
 
-echo "Install controller..."
-kubectl create configmap noop-controller -n metacontroller --from-file=sync.js
-kubectl apply -f noop-controller.yaml
+echo -e "\n++Will install Noop operator..."
+kubectl create configmap noop-controller -n metac --from-file=sync.js
+kubectl apply -f operator.yaml
 
-echo "Wait until CRD is available..."
+echo -e "\n++Wait until CRD is available..."
 until kubectl get $np; do sleep 1; done
 
-echo "Create an object..."
+echo -e "\n++Will apply Noop resource..."
 kubectl apply -f my-noop.yaml
 
-echo "Wait for status to be updated..."
+echo -e "\n++Wait for Noop resource's status to be updated..."
 until [[ "$(kubectl get $np noop -o 'jsonpath={.status.message}')" == "success" ]]; do sleep 1; done
