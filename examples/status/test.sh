@@ -2,7 +2,7 @@
 
 cleanup() {
   set +e
-    echo ""
+  echo ""
 
   echo "--------------------------"
   echo "++ Clean up started"
