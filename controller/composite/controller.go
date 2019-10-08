@@ -169,7 +169,7 @@ func (pc *parentController) String() string {
 
 // Start triggers the reconciliation process of this controller
 // instance
-func (pc *parentController) Start() {
+func (pc *parentController) Start(workerCount int) {
 	// init the channels to signal cancellation
 	// a single stop channel for all workers
 	// done channel is triggered when all workers are stopped
@@ -201,6 +201,10 @@ func (pc *parentController) Start() {
 			UpdateFunc: pc.onChildUpdate,
 			DeleteFunc: pc.onChildDelete,
 		})
+	}
+
+	if workerCount <= 0 {
+		workerCount = 5
 	}
 
 	go func() {
@@ -241,9 +245,9 @@ func (pc *parentController) Start() {
 			return
 		}
 
-		// 5 workers ought to be enough for anyone.
+		glog.Infof("Starting %d workers for %s", workerCount, pc)
 		var wg sync.WaitGroup
-		for i := 0; i < 5; i++ {
+		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

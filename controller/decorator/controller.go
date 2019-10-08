@@ -192,7 +192,7 @@ func newDecoratorController(
 
 // Start starts the decorator controller based on its fields
 // that were initialised earlier (mostly via its constructor)
-func (c *decoratorController) Start() {
+func (c *decoratorController) Start(workerCount int) {
 	// init the channels with empty structs
 	c.stopCh = make(chan struct{})
 	c.doneCh = make(chan struct{})
@@ -230,6 +230,10 @@ func (c *decoratorController) Start() {
 		})
 	}
 
+	if workerCount <= 0 {
+		workerCount = 5
+	}
+
 	go func() {
 		// close done channel i.e. mark closure of this start invocation
 		defer close(c.doneCh)
@@ -260,9 +264,9 @@ func (c *decoratorController) Start() {
 			return
 		}
 
-		// 5 workers ought to be enough for anyone.
+		glog.Infof("Starting %d workers for %v", workerCount, c.schema.Name)
 		var wg sync.WaitGroup
-		for i := 0; i < 5; i++ {
+		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

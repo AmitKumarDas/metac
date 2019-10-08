@@ -50,6 +50,7 @@ type Metacontroller struct {
 	revisionLister   metalisters.ControllerRevisionLister
 	revisionInformer cache.SharedIndexInformer
 
+	workerCount       int
 	queue             workqueue.RateLimitingInterface
 	parentControllers map[string]*parentController
 
@@ -62,6 +63,7 @@ func NewMetacontroller(
 	dynamicInformerFactory *dynamicinformer.SharedInformerFactory,
 	metaInformerFactory metainformers.SharedInformerFactory,
 	metaClientset metaclientset.Interface,
+	workerCount int,
 ) *Metacontroller {
 
 	mc := &Metacontroller{
@@ -69,6 +71,7 @@ func NewMetacontroller(
 		metaClientset:          metaClientset,
 		dynamicClientset:       dynamicClientset,
 		dynamicInformerFactory: dynamicInformerFactory,
+		workerCount:            workerCount,
 
 		lister:           metaInformerFactory.Metacontroller().V1alpha1().CompositeControllers().Lister(),
 		informer:         metaInformerFactory.Metacontroller().V1alpha1().CompositeControllers().Informer(),
@@ -186,7 +189,7 @@ func (mc *Metacontroller) syncCompositeController(cc *v1alpha1.CompositeControll
 	if err != nil {
 		return err
 	}
-	pc.Start()
+	pc.Start(mc.workerCount)
 	mc.parentControllers[cc.Name] = pc
 	return nil
 }

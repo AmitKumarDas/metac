@@ -221,7 +221,7 @@ func newGenericControllerManager(
 
 // Start starts the decorator controller based on its fields
 // that were initialised earlier (mostly via its constructor)
-func (mgr *genericControllerManager) Start() {
+func (mgr *genericControllerManager) Start(workerCount int) {
 	// init the channels with empty structs
 	mgr.stopCh = make(chan struct{})
 	mgr.doneCh = make(chan struct{})
@@ -252,6 +252,10 @@ func (mgr *genericControllerManager) Start() {
 		}
 	}
 
+	if workerCount <= 0 {
+		workerCount = 5
+	}
+
 	go func() {
 		// close done channel i.e. mark closure of this start invocation
 		defer close(mgr.doneCh)
@@ -280,10 +284,9 @@ func (mgr *genericControllerManager) Start() {
 			return
 		}
 
-		// ensure sufficient workers to reconcile good number of
-		// GenericController resources simultaneously
+		glog.Infof("Starting %d workers for %s", workerCount, mgr)
 		var wg sync.WaitGroup
-		for i := 0; i < 50; i++ {
+		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

@@ -47,6 +47,7 @@ func Start(
 	config *rest.Config,
 	discoveryInterval time.Duration,
 	informerRelist time.Duration,
+	workerCount int,
 ) (stop func(), err error) {
 
 	// Periodically refresh discovery to pick up newly-installed resources.
@@ -86,18 +87,21 @@ func Start(
 			dynamicInformerFactory,
 			metaInformerFactory,
 			metaClientset,
+			workerCount,
 		),
 		decorator.NewMetacontroller(
 			resourceMgr,
 			dynamicClientset,
 			dynamicInformerFactory,
 			metaInformerFactory,
+			workerCount,
 		),
 		generic.NewMetacontroller(
 			resourceMgr,
 			dynamicClientset,
 			dynamicInformerFactory,
 			metaInformerFactory,
+			workerCount,
 		),
 	}
 
