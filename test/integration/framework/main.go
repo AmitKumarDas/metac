@@ -143,7 +143,7 @@ func testMain(tests func() int) error {
 	// locally inside the test binary, since that's part of the
 	// code under test.
 	stopServer, err := server.Start(
-		ApiserverConfig(), 500*time.Millisecond, 30*time.Minute,
+		ApiserverConfig(), 500*time.Millisecond, 30*time.Minute, 5,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "Can't start metacontroller server")

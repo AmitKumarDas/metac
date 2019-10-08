@@ -51,6 +51,7 @@ type MetaController struct {
 
 	queue              workqueue.RateLimitingInterface
 	genericControllers map[string]*genericControllerManager
+	workerCount        int
 
 	stopCh, doneCh chan struct{}
 }
@@ -61,12 +62,14 @@ func NewMetacontroller(
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
 	metaInformerFactory metainformers.SharedInformerFactory,
+	workerCount int,
 ) *MetaController {
 
 	mc := &MetaController{
 		resourceManager:    resourceMgr,
 		dynClientset:       dynClientset,
 		dynInformerFactory: dynInformerFactory,
+		workerCount:        workerCount,
 
 		lister:   metaInformerFactory.Metacontroller().V1alpha1().GenericControllers().Lister(),
 		informer: metaInformerFactory.Metacontroller().V1alpha1().GenericControllers().Informer(),
@@ -213,7 +216,7 @@ func (mc *MetaController) syncGenericController(ctrl *v1alpha1.GenericController
 		return err
 	}
 
-	wc.Start()
+	wc.Start(mc.workerCount)
 	mc.genericControllers[ctrl.Key()] = wc
 	return nil
 }

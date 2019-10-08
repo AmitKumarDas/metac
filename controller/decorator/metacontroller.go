@@ -46,6 +46,7 @@ type Metacontroller struct {
 	lister   mclisters.DecoratorControllerLister
 	informer cache.SharedIndexInformer
 
+	workerCount          int
 	queue                workqueue.RateLimitingInterface
 	decoratorControllers map[string]*decoratorController
 
@@ -58,6 +59,7 @@ func NewMetacontroller(
 	clientset *dynamicclientset.Clientset,
 	dynInformers *dynamicinformer.SharedInformerFactory,
 	mcInformerFactory mcinformers.SharedInformerFactory,
+	workerCount int,
 ) *Metacontroller {
 
 	mc := &Metacontroller{
@@ -70,6 +72,7 @@ func NewMetacontroller(
 
 		queue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "DecoratorController"),
 		decoratorControllers: make(map[string]*decoratorController),
+		workerCount:          workerCount,
 	}
 
 	mc.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -181,7 +184,7 @@ func (mc *Metacontroller) syncDecoratorController(dc *v1alpha1.DecoratorControll
 	if err != nil {
 		return err
 	}
-	c.Start()
+	c.Start(mc.workerCount)
 	mc.decoratorControllers[dc.Name] = c
 	return nil
 }

@@ -41,6 +41,7 @@ var (
 	informerRelist    = flag.Duration("cache-flush-interval", 30*time.Minute, "How often to flush local caches and relist objects from the API server")
 	debugAddr         = flag.String("debug-addr", ":9999", "The address to bind the debug http endpoints")
 	clientConfigPath  = flag.String("client-config-path", "", "Path to kubeconfig file (same format as used by kubectl); if not specified, use in-cluster config")
+	workerCount       = flag.Int("workers-count", 5, "How many workers to start per controller to process queued events")
 )
 
 func main() {
@@ -63,7 +64,7 @@ func main() {
 		glog.Fatal(err)
 	}
 
-	stopServer, err := server.Start(config, *discoveryInterval, *informerRelist)
+	stopServer, err := server.Start(config, *discoveryInterval, *informerRelist, *workerCount)
 	if err != nil {
 		glog.Fatal(err)
 	}
