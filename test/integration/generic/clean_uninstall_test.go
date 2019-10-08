@@ -32,16 +32,16 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// TestUnInstallOfNSAndCRDs will verify if GenericController can be
+// TestCleanUninstall will verify if GenericController can be
 // used to implement clean uninstall requirements.
 //
-// A clean uninstall implies when a workload specific namespace
+// A clean uninstall implies when a workload specific Namespace
 // is removed from kubernetes cluster, the associated CRDs and CRs
 // should get removed from this cluster. This should work even in
 // the cases where CRs are set with finalizers and the corresponding
 // controllers i.e. pods are no longer available due to the deletion
 // of this workload namespace.
-func TestUnInstallOfNSAndCRDs(t *testing.T) {
+func TestCleanUninstall(t *testing.T) {
 	// namespace to setup GenericController
 	ctlNSNamePrefix := "gctl-test"
 	// name of the GenericController

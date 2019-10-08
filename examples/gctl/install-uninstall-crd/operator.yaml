@@ -1,0 +1,71 @@
+---
+apiVersion: metac.openebs.io/v1alpha1
+kind: GenericController
+metadata:
+  name: install-un-crd
+spec:
+  watch:
+    apiVersion: v1
+    resource: namespaces
+    nameSelector:
+      # we are interested in amitd namespace only
+      - amitd
+  attachments:
+  - apiVersion: apiextensions.k8s.io/v1beta1
+    resource: customresourcedefinitions
+    nameSelector:
+      # we are interested in storages CRD only
+      - storages.dao.amitd.io
+  hooks:
+    sync:
+      webhook:
+        url: http://jsonnetd.metac/sync-crd
+    finalize:
+      webhook:
+        url: http://jsonnetd.metac/finalize-crd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jsonnetd
+  namespace: metac
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jsonnetd
+  template:
+    metadata:
+      labels:
+        app: jsonnetd
+    spec:
+      containers:
+      - name: hooks
+        # this deployment is all about exposing jsonnet as a webhook
+        # that understands metac request & response payload
+        image: metacontroller/jsonnetd:0.1
+        imagePullPolicy: Always
+        workingDir: /hooks
+        volumeMounts:
+        - name: hooks
+          mountPath: /hooks
+      volumes:
+      - name: hooks
+        configMap:
+          # this configmap provides the jsonnet files that
+          # get executed as webhooks
+          name: install-uninstall-crd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # this name is used to build the webhook url
+  name: jsonnetd
+  # this namespace is used to build the webhook url
+  namespace: metac
+spec:
+  selector:
+    app: jsonnetd
+  ports:
+  - port: 80
+    targetPort: 8080

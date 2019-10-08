@@ -1,7 +1,7 @@
 ### TODO:
-- test metac with changes to rbac
-
-- gctl add integration tests:
+- Test metac with changes to rbac 
+- Make all examples to work & then make it better
+- Add integration tests w.r.t GenericController:
     - check if finalizer works
     - check if attachments not created by gctl are not updated
     - check if attachments not created by gctl are not deleted
@@ -19,33 +19,18 @@
         - operator - WatchIsOwner, WatchIsCreator, WatchIsUpdater
         - operator - WatchInKey, WatchInValue, ValueContainsWatch, KeyContainsWatch
 
-- gctl - read & review
+### Blogs:
+- Integration Tests
+    - go based integration tests vs. bash based vs GCtl based
+    - Blog talks only about GCtl tests & give links to how Go & Bash are done
+
+### Learn:
+- read & review & compare them against GenericController
     - https://github.com/GoogleCloudPlatform/metacontroller/issues/98
     - https://github.com/GoogleCloudPlatform/metacontroller/pull/143
     - https://github.com/GoogleCloudPlatform/metacontroller/pull/168
 
-
-- all controller enhancements
-  - https://github.com/GoogleCloudPlatform/metacontroller/issues/154
-  - make Metac run based on either of following: 
-      - CustomResource, or # current mode
-      - Config # default mode
-  - make cctl, dctl & gctl work from config files vs. current way that depends on CRDs
-
-- explore the one binary sidecars
-    - jsonnetd service + hooks as a docker image
-
-- gctl integration test
-  - code refactoring - one .go file per test
-  - proper logs, informative logs, proper log levels  
-- Use latest stable Kubernetes version & etcd for integration testing
-- make all examples to work & then make it better
-- restructure examples to enable community
-- code to use klog
-- test/unittest
-- find bugs & fix
-
-- targeted usecases
+### Few targeted usecases:
   - ConformanceTest
   - CStorConfigController
   - DDP
@@ -53,10 +38,27 @@
   - UnInstall
   - Upgrade
 
-### Future Actions:
+### Future actions:
+- All controller enhancements
+  - https://github.com/GoogleCloudPlatform/metacontroller/issues/154
+  - make Metac run based on either of following: 
+      - CustomResource, or # current mode
+      - Config # default mode
+  - make cctl, dctl & gctl work from config files vs. current way that depends on CRDs
+- Explore the one binary sidecars
+    - jsonnetd service + hooks as a docker image
+- Use latest stable Kubernetes version & etcd for integration testing
+- restructure examples to enable community
+- code to use klog
+- test/unittest
+- find bugs & fix
 - Make metacontroller watch resources from specific namespace if required
 - Should Metac support UDS?
     - https://eli.thegreenplace.net/2019/unix-domain-sockets-in-go/
+- >>enisoc 2:08 AM
+    if the new client-go dynamic informer does everything metacontroller needs 
+    (e.g. start/stop dynamically without process restart), it would be great to
+    rebase metacontroller on client-go's dynamic package
 
 ### Meeting Notes & Agenda
 - https://docs.google.com/document/d/1HV_Fr0wIW9tr5OZwK_6oGux_OhcGtxxWWV6dCYJR9Cw/

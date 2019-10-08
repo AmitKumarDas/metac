@@ -206,9 +206,12 @@ func (m AttachmentManager) String() string {
 	return m.AttachmentExecuteBase.String()
 }
 
-// preApply prepares the manager before invoking the Apply
-// This method sets various default options if applicable
-func (m *AttachmentManager) preApply() {
+// setDefaults prepares the attachment manager before invoking the
+// Apply
+//
+// NOTE:
+// 	This method sets various **default** options if applicable
+func (m *AttachmentManager) setDefaults() {
 	if m.DeleteFn == nil {
 		m.errs = appendErrIfNotNil(
 			m.errs, anyAttachmentsDefaultDeleter()(m),
@@ -220,16 +223,18 @@ func (m *AttachmentManager) preApply() {
 		)
 	}
 	if m.IsWatchOwner == nil {
-		// defaults to set this watch as not the owner
-		// of the attachments
-		m.IsWatchOwner = kubernetes.BoolPtr(false)
+		// defaults to set this watch as the owner of the
+		// attachments, since this tunable is used only during
+		// creation of these attachment(s) while observing the
+		// watch resource
+		m.IsWatchOwner = kubernetes.BoolPtr(true)
 	}
 }
 
 // Apply executes create, delete or update operations against
 // the child resources set against this manager instance
 func (m *AttachmentManager) Apply() error {
-	m.preApply()
+	m.setDefaults()
 	if len(m.errs) != 0 {
 		return utilerrors.NewAggregate(m.errs)
 	}
