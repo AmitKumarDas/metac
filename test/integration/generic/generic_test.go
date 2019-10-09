@@ -33,18 +33,6 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// This will be run only once when go test is invoked against this package.
-// All the other TestXYZ functions will be invoked via m.Run call only.
-//
-// framework.TestMain provides setup & teardown features required for
-// all the individual testcases to run.
-//
-// TODO (@amitkumardas):
-// Once refactor is done, move this func to suite_test.go
-func TestMain(m *testing.M) {
-	framework.TestMain(m.Run)
-}
-
 // TestGCtlSyncWebhook tests that the sync webhook triggers and
 // passes the request/response properly.
 func TestGCtlSyncWebhook(t *testing.T) {

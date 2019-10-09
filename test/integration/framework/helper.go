@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -70,7 +71,13 @@ func BuildUnstructuredObjFromJSON(
 
 	obj := map[string]interface{}{}
 	if err := json.Unmarshal([]byte(jsonStr), &obj); err != nil {
-		panic(err)
+		panic(
+			errors.Wrapf(
+				err,
+				"%s:%s:%s: Unmarshal failed: %s",
+				apiVersion, kind, name, jsonStr,
+			),
+		)
 	}
 
 	u := &unstructured.Unstructured{Object: obj}
