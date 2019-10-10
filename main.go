@@ -42,6 +42,8 @@ var (
 	debugAddr         = flag.String("debug-addr", ":9999", "The address to bind the debug http endpoints")
 	clientConfigPath  = flag.String("client-config-path", "", "Path to kubeconfig file (same format as used by kubectl); if not specified, use in-cluster config")
 	workerCount       = flag.Int("workers-count", 5, "How many workers to start per controller to process queued events")
+	clientGoQPS       = flag.Float64("client-go-qps", 0, "Number of queries per second client-go is allowed to make (default 5)")
+	clientGoBurst     = flag.Int("client-go-burst", 0, "Allowed burst queries for client-go (default 10)")
 )
 
 func main() {
@@ -63,6 +65,8 @@ func main() {
 	if err != nil {
 		glog.Fatal(err)
 	}
+	config.QPS = float32(*clientGoQPS)
+	config.Burst = *clientGoBurst
 
 	stopServer, err := server.Start(config, *discoveryInterval, *informerRelist, *workerCount)
 	if err != nil {
