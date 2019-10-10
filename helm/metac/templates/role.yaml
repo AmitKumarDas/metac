@@ -1,0 +1,19 @@
+{{ if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ template "metac.fullname" . }}
+rules:
+- apiGroups:
+  {{- range .Values.rbac.apiGroups}}
+  - {{ . | quote }}
+  {{- end }}
+  resources:
+  {{- range .Values.rbac.resources}}
+  - {{ . | quote }}
+  {{- end }}
+  verbs:
+  {{- range .Values.rbac.verbs}}
+  - {{ . | quote }}
+  {{- end }}
+{{ end }}

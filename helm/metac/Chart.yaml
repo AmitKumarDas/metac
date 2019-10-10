@@ -1,0 +1,15 @@
+name: metac
+apiVersion: v1
+appVersion: "v0.1.0"
+description: A Helm chart for Metac
+version: 0.1.0
+home: https://github.com/AmitKumarDas/metac
+keywords:
+- CRDs
+- metac
+- operator
+- controller
+- framework
+- metacontroller
+sources:
+- https://github.com/AmitKumarDas/metac

@@ -1,0 +1,38 @@
+{{ if .Values.crds.cleanup }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "metac.fullname" . }}-crd-cleanup
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": hook-succeeded
+  labels:
+    app: {{ template "metac.name" . }}-crd-cleanup
+    {{- include "metac.labels" . | nindent 4 }}
+
+spec:
+  template:
+    metadata:
+      name: {{ template "metac.fullname" . }}-crd-cleanup
+      labels:
+        app: {{ template "metac.fullname" . }}-crd-cleanup
+        {{- include "metac.labels" . | nindent 8 }}
+    spec:
+    {{- if .Values.rbac.create }}
+      serviceAccountName: {{ template "metac.serviceAccountName" . }}
+    {{- end }}
+      containers:
+        - name: kubectl
+          image: "{{ .Values.hyperkubeImage.repository }}:{{ .Values.hyperkubeImage.tag }}"
+          imagePullPolicy: "{{ .Values.hyperkubeImage.pullPolicy }}"
+          command:
+          - /bin/sh
+          - -c
+          - >
+              kubectl delete crd compositecontrollers.metac.openebs.io;
+              kubectl delete crd controllerrevisions.metac.openebs.io;
+              kubectl delete crd decoratorcontrollers.metac.openebs.io;
+      restartPolicy: OnFailure
+{{- end }}
