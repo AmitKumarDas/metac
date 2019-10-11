@@ -4,7 +4,15 @@ It is [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller) an
 Metac tries to be compatible with the original one. However, there may be breaking changes that one needs to be careful about. If one has been using the original metacontroller and tries to use metac, then one should be aware of below changes:
 - Metac uses a different api group for the custom resources
     - i.e. `apiVersion: metac.openebs.io/v1alpha1`
+- Metac uses a different set of finalizers
+   - i.e. `metac.openebs.io/<controller-name>`
 - Metac is by default installed in `metac` namespace
+
+If you are migrating from Metacontroller to Metac you'll need to cleanup the old Metacontroller's finalizers, you can use a command like the following:
+
+```console
+kubectl get <comma separated list of your resource types here> --no-headers --all-namespaces | awk '{print $2 " -n " $1}' | xargs -L1 -P 50 -r kubectl patch -p '{"metadata":{"finalizers": [null]}}' --type=merge
+```
 
 Licensing, documentation and thought processes remain same.
 
