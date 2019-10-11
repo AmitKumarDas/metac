@@ -1,0 +1,58 @@
+# Default values for metac.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## Metac image to use
+##
+image:
+  repository: quay.io/amitkumardas/metac
+  tag: latest
+
+discoveryInterval: 10s
+cacheFlushInterval: 24h
+workerCount: 5
+logLevel: 1
+clientGoQps: 5
+clientGoBurst: 10
+
+rbac:
+  create: true
+  apiGroups:
+    - "*"
+  resources:
+    - "*"
+  verbs:
+    - "*"
+
+## Service account for Metac to use.
+## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+##
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
+## Should the helm chart manage CRDs?
+##
+crds:
+  # Specifies whether installing the helm chart should install the CRDs
+  create: true
+  # Should deleting the helm release also delete the CRDs?
+  cleanup: true
+
+## Hyperkube image to use when cleaning up
+##
+hyperkubeImage:
+  repository: gcr.io/google-containers/hyperkube
+  tag: v1.12.1
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 80m
+    memory: 80Mi
+  requests:
+    cpu: 50m
+    memory: 60Mi

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "metac.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ template "metac.fullname" . }}
+    {{- include "metac.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ template "metac.fullname" . }}
+  serviceName: ""
+  template:
+    metadata:
+      labels:
+        app: {{ template "metac.fullname" . }}
+        {{- include "metac.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ template "metac.serviceAccountName" . }}
+      containers:
+      - name: {{ template "metac.fullname" . }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag}}
+        command: ["/usr/bin/metac"]
+        args:
+        - --logtostderr
+        - -v={{ .Values.logLevel }}
+        - --discovery-interval={{ .Values.discoveryInterval }}
+        - --cache-flush-interval={{ .Values.cacheFlushInterval }}
+        - --workers-count={{ .Values.workerCount }}
+        - --client-go-qps={{ .Values.clientGoQps }}
+        - --client-go-burst={{ .Values.clientGoBurst }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+  volumeClaimTemplates: []
