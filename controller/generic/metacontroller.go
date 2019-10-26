@@ -31,6 +31,7 @@ import (
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	metainformers "openebs.io/metac/client/generated/informers/externalversions"
 	metalisters "openebs.io/metac/client/generated/listers/metacontroller/v1alpha1"
+	"openebs.io/metac/config"
 	"openebs.io/metac/controller/common"
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 	dynamicdiscovery "openebs.io/metac/dynamic/discovery"
@@ -42,45 +43,176 @@ import (
 // to execute reconcile logic declared in various GenericController
 // resources.
 type MetaController struct {
-	resourceManager    *dynamicdiscovery.APIResourceManager
-	dynClientset       *dynamicclientset.Clientset
-	dynInformerFactory *dynamicinformer.SharedInformerFactory
+	ResourceManager    *dynamicdiscovery.APIResourceManager
+	DynClientset       *dynamicclientset.Clientset
+	DynInformerFactory *dynamicinformer.SharedInformerFactory
 
-	lister   metalisters.GenericControllerLister
-	informer cache.SharedIndexInformer
+	WatchControllers map[string]*watchController
+	WorkerCount      int
 
-	queue              workqueue.RateLimitingInterface
-	genericControllers map[string]*genericControllerManager
-	workerCount        int
-
-	stopCh, doneCh chan struct{}
+	doneCh chan struct{}
 }
 
-// NewMetacontroller returns a new instance of MetaController
-func NewMetacontroller(
+// ConfigBasedMetaController represents a MetaController that
+// is based on configs of type GenericController provided to
+// this binary
+type ConfigBasedMetaController struct {
+	MetaController
+
+	// Config instances of type GenericController required to run
+	// generic meta controllers. In other words these are the
+	// configurations to manage (start, stop) specific watch
+	// controllers
+	ControllerConfigs []*v1alpha1.GenericController
+}
+
+// NewConfigBasedMetaController returns a new instance of
+// ConfigBasedMetaController
+func NewConfigBasedMetaController(
+	metacConfigPath string,
+	resourceMgr *dynamicdiscovery.APIResourceManager,
+	dynClientset *dynamicclientset.Clientset,
+	dynInformerFactory *dynamicinformer.SharedInformerFactory,
+	workerCount int,
+) (*ConfigBasedMetaController, error) {
+
+	ul, err := config.New(metacConfigPath).Load()
+	if err != nil {
+		return nil, err
+	}
+
+	gctls, err := ul.ListGenericControllers()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ConfigBasedMetaController{
+		ControllerConfigs: gctls,
+		MetaController: MetaController{
+			ResourceManager:    resourceMgr,
+			DynClientset:       dynClientset,
+			DynInformerFactory: dynInformerFactory,
+			WorkerCount:        workerCount,
+			WatchControllers:   make(map[string]*watchController),
+		},
+	}, nil
+}
+
+func (mc *ConfigBasedMetaController) String() string {
+	return "LocalGCtl"
+}
+
+// Start generic meta controller by starting watch controllers
+// corresponding to the provided config
+func (mc *ConfigBasedMetaController) Start() {
+	mc.doneCh = make(chan struct{})
+
+	go func() {
+		defer close(mc.doneCh)
+		defer utilruntime.HandleCrash()
+
+		glog.Infof("Starting %s", mc)
+		defer glog.Infof("Shutting down %s", mc)
+
+		// In the metacontroller, we are only responsible for starting/stopping
+		// the watch controllers
+		for _, conf := range mc.ControllerConfigs {
+			if wCtl, ok := mc.WatchControllers[conf.Key()]; ok {
+				// The controller was already started.
+				if apiequality.Semantic.DeepEqual(conf.Spec, wCtl.GCtlConfig.Spec) {
+					// Nothing has changed.
+					continue
+				}
+
+				// Applying the new desired state of GenericController
+				// config implies stop old controller & recreate with new
+				// config
+				wCtl.Stop()
+				delete(mc.WatchControllers, conf.Key())
+			}
+
+			// watch controller
+			wc, err := newWatchController(
+				mc.ResourceManager,
+				mc.DynClientset,
+				mc.DynInformerFactory,
+				conf,
+			)
+			if err != nil {
+				panic(errors.Wrapf(err, "%s: Watch controller failed", mc))
+			}
+
+			// start this watch controller
+			wc.Start(mc.WorkerCount)
+			mc.WatchControllers[conf.Key()] = wc
+		}
+	}()
+}
+
+// Stop stops this MetaController
+func (mc *ConfigBasedMetaController) Stop() {
+	// Stop metacontroller first so there's no more changes
+	// to watch controllers.
+	<-mc.doneCh
+
+	// Stop all its watch controllers
+	var wg sync.WaitGroup
+	for _, wCtl := range mc.WatchControllers {
+		wg.Add(1)
+		go func(ctl *watchController) {
+			defer wg.Done()
+			ctl.Stop()
+		}(wCtl)
+	}
+	// wait till all watch controllers are stopped
+	wg.Wait()
+}
+
+// CRDBasedMetaController represents a MetaController that
+// is based on CustomResources of GenericController applied
+// to the Kubernetes cluster
+type CRDBasedMetaController struct {
+	MetaController
+
+	// To list GenericController CRs
+	Lister metalisters.GenericControllerLister
+
+	// To watch GenericController CR events
+	Informer cache.SharedIndexInformer
+
+	// To enqueue & dequeue GenericController CR events
+	Queue workqueue.RateLimitingInterface
+
+	// To stop watching GenericController CR events
+	stopCh chan struct{}
+}
+
+// NewCRDBasedMetaController returns a new instance of
+// CRDBasedMetaController
+func NewCRDBasedMetaController(
 	resourceMgr *dynamicdiscovery.APIResourceManager,
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
 	metaInformerFactory metainformers.SharedInformerFactory,
 	workerCount int,
-) *MetaController {
+) *CRDBasedMetaController {
 
-	mc := &MetaController{
-		resourceManager:    resourceMgr,
-		dynClientset:       dynClientset,
-		dynInformerFactory: dynInformerFactory,
-		workerCount:        workerCount,
-
-		lister:   metaInformerFactory.Metacontroller().V1alpha1().GenericControllers().Lister(),
-		informer: metaInformerFactory.Metacontroller().V1alpha1().GenericControllers().Informer(),
-
-		queue: workqueue.NewNamedRateLimitingQueue(
-			workqueue.DefaultControllerRateLimiter(), "GenericMetaController",
+	mc := &CRDBasedMetaController{
+		MetaController: MetaController{
+			ResourceManager:    resourceMgr,
+			DynClientset:       dynClientset,
+			DynInformerFactory: dynInformerFactory,
+			WorkerCount:        workerCount,
+			WatchControllers:   make(map[string]*watchController),
+		},
+		Lister:   metaInformerFactory.Metacontroller().V1alpha1().GenericControllers().Lister(),
+		Informer: metaInformerFactory.Metacontroller().V1alpha1().GenericControllers().Informer(),
+		Queue: workqueue.NewNamedRateLimitingQueue(
+			workqueue.DefaultControllerRateLimiter(), "CRDGCtl",
 		),
-		genericControllers: make(map[string]*genericControllerManager),
 	}
 
-	mc.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	mc.Informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    mc.enqueueGenericController,
 		UpdateFunc: mc.updateGenericController,
 		DeleteFunc: mc.enqueueGenericController,
@@ -90,12 +222,12 @@ func NewMetacontroller(
 }
 
 // String implements Stringer interface
-func (mc *MetaController) String() string {
-	return "GCtl"
+func (mc *CRDBasedMetaController) String() string {
+	return "CRDGCtl"
 }
 
 // Start starts this MetaController
-func (mc *MetaController) Start() {
+func (mc *CRDBasedMetaController) Start() {
 	mc.stopCh = make(chan struct{})
 	mc.doneCh = make(chan struct{})
 
@@ -106,7 +238,7 @@ func (mc *MetaController) Start() {
 		glog.Infof("Starting %s", mc)
 		defer glog.Infof("Shutting down %s", mc)
 
-		if !k8s.WaitForCacheSync(mc.String(), mc.stopCh, mc.informer.HasSynced) {
+		if !k8s.WaitForCacheSync(mc.String(), mc.stopCh, mc.Informer.HasSynced) {
 			return
 		}
 
@@ -119,18 +251,18 @@ func (mc *MetaController) Start() {
 }
 
 // Stop stops this MetaController
-func (mc *MetaController) Stop() {
+func (mc *CRDBasedMetaController) Stop() {
 	// Stop metacontroller first so there's no more changes
 	// to watched controllers.
 	close(mc.stopCh)
-	mc.queue.ShutDown()
+	mc.Queue.ShutDown()
 	<-mc.doneCh
 
 	// Stop all its watched resources i.e. controllers
 	var wg sync.WaitGroup
-	for _, c := range mc.genericControllers {
+	for _, c := range mc.WatchControllers {
 		wg.Add(1)
-		go func(c *genericControllerManager) {
+		go func(c *watchController) {
 			defer wg.Done()
 			c.Stop()
 		}(c)
@@ -138,12 +270,12 @@ func (mc *MetaController) Stop() {
 	wg.Wait()
 }
 
-func (mc *MetaController) processNextWorkItem() bool {
-	key, quit := mc.queue.Get()
+func (mc *CRDBasedMetaController) processNextWorkItem() bool {
+	key, quit := mc.Queue.Get()
 	if quit {
 		return false
 	}
-	defer mc.queue.Done(key)
+	defer mc.Queue.Done(key)
 
 	err := mc.sync(key.(string))
 	if err != nil {
@@ -151,16 +283,16 @@ func (mc *MetaController) processNextWorkItem() bool {
 			errors.Wrapf(err, "%s: Failed to sync key %s: Will re-queue", mc, key),
 		)
 		// requeue
-		mc.queue.AddRateLimited(key)
+		mc.Queue.AddRateLimited(key)
 		return true
 	}
 
-	mc.queue.Forget(key)
+	mc.Queue.Forget(key)
 	return true
 }
 
 // sync reconciles GenericMetaController resources
-func (mc *MetaController) sync(key string) error {
+func (mc *CRDBasedMetaController) sync(key string) error {
 	ns, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
@@ -168,7 +300,7 @@ func (mc *MetaController) sync(key string) error {
 
 	glog.V(4).Infof("%s: Try sync-ing key %s", mc, key)
 
-	ctrl, err := mc.lister.GenericControllers(ns).Get(name)
+	ctrl, err := mc.Lister.GenericControllers(ns).Get(name)
 	if apierrors.IsNotFound(err) {
 		glog.V(3).Infof(
 			"%s: Sync key %s ignored: No longer exist: Will stop controller: %v",
@@ -176,9 +308,9 @@ func (mc *MetaController) sync(key string) error {
 		)
 
 		// cleanup this GenericController instance if exists
-		if c, ok := mc.genericControllers[key]; ok {
+		if c, ok := mc.WatchControllers[key]; ok {
 			c.Stop()
-			delete(mc.genericControllers, key)
+			delete(mc.WatchControllers, key)
 		}
 		return nil
 	}
@@ -191,10 +323,10 @@ func (mc *MetaController) sync(key string) error {
 
 // syncGenericController is all about starting individual
 // generic controller resources
-func (mc *MetaController) syncGenericController(ctrl *v1alpha1.GenericController) error {
-	if c, ok := mc.genericControllers[ctrl.Key()]; ok {
+func (mc *CRDBasedMetaController) syncGenericController(ctrl *v1alpha1.GenericController) error {
+	if c, ok := mc.WatchControllers[ctrl.Key()]; ok {
 		// The controller was already started.
-		if apiequality.Semantic.DeepEqual(ctrl.Spec, c.Controller.Spec) {
+		if apiequality.Semantic.DeepEqual(ctrl.Spec, c.GCtlConfig.Spec) {
 			// Nothing has changed.
 			return nil
 		}
@@ -202,26 +334,26 @@ func (mc *MetaController) syncGenericController(ctrl *v1alpha1.GenericController
 		// Applying desired state of GenericController resource implies
 		// stop & recreate.
 		c.Stop()
-		delete(mc.genericControllers, ctrl.Key())
+		delete(mc.WatchControllers, ctrl.Key())
 	}
 
 	// watched resource / controller
-	wc, err := newGenericControllerManager(
-		mc.resourceManager,
-		mc.dynClientset,
-		mc.dynInformerFactory,
+	wc, err := newWatchController(
+		mc.ResourceManager,
+		mc.DynClientset,
+		mc.DynInformerFactory,
 		ctrl,
 	)
 	if err != nil {
 		return err
 	}
 
-	wc.Start(mc.workerCount)
-	mc.genericControllers[ctrl.Key()] = wc
+	wc.Start(mc.WorkerCount)
+	mc.WatchControllers[ctrl.Key()] = wc
 	return nil
 }
 
-func (mc *MetaController) enqueueGenericController(obj interface{}) {
+func (mc *CRDBasedMetaController) enqueueGenericController(obj interface{}) {
 	key, err := common.KeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(
@@ -230,9 +362,9 @@ func (mc *MetaController) enqueueGenericController(obj interface{}) {
 		return
 	}
 
-	mc.queue.Add(key)
+	mc.Queue.Add(key)
 }
 
-func (mc *MetaController) updateGenericController(old, cur interface{}) {
+func (mc *CRDBasedMetaController) updateGenericController(old, cur interface{}) {
 	mc.enqueueGenericController(cur)
 }

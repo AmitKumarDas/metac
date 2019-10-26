@@ -142,11 +142,18 @@ func testMain(tests func() int) error {
 	// anything. Instead, we start the Metacontroller server
 	// locally inside the test binary, since that's part of the
 	// code under test.
-	stopServer, err := server.Start(
-		ApiserverConfig(), 500*time.Millisecond, 30*time.Minute, 5,
-	)
+	var mserver = server.Server{
+		Config:            ApiserverConfig(),
+		DiscoveryInterval: 500 * time.Millisecond,
+		InformerRelist:    30 * time.Minute,
+	}
+	crdServer := &server.CRDBasedServer{Server: mserver}
+	stopServer, err := crdServer.Start(5)
+	//stopServer, err := server.Start(
+	//	ApiserverConfig(), 500*time.Millisecond, 30*time.Minute, 5,
+	//)
 	if err != nil {
-		return errors.Wrapf(err, "Can't start metacontroller server")
+		return errors.Wrapf(err, "Can't start crd based metacontroller server")
 	}
 	defer stopServer()
 

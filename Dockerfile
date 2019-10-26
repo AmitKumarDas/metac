@@ -22,6 +22,7 @@ COPY Makefile Makefile
 # copy source files
 COPY *.go ./
 COPY apis/ apis/
+COPY config/ config/
 COPY hack/ hack/
 COPY controller/ controller/
 COPY dynamic/ dynamic/
