@@ -196,7 +196,7 @@ func (s *Selector) Matches(obj *unstructured.Unstructured) bool {
 }
 
 // makeSelectorKeyFromGK returns a formatted string suitable to be
-// used as a key
+// used as a key of form 'kind.apigroup'
 //
 // The returned key is based on a combination of api group & kind
 func makeSelectorKeyFromGK(apiGroup, kind string) string {

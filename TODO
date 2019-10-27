@@ -31,9 +31,10 @@
     - https://github.com/GoogleCloudPlatform/metacontroller/pull/168
 
 ### Few targeted usecases:
-  - ConformanceTest
-  - CStorConfigController
-  - DDP
+  - K8s ConformanceTest Controllers
+  - K8s Controllers
+  - K8s Debug Controllers
+  - K8s Monitoring Controllers
   - Install
   - UnInstall
   - Upgrade
@@ -63,3 +64,28 @@
 ### Meeting Notes & Agenda
 - https://docs.google.com/document/d/1HV_Fr0wIW9tr5OZwK_6oGux_OhcGtxxWWV6dCYJR9Cw/
 
+
+### Updated TODO List With Priority
+- Apply via Update support - 5
+    - Unit Test 3-way merge
+    - Unit Test 2-way merge
+    - Check if 3-way can be converted to 2-way merge on some condition
+- Skip Reconcile support - 2
+- Advanced Selector support - 6
+    - study existing implementation; push more code comments
+    - study existing unit tests; push more code comments
+    - look again at the names of key, operator, etc;
+    - implement the required stuff
+- Local config based execution - 1
+    - Read existing changes; push more code comments
+    - Send PR
+- Local config based examples - 7
+- Local config based integration tests - 8
+- Namespace controlled execution - 3
+- Allowed-namespaces based flag - 4
+- Send specific parts of attachments - 9
+    - e.g. namespace & name, metadata only, status only, metadata + spec, labels only, annotations only, 
+    - examples - 10
+    - integration tests - 11
+- Simplify Integration Tests - ?
+    - refer to apiserver-extensions project

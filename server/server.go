@@ -37,28 +37,54 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
+// controller abstracts the contracts exposed by all metac
+// controllers
+//
+// NOTE:
+//	Current metac controllers like GenericController,
+// CompositeController & DecoratorController adhere to the
+// contracts exposed by this interface
 type controller interface {
 	Start()
 	Stop()
 }
 
-// Start will start this controller service
-func Start(
-	config *rest.Config,
-	discoveryInterval time.Duration,
-	informerRelist time.Duration,
-	workerCount int,
-) (stop func(), err error) {
+// Server represents the Metac server
+type Server struct {
+	// Kubernetes config required to make API calls
+	Config *rest.Config
 
-	// Periodically refresh discovery to pick up newly-installed resources.
-	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(config)
+	// How often to refresh discovery cache to pick
+	// up newly-installed resources
+	DiscoveryInterval time.Duration
+
+	// How often to flush local caches and relist
+	// objects from the API server
+	InformerRelist time.Duration
+}
+
+// CRDBasedServer represents metac server based on
+// metac's CRDs. In other words, this is based on
+// Kubernetes CustomResourceDefinition(s).
+type CRDBasedServer struct {
+	Server
+}
+
+func (s *CRDBasedServer) String() string {
+	return "CRDMetacServer"
+}
+
+// Start metac server
+func (s *CRDBasedServer) Start(workerCount int) (stop func(), err error) {
+	// Periodically refresh discovery cache to pick up newly-installed resources.
+	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(s.Config)
 	resourceMgr := dynamicdiscovery.NewAPIResourceManager(discoveryClient)
 
 	// We don't care about stopping this cleanly since it has no external effects.
-	resourceMgr.Start(discoveryInterval)
+	resourceMgr.Start(s.DiscoveryInterval)
 
 	// Create informer factory for metacontroller API objects.
-	metaClientset, err := metaclientset.NewForConfig(config)
+	metaClientset, err := metaclientset.NewForConfig(s.Config)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err,
@@ -67,16 +93,16 @@ func Start(
 		)
 	}
 	metaInformerFactory :=
-		metainformers.NewSharedInformerFactory(metaClientset, informerRelist)
+		metainformers.NewSharedInformerFactory(metaClientset, s.InformerRelist)
 
 	// Create dynamic clientset (factory for dynamic clients).
-	dynamicClientset, err := dynamicclientset.New(config, resourceMgr)
+	dynamicClientset, err := dynamicclientset.New(s.Config, resourceMgr)
 	if err != nil {
 		return nil, err
 	}
 	// Create dynamic informer factory (for sharing dynamic informers).
 	dynamicInformerFactory :=
-		dynamicinformer.NewSharedInformerFactory(dynamicClientset, informerRelist)
+		dynamicinformer.NewSharedInformerFactory(dynamicClientset, s.InformerRelist)
 
 	// Start various metacontrollers (controllers that spawn controllers).
 	// Each one requests the informers it needs from the factory.
@@ -96,7 +122,7 @@ func Start(
 			metaInformerFactory,
 			workerCount,
 		),
-		generic.NewMetacontroller(
+		generic.NewCRDBasedMetaController(
 			resourceMgr,
 			dynamicClientset,
 			dynamicInformerFactory,
@@ -108,6 +134,78 @@ func Start(
 	// Start all requested informers.
 	// We don't care about stopping this cleanly since it has no external effects.
 	metaInformerFactory.Start(nil)
+
+	// Start all controllers.
+	for _, c := range metaControllers {
+		c.Start()
+	}
+
+	// Return a function that will stop all controllers.
+	return func() {
+		var wg sync.WaitGroup
+		for _, c := range metaControllers {
+			wg.Add(1)
+			go func(c controller) {
+				defer wg.Done()
+				c.Stop()
+			}(c)
+		}
+		wg.Wait()
+	}, nil
+}
+
+// ConfigBasedServer represents metac server based
+// on metac binary's config
+type ConfigBasedServer struct {
+	Server
+
+	// Path that has the Metac controllers' as config
+	// files(s)
+	MetacConfigPath string
+}
+
+func (s *ConfigBasedServer) String() string {
+	return "ConfigMetacServer"
+}
+
+// Start metac server
+func (s *ConfigBasedServer) Start(workerCount int) (stop func(), err error) {
+	// Periodically refresh discovery cache to pick up newly-installed resources.
+	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(s.Config)
+	resourceMgr := dynamicdiscovery.NewAPIResourceManager(discoveryClient)
+
+	// We don't care about stopping this cleanly since it has no external effects.
+	resourceMgr.Start(s.DiscoveryInterval)
+
+	// Create dynamic clientset (factory for dynamic clients).
+	dynamicClientset, err := dynamicclientset.New(s.Config, resourceMgr)
+	if err != nil {
+		return nil, err
+	}
+	// Create dynamic informer factory (for sharing dynamic informers).
+	dynamicInformerFactory :=
+		dynamicinformer.NewSharedInformerFactory(dynamicClientset, s.InformerRelist)
+
+	genericMetac, err := generic.NewConfigBasedMetaController(
+		s.MetacConfigPath,
+		resourceMgr,
+		dynamicClientset,
+		dynamicInformerFactory,
+		workerCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// Start various metacontrollers (controllers that spawn controllers).
+	// Each one requests the informers it needs from the factory.
+	metaControllers := []controller{
+		// TODO (@amitkumardas):
+		//
+		// Currently GenericController is supported for local mode.
+		// Support for other controllers will be introduced
+		// once local mode for GenericController works fine
+		genericMetac,
+	}
 
 	// Start all controllers.
 	for _, c := range metaControllers {

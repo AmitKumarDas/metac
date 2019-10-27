@@ -45,14 +45,10 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// Manager that handles a GenericController API resource
-//
-// TODO (@amitkumardas):
-// Rename this to watchController & this file
-// to watchcontroller.go
-type genericControllerManager struct {
-	// Controller resource / yaml
-	Controller *v1alpha1.GenericController
+// Controller that reconciles GenericController specifications
+type watchController struct {
+	// GCtlConfig config / yaml
+	GCtlConfig *v1alpha1.GenericController
 
 	// ResourceManager is used to fetch server API resources
 	ResourceManager *dynamicdiscovery.APIResourceManager
@@ -91,30 +87,27 @@ type genericControllerManager struct {
 }
 
 // String implements Stringer interface
-func (mgr *genericControllerManager) String() string {
-	if mgr.Controller == nil {
-		// TODO (@amitkumardas):
-		// Rename this to GenericWatchController
-		return "GCtl-WatchCtl"
+func (mgr *watchController) String() string {
+	if mgr.GCtlConfig == nil {
+		return "WatchGCtl"
 	}
 	return fmt.Sprintf(
-		"GCtl %s/%s: WatchCtl",
-		mgr.Controller.Namespace, mgr.Controller.Name,
+		"WatchGCtl %s/%s", mgr.GCtlConfig.Namespace, mgr.GCtlConfig.Name,
 	)
 }
 
-// newGenericControllerManager returns a new instance of generic
-// controller with required parent & child informers, selectors,
-// update strategy & so on.
-func newGenericControllerManager(
+// newWatchController returns a new instance of watch controller
+// with required watch & child informers, selectors, update
+// strategy & so on.
+func newWatchController(
 	resourceMgr *dynamicdiscovery.APIResourceManager,
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
-	ctrl *v1alpha1.GenericController,
-) (ctrlMgr *genericControllerManager, newErr error) {
+	config *v1alpha1.GenericController,
+) (wCtl *watchController, newErr error) {
 
-	mgr := &genericControllerManager{
-		Controller:       ctrl,
+	ctl := &watchController{
+		GCtlConfig:       config,
 		ResourceManager:  resourceMgr,
 		DynamicClientSet: dynClientset,
 
@@ -125,7 +118,7 @@ func newGenericControllerManager(
 
 		watchQ: workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(),
-			"GenericController-"+ctrl.Namespace+"-"+ctrl.Name,
+			"WatchGCtl-"+config.Namespace+"-"+config.Name,
 		),
 
 		finalizer: &finalizer.Manager{
@@ -133,37 +126,37 @@ func newGenericControllerManager(
 			// this gets applied against the watch s.t GenericController
 			// has a chance to handle finalize hook i.e.handle deletion
 			// of watch resource
-			Name: "protect.gctl.metac.openebs.io/" + ctrl.Namespace + "-" + ctrl.Name,
+			Name: "protect.gctl.metac.openebs.io/" + config.Namespace + "-" + config.Name,
 			// gets enabled if Finalize property is set
-			Enabled: ctrl.Spec.Hooks.Finalize != nil,
+			Enabled: config.Spec.Hooks.Finalize != nil,
 		},
 	}
 
 	var err error
 
-	mgr.selector, err = makeSelector(resourceMgr, ctrl)
+	ctl.selector, err = makeSelector(resourceMgr, config)
 	if err != nil {
 		return nil, err
 	}
 
 	watchAPI := resourceMgr.GetByResource(
-		ctrl.Spec.Watch.APIVersion, ctrl.Spec.Watch.Resource,
+		config.Spec.Watch.APIVersion, config.Spec.Watch.Resource,
 	)
 	if watchAPI == nil {
 		return nil, errors.Errorf(
 			"%s: Can't find %q of %q",
-			mgr, ctrl.Spec.Watch.Resource, ctrl.Spec.Watch.APIVersion,
+			ctl, config.Spec.Watch.Resource, config.Spec.Watch.APIVersion,
 		)
 	}
 	// NOTE:
 	// We use a registry even though there is a single watch
 	// we might remove this registry if we believe single
 	// watch is good & sufficient in GenericController
-	mgr.watchAPIRegistry.Set(watchAPI.Group, watchAPI.Kind, watchAPI)
+	ctl.watchAPIRegistry.Set(watchAPI.Group, watchAPI.Kind, watchAPI)
 
 	// Remember the update strategy for each attachment type.
-	mgr.updateStrategies, err = makeUpdateStrategyForAttachments(
-		resourceMgr, ctrl.Spec.Attachments,
+	ctl.updateStrategies, err = makeUpdateStrategyForAttachments(
+		resourceMgr, config.Spec.Attachments,
 	)
 	if err != nil {
 		return nil, err
@@ -175,10 +168,10 @@ func newGenericControllerManager(
 		if newErr != nil {
 			// If newController fails, Close() any informers we created
 			// since Stop() will never be called.
-			for _, informer := range mgr.attachmentInformers {
+			for _, informer := range ctl.attachmentInformers {
 				informer.Close()
 			}
-			for _, informer := range mgr.watchInformers {
+			for _, informer := range ctl.watchInformers {
 				informer.Close()
 			}
 		}
@@ -186,42 +179,42 @@ func newGenericControllerManager(
 
 	// init watch informers
 	informer, err := dynInformerFactory.GetOrCreate(
-		ctrl.Spec.Watch.APIVersion, ctrl.Spec.Watch.Resource,
+		config.Spec.Watch.APIVersion, config.Spec.Watch.Resource,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err,
 			"%s: Can't create informer for %q of %q",
-			mgr, ctrl.Spec.Watch.Resource, ctrl.Spec.Watch.APIVersion,
+			ctl, config.Spec.Watch.Resource, config.Spec.Watch.APIVersion,
 		)
 	}
 	// NOTE:
 	// This is a registry of watch informers even though GenericController
 	// needs only one watch. This may be removed to a single informer
 	// if we conclude that single watch is best for GenericController.
-	mgr.watchInformers.Set(
-		ctrl.Spec.Watch.APIVersion, ctrl.Spec.Watch.Resource, informer,
+	ctl.watchInformers.Set(
+		config.Spec.Watch.APIVersion, config.Spec.Watch.Resource, informer,
 	)
 
 	// initialise the informers for attachments
-	for _, a := range ctrl.Spec.Attachments {
+	for _, a := range config.Spec.Attachments {
 		informer, err := dynInformerFactory.GetOrCreate(a.APIVersion, a.Resource)
 		if err != nil {
 			return nil, errors.Wrapf(
 				err,
 				"%s: Can't create informer for %q of %q",
-				mgr, a.Resource, a.APIVersion,
+				ctl, a.Resource, a.APIVersion,
 			)
 		}
-		mgr.attachmentInformers.Set(a.APIVersion, a.Resource, informer)
+		ctl.attachmentInformers.Set(a.APIVersion, a.Resource, informer)
 	}
 
-	return mgr, nil
+	return ctl, nil
 }
 
 // Start starts the decorator controller based on its fields
 // that were initialised earlier (mostly via its constructor)
-func (mgr *genericControllerManager) Start(workerCount int) {
+func (mgr *watchController) Start(workerCount int) {
 	// init the channels with empty structs
 	mgr.stopCh = make(chan struct{})
 	mgr.doneCh = make(chan struct{})
@@ -235,10 +228,10 @@ func (mgr *genericControllerManager) Start(workerCount int) {
 		DeleteFunc: mgr.enqueueWatch,
 	}
 	var resyncPeriod time.Duration
-	if mgr.Controller.Spec.ResyncPeriodSeconds != nil {
+	if mgr.GCtlConfig.Spec.ResyncPeriodSeconds != nil {
 		// Use a custom resync period if requested
 		// NOTE: This only applies to the parent
-		resyncPeriod = time.Duration(*mgr.Controller.Spec.ResyncPeriodSeconds) * time.Second
+		resyncPeriod = time.Duration(*mgr.GCtlConfig.Spec.ResyncPeriodSeconds) * time.Second
 		// Put a reasonable limit on it.
 		if resyncPeriod < time.Second {
 			resyncPeriod = time.Second
@@ -270,7 +263,7 @@ func (mgr *genericControllerManager) Start(workerCount int) {
 		syncFuncs := make(
 			[]cache.InformerSynced,
 			0,
-			1+1+len(mgr.Controller.Spec.Attachments),
+			1+1+len(mgr.GCtlConfig.Spec.Attachments),
 		)
 		for _, informer := range mgr.watchInformers {
 			syncFuncs = append(syncFuncs, informer.Informer().HasSynced)
@@ -278,7 +271,7 @@ func (mgr *genericControllerManager) Start(workerCount int) {
 		for _, informer := range mgr.attachmentInformers {
 			syncFuncs = append(syncFuncs, informer.Informer().HasSynced)
 		}
-		if !k8s.WaitForCacheSync(mgr.Controller.Key(), mgr.stopCh, syncFuncs...) {
+		if !k8s.WaitForCacheSync(mgr.GCtlConfig.Key(), mgr.stopCh, syncFuncs...) {
 			// We wait forever unless Stop() is called, so this isn't an error.
 			glog.Warningf("%s: Cache sync never finished", mgr)
 			return
@@ -297,7 +290,7 @@ func (mgr *genericControllerManager) Start(workerCount int) {
 	}()
 }
 
-func (mgr *genericControllerManager) Stop() {
+func (mgr *watchController) Stop() {
 	// closing stopCh will unblock all the logics where this
 	// channel was passed earlier. This triggers closing of
 	// doneCh as well
@@ -327,7 +320,7 @@ func (mgr *genericControllerManager) Stop() {
 
 // worker works for ever. Its only work is to process the
 // workitem i.e. the observed resource
-func (mgr *genericControllerManager) worker() {
+func (mgr *watchController) worker() {
 	for mgr.processNextWorkItem() {
 	}
 }
@@ -341,7 +334,7 @@ func (mgr *genericControllerManager) worker() {
 //
 // NOTE:
 //	It returns false only when queue has been marked for shutdown
-func (mgr *genericControllerManager) processNextWorkItem() bool {
+func (mgr *watchController) processNextWorkItem() bool {
 	// queue will give us the next item (parent resource in this case)
 	// to be reconciled unless shutdown was invoked against this queue
 	key, quit := mgr.watchQ.Get()
@@ -369,7 +362,7 @@ func (mgr *genericControllerManager) processNextWorkItem() bool {
 //
 // In other words, if the given watch resource is eligible it will be
 // added to this controller queue to be extracted later & reconciled.
-func (mgr *genericControllerManager) enqueueWatch(obj interface{}) {
+func (mgr *watchController) enqueueWatch(obj interface{}) {
 	// If the watched doesn't match our selector,
 	// and it doesn't have our finalizer, we don't care about it.
 	//
@@ -404,7 +397,7 @@ func (mgr *genericControllerManager) enqueueWatch(obj interface{}) {
 	mgr.watchQ.Add(key)
 }
 
-func (mgr *genericControllerManager) enqueueWatchAfter(obj interface{}, delay time.Duration) {
+func (mgr *watchController) enqueueWatchAfter(obj interface{}, delay time.Duration) {
 	key, err := makeWatchQueueKey(obj)
 	if err != nil {
 		glog.V(4).Infof(
@@ -419,7 +412,7 @@ func (mgr *genericControllerManager) enqueueWatchAfter(obj interface{}, delay ti
 }
 
 // updateWatch enqueues the watch object without any checks
-func (mgr *genericControllerManager) updateWatch(old, cur interface{}) {
+func (mgr *watchController) updateWatch(old, cur interface{}) {
 	mgr.enqueueWatch(cur)
 }
 
@@ -429,7 +422,7 @@ func (mgr *genericControllerManager) updateWatch(old, cur interface{}) {
 // NOTE:
 //	Errors are logged as debug messages since errors may auto correct
 // eventually
-func (mgr *genericControllerManager) syncWatch(key string) error {
+func (mgr *watchController) syncWatch(key string) error {
 	var err error
 	defer func() {
 		if !glog.V(4) {
@@ -474,7 +467,7 @@ func (mgr *genericControllerManager) syncWatch(key string) error {
 	return err
 }
 
-func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructured) error {
+func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error {
 	// If it doesn't match our selector, and it doesn't have our finalizer,
 	// ignore it.
 	isMatch := mgr.selector.Matches(watch)
@@ -533,7 +526,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 
 	// Call the sync hook
 	syncRequest := &SyncHookRequest{
-		Controller:  mgr.Controller,
+		Controller:  mgr.GCtlConfig,
 		Watch:       watch,
 		Attachments: observedAttachments,
 	}
@@ -634,8 +627,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 	// more checks if generic controller should create/delete/update
 	// any kind of attachments
 	readOnly := false
-	if mgr.Controller.Spec.ReadOnly != nil {
-		readOnly = *mgr.Controller.Spec.ReadOnly
+	if mgr.GCtlConfig.Spec.ReadOnly != nil {
+		readOnly = *mgr.GCtlConfig.Spec.ReadOnly
 	}
 	if readOnly {
 		// this controller instance is only meant for watch related changes
@@ -656,7 +649,7 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 		// build a new instance of attachment update strategy manager
 		updateStrategyMgr, err := newAttachmentUpdateStrategyManager(
 			mgr.ResourceManager,
-			mgr.Controller.Spec.Attachments,
+			mgr.GCtlConfig.Spec.Attachments,
 		)
 		if err != nil {
 			return err
@@ -671,8 +664,8 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 			AttachmentExecuteBase: common.AttachmentExecuteBase{
 				GetChildUpdateStrategyByGK: updateStrategyMgr.GetByGKOrDefault,
 				Watch:                      watch,
-				UpdateAny:                  mgr.Controller.Spec.UpdateAny,
-				DeleteAny:                  mgr.Controller.Spec.DeleteAny,
+				UpdateAny:                  mgr.GCtlConfig.Spec.UpdateAny,
+				DeleteAny:                  mgr.GCtlConfig.Spec.DeleteAny,
 			},
 
 			DynamicClientSet: mgr.DynamicClientSet,
@@ -694,13 +687,13 @@ func (mgr *genericControllerManager) syncWatchObj(watch *unstructured.Unstructur
 // IMO this should support a variety of combinations to
 // filter each attachment kind. Each attachment kind
 // might require its own combination of filters/selectors.
-func (mgr *genericControllerManager) getObservedAttachments(
+func (mgr *watchController) getObservedAttachments(
 	watch *unstructured.Unstructured,
 ) (common.AnyUnstructRegistry, error) {
 
 	attachmentRegistry := make(common.AnyUnstructRegistry)
 
-	for _, attachmentKind := range mgr.Controller.Spec.Attachments {
+	for _, attachmentKind := range mgr.GCtlConfig.Spec.Attachments {
 		attachmentInformer := mgr.attachmentInformers.Get(
 			attachmentKind.APIVersion, attachmentKind.Resource,
 		)
@@ -761,11 +754,11 @@ func (mgr *genericControllerManager) getObservedAttachments(
 	return attachmentRegistry, nil
 }
 
-func (mgr *genericControllerManager) callSyncHook(
+func (mgr *watchController) callSyncHook(
 	request *SyncHookRequest,
 ) (*SyncHookResponse, error) {
 
-	if mgr.Controller.Spec.Hooks == nil {
+	if mgr.GCtlConfig.Spec.Hooks == nil {
 		return nil,
 			errors.Errorf("%s: Invalid controller spec: Missing hooks", mgr)
 	}
@@ -780,7 +773,7 @@ func (mgr *genericControllerManager) callSyncHook(
 	// when the object no longer matches our selector.
 	// This allows the controller to clean up after itself if the object has been
 	// updated to disable the functionality added by the controller.
-	if mgr.Controller.Spec.Hooks.Finalize != nil &&
+	if mgr.GCtlConfig.Spec.Hooks.Finalize != nil &&
 		(request.Watch.GetDeletionTimestamp() != nil ||
 			!mgr.selector.Matches(request.Watch)) {
 
@@ -788,11 +781,11 @@ func (mgr *genericControllerManager) callSyncHook(
 
 		// Finalize
 		request.Finalizing = true
-		if mgr.Controller.Spec.Hooks.Finalize == nil {
+		if mgr.GCtlConfig.Spec.Hooks.Finalize == nil {
 			return nil,
 				errors.Errorf("%s: Invalid controller spec: Missing finalize hook", mgr)
 		}
-		err := common.CallHook(mgr.Controller.Spec.Hooks.Finalize, request, &response)
+		err := common.CallHook(mgr.GCtlConfig.Spec.Hooks.Finalize, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Finalize hook failed")
 		}
@@ -804,12 +797,12 @@ func (mgr *genericControllerManager) callSyncHook(
 
 		// Sync
 		request.Finalizing = false
-		if mgr.Controller.Spec.Hooks.Sync == nil {
+		if mgr.GCtlConfig.Spec.Hooks.Sync == nil {
 			return nil,
 				errors.Errorf("%s: Invalid controller spec: Missing sync hook", mgr)
 		}
 
-		err := common.CallHook(mgr.Controller.Spec.Hooks.Sync, request, &response)
+		err := common.CallHook(mgr.GCtlConfig.Spec.Hooks.Sync, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Sync hook failed")
 		}
