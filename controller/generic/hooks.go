@@ -63,6 +63,11 @@ type SyncHookResponse struct {
 	// the specified interval
 	ResyncAfterSeconds float64 `json:"resyncAfterSeconds"`
 
+	// When true skips reconciliation of attachments
+	// This is expected to be set to a boolean value based
+	// on runtime conditions while executing the hook logic
+	SkipReconcile bool `json:"skipReconcile"`
+
 	// Finalized should only be used by the finalize hook. If
 	// true then this response will be applied by metacontroller.
 	Finalized bool `json:"finalized"`
