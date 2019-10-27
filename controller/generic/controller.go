@@ -467,6 +467,9 @@ func (mgr *watchController) syncWatch(key string) error {
 	return err
 }
 
+// syncWatchObj reconciles the state based on this observed
+// watch resource instance and other configurations specified
+// in the GenericController
 func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error {
 	// If it doesn't match our selector, and it doesn't have our finalizer,
 	// ignore it.
@@ -540,6 +543,8 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		mgr, len(syncResult.Attachments), common.DescObjectAsKey(watch),
 	)
 
+	// form the desired attachments (received from the sync hook call)
+	// in a registry format
 	desiredAttachments :=
 		common.MakeAnyUnstructRegistryByReference(watch, syncResult.Attachments)
 
@@ -624,8 +629,30 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		glog.V(4).Infof("%s: Updated watch %s", mgr, common.DescObjectAsKey(watch))
 	}
 
-	// more checks if generic controller should create/delete/update
-	// any kind of attachments
+	// Check if desired attachments should be reconciled? There will
+	// be cases when we do not want to reconcile the attachments.
+	//
+	// NOTE:
+	// 	SkipReconcile looks similar to GenericController's spec.ReadOnly.
+	// However, both of them serve different purposes. SkipReconcile is
+	// dynamic and is set by the sync hook implementation. However ReadOnly
+	// is a static option that is set in GenericController's spec.
+	//
+	//	In other words, one expects SkipReconcile to vary from true to false
+	// & back to true depending on runtime conditions. On the other hand,
+	// ReadOnly is expected to be set to true or false for the entire
+	// lifecycle of the controller.
+	if syncResult.SkipReconcile {
+		// should skip reconciling attachments
+		glog.V(4).Infof(
+			"%s: Won't update attachments: SkipReconcile %t",
+			mgr, syncResult.SkipReconcile,
+		)
+		return nil
+	}
+
+	// Additional checks from generic controller specs
+	// If create/delete/update are supported for attachments?
 	readOnly := false
 	if mgr.GCtlConfig.Spec.ReadOnly != nil {
 		readOnly = *mgr.GCtlConfig.Spec.ReadOnly
