@@ -298,7 +298,8 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		updateAny = *e.UpdateAny
 	}
 
-	// which watch created this object in the first place
+	// check if this object was created due to a
+	// GenericController watch
 	ann := oObj.GetAnnotations()
 	wantWatch := string(e.Watch.GetUID())
 	gotWatch := ""
@@ -306,10 +307,9 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		gotWatch = ann[attachmentCreateAnnotationKey]
 	}
 
-	// if watches don't match && executor is not granted to update
-	// any kind of attachments then skip this update
+	// if watches don't match && this controller is not granted
+	// to update any arbitrary attachments then skip this update
 	if gotWatch != wantWatch && !updateAny {
-		// Skip objects that was not created due to this watch
 		glog.V(4).Infof(
 			"%s: Can't update %s: Annotation %s has %q want %q: UpdateAny %t",
 			e,
@@ -340,7 +340,7 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 	}
 
 	// Set who is responsible for this update. In other words set the
-	// watch details
+	// watch details in the annotations
 	if ann == nil {
 		ann = make(map[string]string)
 	}
@@ -434,6 +434,8 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) error {
 	ns := dObj.GetNamespace()
 	if ns == "" {
+		// if desired object has not been given a namespace
+		// then it is set to watch's namespace
 		ns = e.Watch.GetNamespace()
 	}
 

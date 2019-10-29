@@ -33,8 +33,13 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// TestCleanUninstall will verify if GenericController can be
-// used to implement clean uninstall requirements.
+// TestPostCleanUninstall will verify if GenericController can be
+// used to implement clean uninstall requirements when a namespace
+// is already marked for deletion but is stuck forever due to some
+// dependant resources left with finalizers.
+//
+// This test verifies the usecase when a GenericController is deployed
+// to get this stuck namespace deleted successfully.
 //
 // A clean uninstall implies when a workload specific Namespace
 // is removed from kubernetes cluster, the associated CRDs and CRs
@@ -42,19 +47,21 @@ import (
 // the cases where CRs are set with finalizers and the corresponding
 // controllers i.e. pods are no longer available due to the deletion
 // of this workload namespace.
-func TestCleanUninstall(t *testing.T) {
+func TestStuckToUnStuckDelete(t *testing.T) {
 	// namespace to setup GenericController
 	ctlNSNamePrefix := "gctl-test"
-	// name of the GenericController
-	ctlName := "clean-uninstall-ctrl"
 
-	// name of the target namespace which is watched by GenericController
-	targetNamespaceName := "target-ns"
+	// name of the GenericController
+	ctlName := "stuck-to-unstuck-gctrl"
+
+	// name of the target namespace which is deleted before
+	// starting the metacontroller
+	targetNamespaceName := "stuckie-ns"
 
 	// name of the target resource(s) that are created
 	// and are expected to get deleted upon deletion
 	// of target namespace
-	targetResName := "my-target"
+	targetResName := "my-stuckie"
 
 	f := framework.NewFixture(t)
 	defer f.TearDown()
@@ -81,35 +88,48 @@ func TestCleanUninstall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// setup some random CRDs, some of which are cluster scoped
-	// while others are namespace scoped
+	// setup some random CRDs, all of which are namespace scoped
 
-	// define a cluster scoped CStorPoolClaim CRD & CR with finalizers
-	cpcCRD, cpcClient, _ := f.SetupClusterCRDAndItsCR(
-		"CStorPoolClaim",
+	// define a namespace scoped CStorPoolClub CRD & CR with finalizers
+	cpcCRD, cpcClient, _ := f.SetupNamespaceCRDAndItsCR(
+		"CStorPoolClub",
+		targetNamespace.GetName(),
 		targetResName,
 		framework.SetFinalizers([]string{"protect.abc.io", "protect.def.io"}),
 	)
-	// define a namespace scoped CStorVolumeReplica CRD & CR with finalizers
+
+	// define a namespace scoped CStorVolumeRest CRD & CR with finalizers
 	cvrCRD, cvrClient, _ := f.SetupNamespaceCRDAndItsCR(
-		"CStorVolumeReplica",
+		"CStorVolumeRest",
 		targetNamespace.GetName(),
 		targetResName,
 		framework.SetFinalizers([]string{"protect.xyz.io", "protect.ced.io"}),
 	)
+
+	// ------------------------------------------------------
+	// Delete target namespace before deploying the controller
+	// ------------------------------------------------------
+	//
+	// Above makes the namespace deletion being stuck due to
+	// this namespace scoped custom resources' finalizers.
+	err = f.GetTypedClientset().CoreV1().Namespaces().Delete(targetNamespace.GetName(), &metav1.DeleteOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// ------------------------------------------------------------
 	// Define the "reconcile logic" for finalize i.e. delete event
 	// ------------------------------------------------------------
 	//
 	// NOTE:
-	// 	This gets triggered upon deletion of target namespace
+	// 	This gets triggered upon deletion of target CRD
 	//
 	// NOTE:
 	// 	This is a multi process reconciliation strategy:
-	//		Stage 1: remove finalizers from custom resources
-	//      Stage 2: delete custom resources that dont have finalizers
-	//		Stage 3: delete custom resource definition when there are no custom resources
+	//
+	// Stage 1: Remove finalizers from custom resources
+	// Stage 2: Delete custom resources that dont have finalizers
+	// Stage 3: Delete other custom resource definition(s) if there are no more custom resources
 	//
 	// FUTURE:
 	//	One can report these stages via status of the watch object
@@ -215,19 +235,18 @@ func TestCleanUninstall(t *testing.T) {
 		// enable controller to update any attachments
 		generic.WithUpdateAny(k8s.BoolPtr(true)),
 
-		// set 'sync' as well as 'finalize' hooks
-		//generic.WithWebhookSyncURL(&sHook.URL),
+		// set finalize' hook
 		generic.WithWebhookFinalizeURL(&fHook.URL),
 
-		// We want Namespace as our watched resource
+		// We want CStorPoolClub CRD as our watched resource
 		generic.WithWatch(
 			&v1alpha1.GenericControllerResource{
 				ResourceRule: v1alpha1.ResourceRule{
-					APIVersion: "v1",
-					Resource:   "namespaces",
+					APIVersion: "apiextensions.k8s.io/v1beta1",
+					Resource:   "customresourcedefinitions",
 				},
-				// We are interested only for our target namespace
-				NameSelector: []string{targetNamespaceName},
+				// We are interested only for one of our custom resource
+				NameSelector: []string{cpcCRD.GetName()},
 			},
 		),
 
@@ -236,7 +255,7 @@ func TestCleanUninstall(t *testing.T) {
 		// This is done so as to implement clean uninstall when
 		// above watch resource is deleted. A clean uninstall is
 		// successful if these declared attachments get deleted
-		// when watch i.e. our target namespace is deleted.
+		// when watch i.e. CRD is deleted.
 		generic.WithAttachments(
 			[]*v1alpha1.GenericControllerAttachment{
 				// We want all CPC custom resources as attachments
@@ -263,18 +282,15 @@ func TestCleanUninstall(t *testing.T) {
 						Method: v1alpha1.ChildUpdateInPlace,
 					},
 				},
-				// We want CRDs to be included as attachments &&
-				// We want only our CRDs i.e. CStorPoolClaim & CStorVolumeReplica
+				// We want CRDs to be included as attachments
+				// We want the other CRD i.e. CStorVolumeRest only
 				&v1alpha1.GenericControllerAttachment{
 					GenericControllerResource: v1alpha1.GenericControllerResource{
 						ResourceRule: v1alpha1.ResourceRule{
 							APIVersion: "apiextensions.k8s.io/v1beta1",
 							Resource:   "customresourcedefinitions",
 						},
-						NameSelector: []string{
-							cpcCRD.GetName(),
-							cvrCRD.GetName(),
-						},
+						NameSelector: []string{cvrCRD.GetName()},
 					},
 					UpdateStrategy: &v1alpha1.GenericControllerAttachmentUpdateStrategy{
 						Method: v1alpha1.ChildUpdateInPlace,
@@ -288,44 +304,46 @@ func TestCleanUninstall(t *testing.T) {
 	// Wait for the setup to behave similar to production env
 	// -------------------------------------------------------
 	//
-	// Wait till target namespace is assigned with a finalizer
-	// by GenericController. GenericController automatically
-	// updates the watch with its own finalizer if it finds a
-	// finalize hook in its specifications.
-	err = f.Wait(func() (bool, error) {
-		targetNamespace, err =
-			f.GetTypedClientset().CoreV1().Namespaces().Get(targetNamespaceName, metav1.GetOptions{})
+	// Wait till target CRD is assigned with GenericController's
+	// finalizer
+	//
+	// NOTE:
+	//	GenericController automatically updates the watch with
+	// its own finalizer if it finds a finalize hook in its
+	// specifications.
+	readyErr := f.Wait(func() (bool, error) {
+		cpcCRDWithF, err :=
+			f.GetCRDClient().CustomResourceDefinitions().Get(cpcCRD.GetName(), metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
-		for _, finalizer := range targetNamespace.GetFinalizers() {
+		for _, finalizer := range cpcCRDWithF.GetFinalizers() {
 			if finalizer == "protect.gctl.metac.openebs.io/"+ctlNS.GetName()+"-"+ctlName {
 				return true, nil
 			}
 		}
-		return false,
-			errors.Errorf("Namespace %s is not set with gctl finalizer", targetNamespaceName)
+		return false, errors.Errorf("CRD %s is not set with gctl finalizer", cpcCRD.GetName())
 
 	})
-	if err != nil {
+	if readyErr != nil {
 		// we wait till timeout & panic if condition is not met
-		t.Fatal(err)
+		t.Fatal(readyErr)
 	}
 
-	// Since setup is ready
+	// ------------------------------------------------------
+	// Delete target CRD to trigger above generic controller
+	// ------------------------------------------------------
 	//
-	// ------------------------------------------------------
-	// Trigger the test by deleting the target namespace
-	// ------------------------------------------------------
-	err = f.GetTypedClientset().CoreV1().Namespaces().
-		Delete(targetNamespace.GetName(), &metav1.DeleteOptions{})
-	if err != nil {
-		t.Fatal(err)
+	// In other words, deleting the generic controller's
+	// watch will trigger this controller's finalizer
+	delErr := f.GetCRDClient().CustomResourceDefinitions().Delete(cpcCRD.GetName(), &metav1.DeleteOptions{})
+	if delErr != nil {
+		t.Fatal(delErr)
 	}
 
 	// Need to wait & see if our controller works as expected
 	// Make sure the specified attachments are deleted
-	t.Logf("Waiting for deletion of CRs & CRDs")
+	t.Logf("Waiting for deletion of CRs, CRDs & Namespace")
 
 	err = f.Wait(func() (bool, error) {
 		var errs []error
@@ -333,7 +351,7 @@ func TestCleanUninstall(t *testing.T) {
 		// -------------------------------------------
 		// verify if our custom resources are deleted
 		// -------------------------------------------
-		cpc, cpcGetErr := cpcClient.Get(targetResName, metav1.GetOptions{})
+		cpc, cpcGetErr := cpcClient.Namespace(targetNamespaceName).Get(targetResName, metav1.GetOptions{})
 		if cpcGetErr != nil && !apierrors.IsNotFound(cpcGetErr) {
 			errs = append(
 				errs, errors.Wrapf(cpcGetErr, "Get CPC %s failed", targetResName),
@@ -362,14 +380,7 @@ func TestCleanUninstall(t *testing.T) {
 		if targetNSGetErr != nil && !apierrors.IsNotFound(targetNSGetErr) {
 			errs = append(errs, targetNSGetErr)
 		}
-		if targetNSAgain != nil && len(targetNSAgain.GetFinalizers()) != 0 {
-			errs = append(
-				errs,
-				errors.Errorf(
-					"Namespace %s has finalizers", targetNSAgain.GetName(),
-				),
-			)
-		}
+
 		if targetNSAgain != nil && targetNSAgain.GetDeletionTimestamp() == nil {
 			errs = append(
 				errs,
@@ -389,7 +400,7 @@ func TestCleanUninstall(t *testing.T) {
 	})
 
 	if err != nil {
-		t.Fatalf("CRs & CRDs deletion failed: %v", err)
+		t.Fatalf("CRs, CRDs & Namespace deletion failed: %v", err)
 	}
-	t.Logf("CRs & CRDs were finalized / deleted successfully")
+	t.Logf("CRDs, CRs & namespace were deleted successfully")
 }

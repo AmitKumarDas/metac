@@ -149,9 +149,6 @@ func testMain(tests func() int) error {
 	}
 	crdServer := &server.CRDBasedServer{Server: mserver}
 	stopServer, err := crdServer.Start(5)
-	//stopServer, err := server.Start(
-	//	ApiserverConfig(), 500*time.Millisecond, 30*time.Minute, 5,
-	//)
 	if err != nil {
 		return errors.Wrapf(err, "Can't start crd based metacontroller server")
 	}

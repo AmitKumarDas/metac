@@ -100,12 +100,11 @@ func (a *Apply) Merge(
 	return a.merge(orig, update)
 }
 
-// merge applies the update against the original object in the
-// style of kubectl apply
+// merge applies the update against the original object
+// in the style of kubectl apply
 //
-// TODO(@amitkumardas):
-// ApplyMerge along with reflect.DeepEqual may be used to build
-// assert logic based on observed yaml vs. desired yaml
+// NOTE:
+//	This should be invoked from the public Merge method
 func (a *Apply) merge(
 	orig, update *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {

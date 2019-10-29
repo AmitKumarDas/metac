@@ -67,7 +67,7 @@ type parentController struct {
 	updateStrategy updateStrategyMap
 	childInformers common.ResourceInformerRegistryByVR
 
-	finalizer *finalizer.Manager
+	finalizer *finalizer.Finalizer
 }
 
 func newParentController(
@@ -150,7 +150,7 @@ func newParentController(
 			workqueue.DefaultControllerRateLimiter(),
 			"CompositeController-"+api.Name,
 		),
-		finalizer: &finalizer.Manager{
+		finalizer: &finalizer.Finalizer{
 			Name:    "metac.openebs.io/compositecontroller-" + api.Name,
 			Enabled: api.Spec.Hooks.Finalize != nil,
 		},

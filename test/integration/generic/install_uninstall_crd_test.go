@@ -30,16 +30,17 @@ import (
 	"openebs.io/metac/test/integration/framework"
 )
 
-// TestApplyDeleteCRD will verify if GenericController can be
-// used to implement apply & delete of CustomResourceDefinition.
+// TestInstallUninstallCRD will verify if GenericController can be
+// used to implement install & uninstall of CustomResourceDefinition
+// given install & uninstall of a namespace.
 //
 // This function will try to get a CRD installed when a target namespace
 // gets installed. GenericController should also automatically uninstall
 // this CRD when this target namespace is deleted.
-func TestApplyDeleteCRD(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping TestApplyDeleteCRD in short mode")
-	}
+func TestInstallUninstallCRD(t *testing.T) {
+	// if testing.Short() {
+	// 	t.Skip("Skipping TestApplyDeleteCRD in short mode")
+	// }
 
 	// namespace to setup GenericController
 	ctlNSNamePrefix := "gctl-test"
@@ -48,7 +49,7 @@ func TestApplyDeleteCRD(t *testing.T) {
 	ctlName := "install-un-crd-ctrl"
 
 	// name of the target namespace which is watched by GenericController
-	targetNSName := "amitd"
+	targetNSName := "install-un-ns"
 
 	// name of the target CRD which is reconciled by GenericController
 	targetCRDName := "storages.dao.amitd.io"
@@ -127,6 +128,11 @@ func TestApplyDeleteCRD(t *testing.T) {
 	//
 	// NOTE:
 	// 	Finalize ensures deletion of target CRD via attachments
+
+	// isFinalized helps in determining if the CRD was deleted
+	// and is no longer a part of attachment.
+	var isFinalized bool
+
 	fHook := f.ServeWebhook(func(body []byte) ([]byte, error) {
 		req := generic.SyncHookRequest{}
 		if uerr := json.Unmarshal(body, &req); uerr != nil {
@@ -136,25 +142,36 @@ func TestApplyDeleteCRD(t *testing.T) {
 		// initialize the hook response
 		resp := generic.SyncHookResponse{}
 
-		// set attachments to nil to let GenericController
-		// finalize i.e. delete CRD
-		resp.Attachments = nil
-
-		// finalize hook should be executed till its request
-		// has attachments
-		if req.Attachments.IsEmpty() {
-			// since all attachments are deleted from cluster
-			// indicate GenericController to mark completion
-			// of finalize hook
-			resp.Finalized = true
-		} else {
-			// if there are still attachments seen in the request
-			// keep resyncing the watch
+		if req.Watch.GetDeletionTimestamp() == nil {
 			resp.ResyncAfterSeconds = 2
+
+			// no need to reconcile the attachments since
+			// watch is not marked for deletion
+			resp.SkipReconcile = true
+		} else {
+			// set attachments to nil to let GenericController
+			// finalize i.e. delete CRD
+			resp.Attachments = nil
+
+			// finalize hook should be executed till its request
+			// has attachments
+			if req.Attachments.IsEmpty() {
+				// since all attachments are deleted from cluster
+				// indicate GenericController to mark completion
+				// of finalize hook
+				resp.Finalized = true
+			} else {
+				// if there are still attachments seen in the request
+				// keep resyncing the watch
+				resp.ResyncAfterSeconds = 2
+			}
 		}
 
-		t.Logf("Finalize: Req.Attachments.Len=%d", req.Attachments.Len())
+		// Set this to help in verifing this test case outside
+		// of this finalize block
+		isFinalized = resp.Finalized
 
+		t.Logf("Finalize: Req.Attachments.Len=%d", req.Attachments.Len())
 		return json.Marshal(resp)
 	})
 
@@ -229,34 +246,54 @@ func TestApplyDeleteCRD(t *testing.T) {
 	// Make sure the specified attachments i.e. CRD is created
 	t.Logf("Wait for creation of CRD %s", targetCRDName)
 
-	err = f.Wait(func() (bool, error) {
-		var getErr error
-
+	crdCreateErr := f.Wait(func() (bool, error) {
 		// ------------------------------------------------
 		// verify if target CRD is created i.e. reconciled
 		// ------------------------------------------------
-
-		crdObj, getErr :=
+		crdCreateObj, createErr :=
 			f.GetCRDClient().CustomResourceDefinitions().Get(targetCRDName, metav1.GetOptions{})
-
-		if getErr != nil {
-			return false, getErr
+		if createErr != nil {
+			return false, createErr
 		}
 
-		if crdObj == nil {
+		if crdCreateObj == nil {
 			return false, errors.Errorf("CRD %s is not created", targetCRDName)
 		}
 
 		// condition passed
 		return true, nil
 	})
+	if crdCreateErr != nil {
+		t.Fatalf("CRD %s wasn't created: %v", targetCRDName, crdCreateErr)
+	}
 
-	if err != nil {
-		t.Fatalf("CRD %s wasn't created: %v", targetCRDName, err)
+	// Wait till target namespace is assigned with GenericController's
+	// finalizer
+	//
+	// NOTE:
+	//	GenericController automatically updates the watch with
+	// its own finalizer if it finds a finalize hook in its
+	// specifications.
+	nsWithFErr := f.Wait(func() (bool, error) {
+		nsWithF, err :=
+			f.GetTypedClientset().CoreV1().Namespaces().Get(targetNSName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		for _, finalizer := range nsWithF.GetFinalizers() {
+			if finalizer == "protect.gctl.metac.openebs.io/"+ctlNS.GetName()+"-"+ctlName {
+				return true, nil
+			}
+		}
+		return false, errors.Errorf("Namespace %s is not set with gctl finalizer", targetNSName)
+	})
+	if nsWithFErr != nil {
+		// we wait till timeout & panic if condition is not met
+		t.Fatal(nsWithFErr)
 	}
 
 	// ------------------------------------------------------
-	// Trigger reconcile again by deleting the target namespace
+	// Trigger finalize by deleting the target namespace
 	// ------------------------------------------------------
 
 	err =
@@ -269,12 +306,17 @@ func TestApplyDeleteCRD(t *testing.T) {
 	// Make sure the specified attachments i.e. CRD is deleted
 	t.Logf("Wait for deletion of CRD %s", targetCRDName)
 
-	err = f.Wait(func() (bool, error) {
+	crdDelErr := f.Wait(func() (bool, error) {
 		var getErr error
 
 		// ------------------------------------------------
 		// verify if target CRD is deleted i.e. reconciled
 		// ------------------------------------------------
+
+		if isFinalized {
+			t.Logf("CRD %s should have been deleted: IsFinalized %t", targetCRDName, isFinalized)
+			return true, nil
+		}
 
 		crdObj, getErr :=
 			f.GetCRDClient().CustomResourceDefinitions().Get(targetCRDName, metav1.GetOptions{})
@@ -292,9 +334,9 @@ func TestApplyDeleteCRD(t *testing.T) {
 		return true, nil
 	})
 
-	if err != nil {
-		t.Fatalf("CRD %s wasn't deleted: %v", targetCRDName, err)
+	if crdDelErr != nil {
+		t.Fatalf("CRD %s wasn't deleted: %v", targetCRDName, crdDelErr)
 	}
 
-	t.Logf("Test 'Install Uninstall CRD' passed")
+	t.Logf("Test Install Uninstall CRD %s passed", targetCRDName)
 }

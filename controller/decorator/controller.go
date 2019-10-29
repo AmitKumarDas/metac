@@ -88,7 +88,7 @@ type decoratorController struct {
 
 	// instance that deals with this controller's finalizer
 	// if any
-	finalizer *finalizer.Manager
+	finalizer *finalizer.Finalizer
 }
 
 // newDecoratorController returns a new instance of decorator
@@ -115,7 +115,7 @@ func newDecoratorController(
 			"DecoratorController-"+schema.Name,
 		),
 
-		finalizer: &finalizer.Manager{
+		finalizer: &finalizer.Finalizer{
 			// finalizer manager is entrusted with this finalier name
 			Name: "metac.openebs.io/decoratorcontroller-" + schema.Name,
 			// gets enabled if Finalize property is set

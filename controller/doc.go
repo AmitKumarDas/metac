@@ -14,7 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controller holds the business logic for this project.
-// Metac is all about providing a toolkit to develop Kubernetes
-// controllers.
+// Package controller holds the business logic for all the meta
+// controllers implemented by metac. The meta controllers that are
+// currently supported are:
+//
+// 1/ Composite Controller
+// 2/ Decorator Controller
+// 3/ Generic Controller
 package controller
