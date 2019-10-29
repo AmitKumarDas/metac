@@ -37,30 +37,46 @@ func TestMerge(t *testing.T) {
 			want:        `{}`,
 		},
 		{
-			name: "scalars",
-			observed: `{
-				"keep": "other",
-				"remove": "other",
-				"replace": "other"
-			}`,
-			lastApplied: `{"remove": "old", "replace": "old"}`,
-			desired:     `{"replace": "new", "add": "new" }`,
-			want: `{
-				"replace": "new",
-				"add": "new",
-				"keep": "other"
-			}`,
+			name:        "scalars",
+			observed:    `{"a": "old", "b": "old", "c": "old"}`,
+			lastApplied: `{"b": "old", "c": "old"}`,
+			desired:     `{"c": "new", "d": "new" }`,
+			want:        `{"c": "new", "d": "new", "a": "old"}`,
 		},
 		{
-			name: "nested object",
-			observed: `{
-				"update": {"keep": "other", "remove": "other"}
-			}`,
-			lastApplied: `{"update": {"remove": "old", "replace": "old"}}`,
-			desired:     `{"update": {"replace": "new", "add": "new"}}`,
-			want: `{
-				"update": {"replace": "new", "add": "new", "keep": "other"}
-			}`,
+			name:        "scalars minus last applied",
+			observed:    `{"a": "old", "b": "old", "c": "old"}`,
+			lastApplied: `{}`,
+			desired:     `{"a": "new", "d": "new" }`,
+			want:        `{"a": "new", "d": "new", "b": "old", "c": "old"}`,
+		},
+		{
+			name:        "scalars with last applied equals desired",
+			observed:    `{"a": "old", "b": "old", "c": "old"}`,
+			lastApplied: `{"a": "new", "d": "new"}`,
+			desired:     `{"a": "new", "d": "new"}`,
+			want:        `{"a": "new", "b": "old", "c": "old", "d": "new"}`,
+		},
+		{
+			name:        "nested object",
+			observed:    `{"hey": {"a": "old", "b": "old"}}`,
+			lastApplied: `{"hey": {"b": "old", "a": "old"}}`,
+			desired:     `{"hey": {"a": "new", "c": "new"}}`,
+			want:        `{"hey": {"a": "new", "c": "new"}}`,
+		},
+		{
+			name:        "nested object minus last applied",
+			observed:    `{"hey": {"a": "old", "b": "old"}}`,
+			lastApplied: `{}`,
+			desired:     `{"hey": {"a": "new", "c": "new"}}`,
+			want:        `{"hey": {"a": "new", "b": "old", "c": "new"}}`,
+		},
+		{
+			name:        "nested object with last applied equals desired",
+			observed:    `{"hey": {"a": "old", "b": "old"}}`,
+			lastApplied: `{"hey": {"a": "new", "c": "new"}}`,
+			desired:     `{"hey": {"a": "new", "c": "new"}}`,
+			want:        `{"hey": {"a": "new", "b": "old", "c": "new"}}`,
 		},
 		{
 			name:        "replace list",
@@ -70,33 +86,88 @@ func TestMerge(t *testing.T) {
 			want:        `{"list": [7,8,9,{"b":false}]}`,
 		},
 		{
+			name:        "replace list minus last applied",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{}`,
+			desired:     `{"list": [7,8,9,{"b":false}]}`,
+			want:        `{"list": [7,8,9,{"b":false}]}`,
+		},
+		{
+			name:        "replace list with last applied equals desired",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{"list": [7,8,9,{"b":false}]}`,
+			desired:     `{"list": [7,8,9,{"b":false}]}`,
+			want:        `{"list": [7,8,9,{"b":false}]}`,
+		},
+		{
+			name:        "remove list minus last applied",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{}`,
+			desired:     `{"list": []}`,
+			want:        `{"list": []}`,
+		},
+		{
+			name:        "remove list with last applied",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{"list": [7,8,9,{"b":false}]}`,
+			desired:     `{"list": []}`,
+			want:        `{"list": []}`,
+		},
+		{
+			name:        "remove object with last applied minus desired",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{"list": [7,8,9,{"b":false}]}`,
+			desired:     `{}`,
+			want:        `{}`,
+		},
+		{
+			name:        "keep list minus last applied minus desired",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{}`,
+			desired:     `{}`,
+			want:        `{"list": [1,2,3,{"a":true}]}`,
+		},
+		{
+			name:        "remove specific items from list",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{"list": [2,{"a":true}]}`,
+			desired:     `{"list": [3,{"a":true}]}`,
+			want:        `{"list": [3,{"a":true}]}`,
+		},
+		{
+			name:        "remove specific items from list minus last applied",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{}`,
+			desired:     `{"list": [3,{"a":true}]}`,
+			want:        `{"list": [3,{"a":true}]}`,
+		},
+		{
+			name:        "remove specific items from list with empty last applied",
+			observed:    `{"list": [1,2,3,{"a":true}]}`,
+			lastApplied: `{"list": []}`,
+			desired:     `{"list": [3,{"a":true}]}`,
+			want:        `{"list": [3,{"a":true}]}`,
+		},
+		{
 			name: "merge list-map",
 			observed: `{
-        "listMap": [
-          {"name": "keep", "value": "other"},
-          {"name": "remove", "value": "other"},
-          {"name": "merge", "nested": {"keep": "other"}}
-        ],
-				"ports1": [
-					{"port": 80, "keep": "other"}
+				"listMap": [
+					{"name": "keep", "value": "other"},
+					{"name": "remove", "value": "other"},
+					{"name": "merge", "nested": {"keep": "other"}}
 				],
-				"ports2": [
-					{"containerPort": 80, "keep": "other"}
-				]
-      }`,
+				"ports1": [{"port": 80, "keep": "other"}],
+				"ports2": [{"containerPort": 80, "keep": "other"}]
+      		}`,
 			lastApplied: `{
-        "listMap": [
-          {"name": "remove", "value": "old"}
-        ],
-				"ports1": [
-					{"port": 80, "remove": "old"}
-				]
-      }`,
+				"listMap": [{"name": "remove", "value": "old"}],
+				"ports1": [{"port": 80, "remove": "old"}]
+		    }`,
 			desired: `{
-        "listMap": [
-          {"name": "add", "value": "new"},
-          {"name": "merge", "nested": {"add": "new"}}
-        ],
+				"listMap": [
+					{"name": "add", "value": "new"},
+					{"name": "merge", "nested": {"add": "new"}}
+				],
 				"ports1": [
 					{"port": 80, "add": "new"},
 					{"port": 90}
@@ -105,13 +176,13 @@ func TestMerge(t *testing.T) {
 					{"containerPort": 80},
 					{"containerPort": 90}
 				]
-      }`,
+      		}`,
 			want: `{
-        "listMap": [
-          {"name": "keep", "value": "other"},
-          {"name": "merge", "nested": {"keep": "other", "add": "new"}},
-          {"name": "add", "value": "new"}
-        ],
+				"listMap": [
+					{"name": "keep", "value": "other"},
+					{"name": "merge", "nested": {"keep": "other", "add": "new"}},
+					{"name": "add", "value": "new"}
+				],
 				"ports1": [
 					{"port": 80, "keep": "other", "add": "new"},
 					{"port": 90}
@@ -120,34 +191,32 @@ func TestMerge(t *testing.T) {
 					{"containerPort": 80, "keep": "other"},
 					{"containerPort": 90}
 				]
-      }`,
+      		}`,
 		},
 		{
 			name: "replace list of objects that's not a list-map",
 			observed: `{
-        "notListMap": [
-          {"name": "keep", "value": "other"},
-          {"notName": "remove", "value": "other"},
-          {"name": "merge", "nested": {"keep": "other"}}
-        ]
-      }`,
+				"notListMap": [
+					{"name": "keep", "value": "other"},
+					{"notName": "remove", "value": "other"},
+					{"name": "merge", "nested": {"keep": "other"}}
+				]
+			}`,
 			lastApplied: `{
-        "notListMap": [
-          {"name": "remove", "value": "old"}
-        ]
-      }`,
+				"notListMap": [{"name": "remove", "value": "old"}]
+      		}`,
 			desired: `{
-        "notListMap": [
-          {"name": "add", "value": "new"},
-          {"name": "merge", "nested": {"add": "new"}}
-        ]
-      }`,
+				"notListMap": [
+					{"name": "add", "value": "new"},
+					{"name": "merge", "nested": {"add": "new"}}
+				]
+      		}`,
 			want: `{
-        "notListMap": [
-          {"name": "add", "value": "new"},
-          {"name": "merge", "nested": {"add": "new"}}
-        ]
-      }`,
+				"notListMap": [
+					{"name": "add", "value": "new"},
+					{"name": "merge", "nested": {"add": "new"}}
+				]
+			}`,
 		},
 	}
 

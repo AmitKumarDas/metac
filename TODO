@@ -1,17 +1,7 @@
 ### TODO:
 - Test metac with changes to rbac 
-- Make all examples to work & then make it better
 - Add integration tests w.r.t GenericController:
-    - check if finalizer works
-    - check if attachments not created by gctl are not updated
-    - check if attachments not created by gctl are not deleted
-    - check if ReadOnly works
-    - check if UpdateAny works
-    - check if DeleteAny works
     - check if same watch can update an attachment via multiple gctl specs
-    - check for 2-way merge as well as 3-way merge
-        - default to 2-way merge if only finalize hook is present
-        - default to 3-way merge if both sync & finalize hooks are present
     - send specific parts of attachments:
         - send - []string{Name, MetaData, Labels, Annotations, Spec, Status} 
         - default sends everything
@@ -46,16 +36,9 @@
       - CustomResource, or # current mode
       - Config # default mode
   - make cctl, dctl & gctl work from config files vs. current way that depends on CRDs
-- Explore the one binary sidecars
-    - jsonnetd service + hooks as a docker image
 - Use latest stable Kubernetes version & etcd for integration testing
 - restructure examples to enable community
 - code to use klog
-- test/unittest
-- find bugs & fix
-- Make metacontroller watch resources from specific namespace if required
-- Should Metac support UDS?
-    - https://eli.thegreenplace.net/2019/unix-domain-sockets-in-go/
 - >>enisoc 2:08 AM
     if the new client-go dynamic informer does everything metacontroller needs 
     (e.g. start/stop dynamically without process restart), it would be great to
@@ -66,28 +49,22 @@
 
 
 ### Updated TODO List With Priority
-- Apply via Update support - 5
-    - Unit Test 3-way merge
-    - Unit Test 2-way merge
-    - Check if 3-way can be converted to 2-way merge on some condition
-- Skip Reconcile support - 2 - DONE
+- Skip Reconcile support - DONE
 - Skip Reconcile example - ?
-- Skip Reconcile integration tests - ?
-- Advanced Selector support - 6
+- Advanced Selector support - 1
     - study existing implementation; push more code comments
     - study existing unit tests; push more code comments
     - look again at the names of key, operator, etc;
     - implement the required stuff
-- Local config based execution - 1 - DONE
-    - Read existing changes; push more code comments - DONE
-    - Send PR - DONE
-- Local config based examples - 7
-- Local config based integration tests - 8
-- Namespace controlled execution - 3
-- Allowed-namespaces based flag - 4
-- Send specific parts of attachments - 9
+- Local config based examples - 3
+- Local config based integration tests - 2
+    - Split manifests
+    - Design a separate suite_test.go for local config based tests
+- Send specific parts of attachments - ?
     - e.g. namespace & name, metadata only, status only, metadata + spec, labels only, annotations only, 
-    - examples - 10
-    - integration tests - 11
+    - examples - ?
+    - integration tests - ?
 - Simplify Integration Tests - ?
     - refer to apiserver-extensions project
+- Inline Hook Calls - 4
+- Inline Hook Call Integration Tests - 5

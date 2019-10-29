@@ -36,7 +36,7 @@ const (
 	// testing involves some amount of wait & retry i.e. polling
 	// these variables are tunables used during polling
 	defaultWaitTimeout  = 60 * time.Second
-	defaultWaitInterval = 200 * time.Millisecond
+	defaultWaitInterval = 500 * time.Millisecond
 )
 
 // Fixture is the base structure that various test cases will make use

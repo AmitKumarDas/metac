@@ -1,5 +1,6 @@
 /*
 Copyright 2018 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,4 +50,29 @@ func RemoveFinalizer(obj metav1.Object, name string) {
 		}
 	}
 	// We never found it, so it's already gone and there's nothing to do.
+}
+
+// HasAnnotation returns true if given object has the provided
+// annotation
+func HasAnnotation(obj metav1.Object, key, value string) bool {
+	anns := obj.GetAnnotations()
+	if anns == nil {
+		return false
+	}
+	return anns[key] == value
+}
+
+// AddAnnotation adds the given annotation to obj, if it
+// isn't already present.
+func AddAnnotation(obj metav1.Object, key, value string) {
+	if HasAnnotation(obj, key, value) {
+		// It's already present, so there's nothing to do.
+		return
+	}
+	anns := obj.GetAnnotations()
+	if anns == nil {
+		anns = make(map[string]string)
+	}
+	anns[key] = value
+	obj.SetAnnotations(anns)
 }

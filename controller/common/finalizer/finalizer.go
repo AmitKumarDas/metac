@@ -1,6 +1,6 @@
 /*
-Copyright 2019 The MayaData Authors.
 Copyright 2018 Google Inc.
+Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,30 +25,38 @@ import (
 	dynamicobject "openebs.io/metac/dynamic/object"
 )
 
-// Manager encapsulates controller logic for dealing with
-// any specific finalizer.
-//
-// TODO (@amitkumardas) Move this to dynamic pkg to
-// let dynamic pkg be used as a library by other
-// projects
-type Manager struct {
-	// Name of the finalizer that needs to be managed
-	Name    string
+// Finalizer manages updating metacontroller finalizer value
+// against the target resource's finalizers field
+type Finalizer struct {
+	// Name of the finalizer that needs to be set or unset
+	Name string
+
+	// Boolean that flags if finalizer should be added or removed
 	Enabled bool
 }
 
-// SyncObject adds or removes the finalizer on the given object
-// as necessary.
-func (m *Manager) SyncObject(
-	client *dynamicclientset.ResourceClient,
-	obj *unstructured.Unstructured,
+// SyncObject reconciles i.e. adds or removes the finalizer on
+// the given object as necessary.
+func (m *Finalizer) SyncObject(
+	client *dynamicclientset.ResourceClient, obj *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 	// If the cached object passed in is already in the right state,
 	// we'll assume we don't need to check the live object.
+	//
+	// NOTE:
+	//	Right state here can imply either of below:
+	//
+	// - Finalizer is desired and this object has the finalizer
+	// - Finalizer is not desired & this object does not have the finalizer
 	if dynamicobject.HasFinalizer(obj, m.Name) == m.Enabled {
 		return obj, nil
 	}
+
 	// Otherwise, we may need to update the object.
+	//
+	// NOTE:
+	// 	Enabled is typically set by the caller, when metacontroller
+	// specs has a finalizer hook
 	if m.Enabled {
 		// If the object is already pending deletion, we don't add the finalizer.
 		// We might have already removed it.
@@ -63,7 +71,7 @@ func (m *Manager) SyncObject(
 // ShouldFinalize returns true if the controller should take action
 // to manage children even though the parent is pending deletion
 // (i.e. finalize).
-func (m *Manager) ShouldFinalize(parent metav1.Object) bool {
+func (m *Finalizer) ShouldFinalize(parent metav1.Object) bool {
 	// There's no point managing children if the parent has a GC finalizer,
 	// because we'd be fighting the GC.
 	if hasGCFinalizer(parent) {
@@ -74,6 +82,15 @@ func (m *Manager) ShouldFinalize(parent metav1.Object) bool {
 		return false
 	}
 	return m.Enabled
+}
+
+// RemoveFinalizer removes the finalizer on the given object
+//
+// NOTE:
+//	This mutates the given object and does not update this state
+// at the cluster.
+func (m *Finalizer) RemoveFinalizer(obj *unstructured.Unstructured) {
+	dynamicobject.RemoveFinalizer(obj, m.Name)
 }
 
 // hasGCFinalizer returns true if obj has any GC finalizer.

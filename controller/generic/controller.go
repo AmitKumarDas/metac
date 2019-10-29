@@ -61,8 +61,9 @@ type watchController struct {
 	// GenericController yaml
 	watchAPIRegistry common.ResourceRegistryByGK
 
-	// selector to filter watch & attachment resources
-	selector *Selector
+	// selectors to filter watch & attachment resources
+	watchSelector      *Selector
+	attachmentSelector *Selector
 
 	// channels to flag stopping or completing the
 	// reconcile process
@@ -83,7 +84,7 @@ type watchController struct {
 
 	// instance that deals with this controller's finalizer
 	// if any
-	finalizer *finalizer.Manager
+	finalizer *finalizer.Finalizer
 }
 
 // String implements Stringer interface
@@ -121,20 +122,21 @@ func newWatchController(
 			"WatchGCtl-"+config.Namespace+"-"+config.Name,
 		),
 
-		finalizer: &finalizer.Manager{
-			// finalizer manager is entrusted with this finalizer name
-			// this gets applied against the watch s.t GenericController
-			// has a chance to handle finalize hook i.e.handle deletion
+		finalizer: &finalizer.Finalizer{
+			// Finalizer is entrusted with this finalizer name.
+			// This gets applied against the watch s.t GenericController
+			// has a chance to handle finalize hook i.e. handle deletion
 			// of watch resource
 			Name: "protect.gctl.metac.openebs.io/" + config.Namespace + "-" + config.Name,
-			// gets enabled if Finalize property is set
+
+			// Enable if Finalize field is set in the generic controller
 			Enabled: config.Spec.Hooks.Finalize != nil,
 		},
 	}
 
 	var err error
 
-	ctl.selector, err = makeSelector(resourceMgr, config)
+	ctl.watchSelector, ctl.attachmentSelector, err = makeAllSelector(resourceMgr, config)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +372,7 @@ func (mgr *watchController) enqueueWatch(obj interface{}) {
 	// or matches this controller's selectors, then this resource
 	// belongs to this controller & hence should be queued
 	if watchObj, ok := obj.(*unstructured.Unstructured); ok {
-		isMatch := mgr.selector.Matches(watchObj)
+		isMatch := mgr.watchSelector.Matches(watchObj)
 		hasFinalizer := dynamicobject.HasFinalizer(watchObj, mgr.finalizer.Name)
 		if !isMatch && !hasFinalizer {
 			glog.V(4).Infof(
@@ -473,7 +475,7 @@ func (mgr *watchController) syncWatch(key string) error {
 func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error {
 	// If it doesn't match our selector, and it doesn't have our finalizer,
 	// ignore it.
-	isMatch := mgr.selector.Matches(watch)
+	isMatch := mgr.watchSelector.Matches(watch)
 	hasFinalizer := dynamicobject.HasFinalizer(watch, mgr.finalizer.Name)
 	if !isMatch && !hasFinalizer {
 		glog.V(4).Infof(
@@ -510,7 +512,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 	watch = watchCopy
 
 	// Check the finalizer again in case we just removed it.
-	isMatch = mgr.selector.Matches(watch)
+	isMatch = mgr.watchSelector.Matches(watch)
 	hasFinalizer = dynamicobject.HasFinalizer(watch, mgr.finalizer.Name)
 	if !isMatch && !hasFinalizer {
 		glog.V(4).Infof(
@@ -536,6 +538,13 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 	syncResult, err := mgr.callSyncHook(syncRequest)
 	if err != nil {
 		return err
+	}
+	if syncResult == nil {
+		// nothing to do; hence return
+		//
+		// this can happen when only finalize hook is set
+		// and time to finalize has not yet come
+		return nil
 	}
 
 	glog.V(4).Infof(
@@ -613,7 +622,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 
 		// check if its time to remove its finalizer
 		if syncResult.Finalized {
-			dynamicobject.RemoveFinalizer(watchCopy, mgr.finalizer.Name)
+			mgr.finalizer.RemoveFinalizer(watchCopy)
 		}
 
 		glog.V(4).Infof("%s: Updating watch %s", mgr, common.DescObjectAsKey(watch))
@@ -673,8 +682,8 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 	//	2. if watch is pending deletion and controller has a 'finalize' hook
 	if watch.GetDeletionTimestamp() == nil || mgr.finalizer.ShouldFinalize(watch) {
 
-		// build a new instance of attachment update strategy manager
-		updateStrategyMgr, err := newAttachmentUpdateStrategyManager(
+		// build a new instance of attachment update strategy finder
+		updateStrategyMgr, err := newAttachmentUpdateStrategyFinder(
 			mgr.ResourceManager,
 			mgr.GCtlConfig.Spec.Attachments,
 		)
@@ -689,7 +698,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		// Reconcile attachments via attachment manager
 		attMgr := &common.AttachmentManager{
 			AttachmentExecuteBase: common.AttachmentExecuteBase{
-				GetChildUpdateStrategyByGK: updateStrategyMgr.GetByGKOrDefault,
+				GetChildUpdateStrategyByGK: updateStrategyMgr.GetStrategyByGKOrDefault,
 				Watch:                      watch,
 				UpdateAny:                  mgr.GCtlConfig.Spec.UpdateAny,
 				DeleteAny:                  mgr.GCtlConfig.Spec.DeleteAny,
@@ -768,7 +777,7 @@ func (mgr *watchController) getObservedAttachments(
 		// @amitkumardas: Need to think more on this !!
 		for _, attObj := range attachmentObjs {
 			// Do not consider if match fails
-			if !mgr.selector.Matches(attObj) {
+			if !mgr.attachmentSelector.Matches(attObj) {
 				glog.V(4).Infof(
 					"%s: Ignore attachment %s: Selector doesn't match",
 					mgr, common.DescObjectAsKey(attObj),
@@ -785,7 +794,9 @@ func (mgr *watchController) callSyncHook(
 	request *SyncHookRequest,
 ) (*SyncHookResponse, error) {
 
-	if mgr.GCtlConfig.Spec.Hooks == nil {
+	if mgr.GCtlConfig.Spec.Hooks == nil ||
+		(mgr.GCtlConfig.Spec.Hooks.Finalize == nil &&
+			mgr.GCtlConfig.Spec.Hooks.Sync == nil) {
 		return nil,
 			errors.Errorf("%s: Invalid controller spec: Missing hooks", mgr)
 	}
@@ -802,11 +813,11 @@ func (mgr *watchController) callSyncHook(
 	// updated to disable the functionality added by the controller.
 	if mgr.GCtlConfig.Spec.Hooks.Finalize != nil &&
 		(request.Watch.GetDeletionTimestamp() != nil ||
-			!mgr.selector.Matches(request.Watch)) {
+			!mgr.watchSelector.Matches(request.Watch)) {
 
 		glog.V(4).Infof("%s: Invoking finalize hook", mgr)
 
-		// Finalize
+		// Set finalizing to true since this is finalize hook invocation
 		request.Finalizing = true
 		if mgr.GCtlConfig.Spec.Hooks.Finalize == nil {
 			return nil,
@@ -820,15 +831,15 @@ func (mgr *watchController) callSyncHook(
 		glog.V(3).Infof("%s: Finalize hook completed", mgr)
 	} else {
 
-		glog.V(4).Infof("%s: Invoking sync hook", mgr)
-
-		// Sync
-		request.Finalizing = false
 		if mgr.GCtlConfig.Spec.Hooks.Sync == nil {
-			return nil,
-				errors.Errorf("%s: Invalid controller spec: Missing sync hook", mgr)
+			glog.V(4).Infof("%s: Skipping sync hook: Sync is not configured", mgr)
+			return nil, nil
 		}
 
+		glog.V(4).Infof("%s: Invoking sync hook", mgr)
+
+		// Set finalizing to false since this is sync hook invocation
+		request.Finalizing = false
 		err := common.CallHook(mgr.GCtlConfig.Spec.Hooks.Sync, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Sync hook failed")
@@ -873,27 +884,37 @@ func makeAttachmentUpdateStrategyKey(apiGroup, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiGroup)
 }
 
-// makeSelector builds selector for watch as well as for all
-// attachements declared in GenericController
-func makeSelector(
+// makeAllSelector builds selector for watch as well as for all
+// attachments declared in GenericController
+func makeAllSelector(
 	resourceMgr *dynamicdiscovery.APIResourceManager,
 	schema *v1alpha1.GenericController,
-) (*Selector, error) {
-	// initialize the selector with watch
-	var options = []SelectorOption{
-		ResourceSelectorOption(resourceMgr, schema.Spec.Watch),
+) (watchSelector, attachmentSelector *Selector, selErr error) {
+
+	// selector for watch
+	wSel, err := NewSelector(SelectRuleFromResource(resourceMgr, schema.Spec.Watch))
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// add selector options for attachements
+	// selector options for all attachements
+	var options []SelectorOption
 	for _, attachment := range schema.Spec.Attachments {
 		options = append(
 			options,
-			ResourceSelectorOption(
+			SelectRuleFromResource(
 				resourceMgr, attachment.GenericControllerResource,
 			),
 		)
 	}
-	return NewSelector(options...)
+
+	// one selector for all attachments
+	aSel, err := NewSelector(options...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return wSel, aSel, nil
 }
 
 // makeUpdateStrategyForAttachments returns the update strategies
