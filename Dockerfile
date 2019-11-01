@@ -28,6 +28,7 @@ COPY controller/ controller/
 COPY dynamic/ dynamic/
 COPY hooks/ hooks/
 COPY server/ server/
+COPY start/ start/
 COPY third_party/ third_party/
 
 # build metacontroller binary
