@@ -1,6 +1,5 @@
 /.idea/
 /vendor/
-/client/generated/
 /metac
 /hack/bin/
 .*.swp

@@ -48,6 +48,11 @@ import (
 // controllers i.e. pods are no longer available due to the deletion
 // of this workload namespace.
 func TestStuckToUnStuckDelete(t *testing.T) {
+	// skipping this in short mode as this is a flaky test
+	if testing.Short() {
+		t.Skip("Skipping TestStuckToUnStuckDelete in short mode")
+	}
+
 	// namespace to setup GenericController
 	ctlNSNamePrefix := "gctl-test"
 
