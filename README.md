@@ -45,3 +45,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and the [contributor guide](https://metac
 ## Licensing
 
 This project is licensed under the [Apache License 2.0](LICENSE).
+
+## Comparison (little bit dated w.r.t Metac)
+- https://admiralty.io/blog/kubernetes-custom-resource-controller-and-operator-development-tools/

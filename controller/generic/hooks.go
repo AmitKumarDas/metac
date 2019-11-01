@@ -72,3 +72,25 @@ type SyncHookResponse struct {
 	// true then this response will be applied by metacontroller.
 	Finalized bool `json:"finalized"`
 }
+
+// HookInvoker manages invocation of hook. This understands inline
+// hook invocation that is supported by generic controller
+type HookInvoker struct {
+	Schema *v1alpha1.Hook
+}
+
+// Invoke invokes the hook based on the given request & fills the
+// response post successful invocation
+func (i *HookInvoker) Invoke(req *SyncHookRequest, resp *SyncHookResponse) error {
+	// if inline call then set appropriate call func
+	if i.Schema.Inline != nil && i.Schema.Inline.FuncName != nil {
+		// create a new instance of generic controller based inline hook invoker
+		ihi, err := NewInlineHookInvoker(*i.Schema.Inline.FuncName)
+		if err != nil {
+			return err
+		}
+		return ihi.Invoke(req, resp)
+	}
+	// this is one of the commonly supported hooks
+	return common.InvokeHook(i.Schema, req, resp)
+}

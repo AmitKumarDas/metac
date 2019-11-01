@@ -101,7 +101,7 @@ func (e *HookExecutor) Execute(req *SyncHookRequest) (*SyncHookResponse, error) 
 		e.Controller.Spec.Hooks.Finalize != nil {
 		// Finalize
 		req.Finalizing = true
-		err := common.CallHook(e.Controller.Spec.Hooks.Finalize, req, &resp)
+		err := common.InvokeHook(e.Controller.Spec.Hooks.Finalize, req, &resp)
 		if err != nil {
 			return nil, errors.Wrapf(err, "%s: Finalize hook failed for %s", e, req)
 		}
@@ -113,7 +113,7 @@ func (e *HookExecutor) Execute(req *SyncHookRequest) (*SyncHookResponse, error) 
 				errors.Errorf("%s: Sync hook not defined for %s", e, req)
 		}
 
-		err := common.CallHook(e.Controller.Spec.Hooks.Sync, req, &resp)
+		err := common.InvokeHook(e.Controller.Spec.Hooks.Sync, req, &resp)
 		if err != nil {
 			return nil,
 				errors.Wrapf(err, "%s: Sync hook failed for %s", e, req)

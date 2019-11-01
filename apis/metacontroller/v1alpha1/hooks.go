@@ -21,21 +21,15 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // Hook refers to the logic that builds the desired
 // state of resources
 type Hook struct {
-	// Webhook based desired state
+	// Webhook invocation to arrive at desired state
 	Webhook *Webhook `json:"webhook,omitempty"`
 
-	// Go templating based desired state
-	GoTemplate *GoTemplateHook `json:"gotemplate,omitempty"`
-
-	// Jsonnet based desired state
-	Jsonnet *JsonnetHook `json:"jsonnet,omitempty"`
-
-	// Job based desired state
-	Job *JobHook `json:"job,omitempty"`
+	// Inline invocation to arrive at desired state
+	Inline *Inline `json:"inline,omitempty"`
 }
 
-// Webhook refers to the logic that needs to be invoked
-// as a web hook to get the desired state of resources
+// Webhook refers to the logic that gets invoked as
+// as web hook to arrive at the desired state
 type Webhook struct {
 	URL     *string          `json:"url,omitempty"`
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
@@ -44,33 +38,12 @@ type Webhook struct {
 	Service *ServiceReference `json:"service,omitempty"`
 }
 
-// JobHook represents the logic to derive the desired state. A job
-// based hook can be invoked for a sync/finalize action.
+// Inline refers to the logic that gets invoked as inline
+// function call to arrive at the desired state.
 //
-// A JobHook is a Kubernetes Job API that can be applied by Metac
-// binary itself.
-type JobHook struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata"`
-
-	// Image refers to container image
-	Image string `json:"image"`
-}
-
-// GoTemplateHook represents the logic that helps in achieving the
-// desired state. This logic written as a go template. Metac fetches
-// this go template from Kubernetes ConfigMap. Metac has a go template
-// parser to parse the same.
-type GoTemplateHook ConfigMap
-
-// JsonnetHook represents the logic that helps in achieving the
-// desired state. This logic is written in jsonnet. Metac fetches
-// this jsonnet from Kubernetes ConfigMap and has a jsonnet parser
-// to parse the same.
-type JsonnetHook ConfigMap
-
-// ConfigMap refers to a Kubernetes ConfigMap
-type ConfigMap struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace, omitempty"`
+// NOTE:
+//	This works as a single binary that works via meta controller
+// invoking this inline hook function.
+type Inline struct {
+	FuncName *string `json:"funcName,omitempty"`
 }
