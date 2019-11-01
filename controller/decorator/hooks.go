@@ -67,7 +67,7 @@ func (c *decoratorController) callSyncHook(
 			!c.parentSelector.Matches(request.Object)) {
 		// Finalize
 		request.Finalizing = true
-		err := common.CallHook(c.schema.Spec.Hooks.Finalize, request, &response)
+		err := common.InvokeHook(c.schema.Spec.Hooks.Finalize, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Finalize hook failed")
 		}
@@ -78,7 +78,7 @@ func (c *decoratorController) callSyncHook(
 			return nil, errors.Errorf("Sync hook not defined")
 		}
 
-		err := common.CallHook(c.schema.Spec.Hooks.Sync, request, &response)
+		err := common.InvokeHook(c.schema.Spec.Hooks.Sync, request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Sync hook failed")
 		}

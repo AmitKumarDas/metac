@@ -23,38 +23,50 @@ import (
 	"github.com/pkg/errors"
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/hooks"
+	"openebs.io/metac/hooks/webhook"
 )
 
-// SetCallFnFromSchema sets the HookCaller instance with appropriate
-// caller logic based on the provided schema
+// InvokeHook invokes the given hook with the given request
+func InvokeHook(schema *v1alpha1.Hook, request, response interface{}) error {
+	i, err := hooks.NewInvoker(WithHookSchema(schema))
+	if err != nil {
+		return err
+	}
+	return i.Invoke(request, response)
+}
+
+// WithHookSchema sets the hook invoker instance with appropriate
+// invoke function based on the provided schema
 //
 // NOTE:
 //	This logic is expected to have multiple **if conditions** to support
-// different hook types e.g. Webhook, gRPCHook, GoTemplateHook etc
-// when they are supported in future
-func SetCallFnFromSchema(schema *v1alpha1.Hook) hooks.HookCallerOption {
-	return func(caller *hooks.HookCaller) error {
-		// if webhook then set the webhook call func
-		if schema.Webhook != nil {
-			// create a new instance of WebhookCaller
-			mgr, err := hooks.NewWebhookManager(
-				SetWebhookURLFromSchema(schema.Webhook),
-				SetWebhookTimeoutFromSchemaOrDefault(schema.Webhook),
-			)
-			if err != nil {
-				return err
-			}
-
-			caller.CallFn = mgr.Invoke
+// different hook types e.g. webhook, inline hook, etc
+func WithHookSchema(schema *v1alpha1.Hook) hooks.InvokerOption {
+	return func(invoker *hooks.Invoker) error {
+		// webhook is the only commonly supported hook for
+		// all meta controllers
+		if schema.Webhook == nil {
+			return errors.Errorf("Unsupported hook %v", schema)
 		}
+		// Since this is webhook set the webhook call func
+		// create a new instance of webhook invoker
+		whi, err := webhook.NewInvoker(
+			// set various webhook options
+			SetWebhookURLFromSchema(schema.Webhook),
+			SetWebhookTimeoutFromSchemaOrDefault(schema.Webhook),
+		)
+		if err != nil {
+			return err
+		}
+		invoker.InvokeFn = whi.Invoke
 		return nil
 	}
 }
 
 // SetWebhookURLFromSchema evaluates provided webhook's url and sets
 // the evaluated url against the WebhookCaller instance
-func SetWebhookURLFromSchema(schema *v1alpha1.Webhook) hooks.WebhookManagerOption {
-	return func(caller *hooks.WebhookManager) error {
+func SetWebhookURLFromSchema(schema *v1alpha1.Webhook) webhook.InvokerOption {
+	return func(caller *webhook.Invoker) error {
 		if schema.URL != nil {
 			// Full URL overrides everything else.
 			caller.URL = *schema.URL
@@ -98,11 +110,8 @@ func SetWebhookURLFromSchema(schema *v1alpha1.Webhook) hooks.WebhookManagerOptio
 
 // SetWebhookTimeoutFromSchemaOrDefault evaluates webhook timeout and sets the
 // evaluated timeout against WebhookCaller instance
-func SetWebhookTimeoutFromSchemaOrDefault(
-	schema *v1alpha1.Webhook,
-) hooks.WebhookManagerOption {
-
-	return func(caller *hooks.WebhookManager) error {
+func SetWebhookTimeoutFromSchemaOrDefault(schema *v1alpha1.Webhook) webhook.InvokerOption {
+	return func(caller *webhook.Invoker) error {
 		if schema.Timeout == nil {
 			// Defaults to 10 Seconds to preserve current behavior.
 			caller.Timeout = 10 * time.Second
@@ -121,13 +130,4 @@ func SetWebhookTimeoutFromSchemaOrDefault(
 		caller.Timeout = t.Duration
 		return nil
 	}
-}
-
-// CallHook invokes appropriate hook
-func CallHook(schema *v1alpha1.Hook, request, response interface{}) error {
-	caller, err := hooks.NewHookCaller(SetCallFnFromSchema(schema))
-	if err != nil {
-		return err
-	}
-	return caller.Call(request, response)
 }

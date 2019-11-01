@@ -176,10 +176,12 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 
 					// This is a custom resource with finalizers
 					// Hence, re-build the attachment with empty finalizers
-					respAtt.SetAPIVersion(att.GetAPIVersion())
-					respAtt.SetKind(att.GetKind())
-					respAtt.SetName(att.GetName())
-					respAtt.SetNamespace(att.GetNamespace())
+					respAtt.SetUnstructuredContent(att.UnstructuredContent())
+					//respAtt.SetAPIVersion(att.GetAPIVersion())
+					//respAtt.SetKind(att.GetKind())
+					//respAtt.SetName(att.GetName())
+					//respAtt.SetNamespace(att.GetNamespace())
+
 					// Setting finalizers to empty is a must to
 					// let this custom resource get deleted
 					respAtt.SetFinalizers([]string{})
@@ -213,6 +215,7 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 			"Finalize attachments count: Req %d: Resp %d",
 			req.Attachments.Len(), len(resp.Attachments),
 		)
+		t.Logf("Req attachments: \n%v", req.Attachments)
 
 		return json.Marshal(resp)
 	})
@@ -282,7 +285,6 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 						Method: v1alpha1.ChildUpdateInPlace,
 					},
 				},
-				// We want CRDs to be included as attachments
 				// We want the other CRD i.e. CStorVolumeRest only
 				&v1alpha1.GenericControllerAttachment{
 					GenericControllerResource: v1alpha1.GenericControllerResource{
@@ -370,24 +372,6 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 		}
 		if cvr != nil {
 			errs = append(errs, errors.Errorf("CVR %s is not deleted", targetResName))
-		}
-
-		// ------------------------------------------
-		// verify if our target namespace is deleted
-		// ------------------------------------------
-		targetNSAgain, targetNSGetErr := f.GetTypedClientset().CoreV1().Namespaces().
-			Get(targetNamespace.GetName(), metav1.GetOptions{})
-		if targetNSGetErr != nil && !apierrors.IsNotFound(targetNSGetErr) {
-			errs = append(errs, targetNSGetErr)
-		}
-
-		if targetNSAgain != nil && targetNSAgain.GetDeletionTimestamp() == nil {
-			errs = append(
-				errs,
-				errors.Errorf(
-					"Namespace %s is not marked for deletion", targetNSAgain.GetName(),
-				),
-			)
 		}
 
 		// condition did not pass in case of any errors

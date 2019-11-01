@@ -21,39 +21,39 @@ import (
 	"github.com/pkg/errors"
 )
 
-// HookCaller enables invocation of appropriate hook
-type HookCaller struct {
-	// CallFn abstracts invocation of hook. Typically specific
+// Invoker enables invocation of appropriate hook
+type Invoker struct {
+	// InvokeFn abstracts invocation of hook. Typically specific
 	// hook implementors will have their call methods set here
-	CallFn func(request, response interface{}) error
+	InvokeFn func(request, response interface{}) error
 }
 
-// HookCallerOption is a typed function that helps in building
-// up the HookCaller instance
+// InvokerOption is a typed function that helps in building
+// up the Invoker instance
 //
 // This follows the pattern called "functional options"
-type HookCallerOption func(*HookCaller) error
+type InvokerOption func(*Invoker) error
 
-// NewHookCaller returns a new instance of HookCaller
+// NewInvoker returns a new instance of Invoker.
 // This requires at-least one option to be sent from
 // its callers.
-func NewHookCaller(must HookCallerOption, others ...HookCallerOption) (*HookCaller, error) {
+func NewInvoker(must InvokerOption, others ...InvokerOption) (*Invoker, error) {
 
-	var options = []HookCallerOption{must}
+	var options = []InvokerOption{must}
 	options = append(options, others...)
 
-	c := &HookCaller{}
+	i := &Invoker{}
 	for _, o := range options {
-		o(c)
+		o(i)
 	}
 
-	if c.CallFn == nil {
-		return nil, errors.Errorf("Invalid hook: Nil CallFunc")
+	if i.InvokeFn == nil {
+		return nil, errors.Errorf("Invoke func can't be nil")
 	}
-	return c, nil
+	return i, nil
 }
 
-// Call invokes the hook
-func (c *HookCaller) Call(request, response interface{}) error {
-	return c.CallFn(request, response)
+// Invoke invokes the hook
+func (c *Invoker) Invoke(request, response interface{}) error {
+	return c.InvokeFn(request, response)
 }

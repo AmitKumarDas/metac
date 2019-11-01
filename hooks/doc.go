@@ -16,10 +16,6 @@ limitations under the License.
 
 // Package hooks will have logic corresponding to specific hook
 // implementations. For example, procedure to invoke a webhook
-// is coded in this package. Similarly, gRPC, GoTemplate, Jsonnet,
-// etc hook implementations will have their logic in this package.
-//
-// TODO (@amitkumardas):
-// 	We might move each hook implementation to their specific packages
-// in the future.
+// is coded in this package. Similarly, inline hook implementation
+// has its logic in this package.
 package hooks

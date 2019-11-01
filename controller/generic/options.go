@@ -50,6 +50,25 @@ func WithDeleteAny(b *bool) Option {
 	}
 }
 
+// WithInlinehookSyncFunc sets the GenericController instance's
+// inline hook sync function
+func WithInlinehookSyncFunc(funcName *string) Option {
+	return func(ctl *v1alpha1.GenericController) {
+		if funcName == nil {
+			return
+		}
+		if ctl.Spec.Hooks == nil {
+			ctl.Spec.Hooks = &v1alpha1.GenericControllerHooks{}
+		}
+		if ctl.Spec.Hooks.Sync == nil {
+			ctl.Spec.Hooks.Sync = &v1alpha1.Hook{}
+		}
+		ctl.Spec.Hooks.Sync.Inline = &v1alpha1.Inline{
+			FuncName: funcName,
+		}
+	}
+}
+
 // WithWebhookSyncURL sets the GenericController instance's
 // Webhook sync url
 func WithWebhookSyncURL(url *string) Option {
@@ -65,6 +84,25 @@ func WithWebhookSyncURL(url *string) Option {
 		}
 		ctl.Spec.Hooks.Sync.Webhook = &v1alpha1.Webhook{
 			URL: url,
+		}
+	}
+}
+
+// WithInlinehookFinalizeFunc sets the GenericController instance's
+// inline hook sync function
+func WithInlinehookFinalizeFunc(funcName *string) Option {
+	return func(ctl *v1alpha1.GenericController) {
+		if funcName == nil {
+			return
+		}
+		if ctl.Spec.Hooks == nil {
+			ctl.Spec.Hooks = &v1alpha1.GenericControllerHooks{}
+		}
+		if ctl.Spec.Hooks.Finalize == nil {
+			ctl.Spec.Hooks.Finalize = &v1alpha1.Hook{}
+		}
+		ctl.Spec.Hooks.Finalize.Inline = &v1alpha1.Inline{
+			FuncName: funcName,
 		}
 	}
 }

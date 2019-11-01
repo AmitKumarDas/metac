@@ -384,8 +384,6 @@ func (mgr *watchController) enqueueWatch(obj interface{}) {
 		}
 	}
 
-	glog.V(4).Infof("%s: Will try to enqueue %v", mgr, obj)
-
 	key, err := makeWatchQueueKey(obj)
 	if err != nil {
 		glog.V(4).Infof(
@@ -396,6 +394,8 @@ func (mgr *watchController) enqueueWatch(obj interface{}) {
 		)
 		return
 	}
+
+	glog.V(4).Infof("%s: Will enqueue %s", mgr, key)
 	mgr.watchQ.Add(key)
 }
 
@@ -540,16 +540,21 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		return err
 	}
 	if syncResult == nil {
+		glog.V(4).Infof(
+			"%s: Hook response for watch %s is nil", mgr, common.DescObjectAsKey(watch),
+		)
+
 		// nothing to do; hence return
 		//
-		// this can happen when only finalize hook is set
-		// and time to finalize has not yet come
+		// one of the scenarios this can happen is when
+		// only finalize hook is set and time to finalize
+		// has not yet come
 		return nil
 	}
 
 	glog.V(4).Infof(
-		"%s: %d attachment(s) received from hook response for watch %s",
-		mgr, len(syncResult.Attachments), common.DescObjectAsKey(watch),
+		"%s: %d attachment(s) received from hook response %v: watch %s",
+		mgr, len(syncResult.Attachments), syncResult, common.DescObjectAsKey(watch),
 	)
 
 	// form the desired attachments (received from the sync hook call)
@@ -589,9 +594,19 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		syncResult.Status = finalWatchStatus
 	}
 
+	glog.V(4).Infof(
+		"%s: Desired watch %s: Labels %v: Anns %v: Status %v",
+		mgr, common.DescObjectAsKey(watch), syncResult.Labels, syncResult.Annotations, syncResult.Status,
+	)
+
 	labelsChanged := updateStringMap(finalWatchLabels, syncResult.Labels)
 	annotationsChanged := updateStringMap(finalWatchAnnotations, syncResult.Annotations)
 	statusChanged := !reflect.DeepEqual(finalWatchStatus, syncResult.Status)
+
+	glog.V(4).Infof(
+		"%s: Watch %s changes: Labels change %t: Anns change %t: Status change %t",
+		mgr, common.DescObjectAsKey(watch), labelsChanged, annotationsChanged, statusChanged,
+	)
 
 	// Only update the watch if anything changed
 	//
@@ -604,7 +619,13 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		watchCopy.SetAnnotations(finalWatchAnnotations)
 		k8s.SetNestedField(watchCopy.Object, syncResult.Status, "status")
 
-		if statusChanged && watchClient.HasSubresource("status") {
+		hasSubResourceStatus := watchClient.HasSubresource("status")
+		glog.V(4).Infof(
+			"%s: Watch %s: Client has status as sub resource %t",
+			mgr, common.DescObjectAsKey(watch), hasSubResourceStatus,
+		)
+
+		if statusChanged && hasSubResourceStatus {
 			// The regular Update below will ignore changes to .status
 			// so we do it separately.
 			result, err := watchClient.Namespace(watch.GetNamespace()).
@@ -819,11 +840,10 @@ func (mgr *watchController) callSyncHook(
 
 		// Set finalizing to true since this is finalize hook invocation
 		request.Finalizing = true
-		if mgr.GCtlConfig.Spec.Hooks.Finalize == nil {
-			return nil,
-				errors.Errorf("%s: Invalid controller spec: Missing finalize hook", mgr)
+		hi := &HookInvoker{
+			Schema: mgr.GCtlConfig.Spec.Hooks.Finalize,
 		}
-		err := common.CallHook(mgr.GCtlConfig.Spec.Hooks.Finalize, request, &response)
+		err := hi.Invoke(request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Finalize hook failed")
 		}
@@ -840,7 +860,10 @@ func (mgr *watchController) callSyncHook(
 
 		// Set finalizing to false since this is sync hook invocation
 		request.Finalizing = false
-		err := common.CallHook(mgr.GCtlConfig.Spec.Hooks.Sync, request, &response)
+		hi := &HookInvoker{
+			Schema: mgr.GCtlConfig.Spec.Hooks.Sync,
+		}
+		err := hi.Invoke(request, &response)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Sync hook failed")
 		}
