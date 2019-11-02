@@ -1,0 +1,26 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: set-status-on-cr
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: set-status-on-cr
+  template:
+    metadata:
+      labels:
+        app: set-status-on-cr
+    spec:
+      containers:
+      - name: set-status-on-cr
+        image: quay.io/amitkumardas/set-status-on-cr:latest
+        command: ["/usr/bin/set-status-on-cr"]
+        args:
+        - --logtostderr
+        - --run-as-local
+        - -v=4
+        - --discovery-interval=20s
+---
