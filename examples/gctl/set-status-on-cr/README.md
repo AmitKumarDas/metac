@@ -11,6 +11,7 @@ is supposed to set status of a custom resource of kind `CoolNerd`.
 
 ```sh
 kubectl apply -f ns_and_crd.yaml
+kubectl create configmap set-status-on-cr --from-file=config.yaml
 kubectl apply -f operator.yaml
 
 # verify if above was installed properly

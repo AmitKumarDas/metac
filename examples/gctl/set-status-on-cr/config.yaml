@@ -1,4 +1,3 @@
----
 apiVersion: metac.openebs.io/v1alpha1
 kind: GenericController
 metadata:
@@ -11,4 +10,3 @@ spec:
     sync:
       inline:
         funcName: sync/cool-nerd
----

@@ -68,6 +68,8 @@ func New(path string) *Config {
 // Load loads all metac config files & converts them
 // to unstructured instances
 func (c *Config) Load() (MetacConfigs, error) {
+	glog.V(4).Infof("Will load config from path %s", c.Path)
+
 	files, readerr := ioutil.ReadDir(c.Path)
 	if readerr != nil {
 		return nil, readerr
@@ -78,6 +80,8 @@ func (c *Config) Load() (MetacConfigs, error) {
 
 	// there can be multiple config files
 	for _, file := range files {
+		glog.V(4).Infof("Will load config file %s", file.Name())
+
 		f, openerr := os.Open(file.Name())
 		if openerr != nil {
 			glog.Errorf("Failed to open metac config file %s: %v", file.Name(), openerr)
@@ -107,7 +111,11 @@ func (c *Config) Load() (MetacConfigs, error) {
 			loaderr = errors.Wrapf(loaderr, "Failed to load metac config %s", file.Name())
 			return nil, loaderr
 		}
+
+		glog.V(4).Infof("Config file %s loaded successfully", file.Name())
 		out = append(out, ul...)
 	}
+
+	glog.V(4).Infof("Config file(s) loaded successfully from path %s", c.Path)
 	return out, nil
 }
