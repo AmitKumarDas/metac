@@ -17,10 +17,7 @@ limitations under the License.
 package config
 
 import (
-	"bufio"
-	"bytes"
 	"io/ioutil"
-	"os"
 
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -68,15 +65,18 @@ func New(path string) *Config {
 // Load loads all metac config files & converts them
 // to unstructured instances
 func (c *Config) Load() (MetacConfigs, error) {
-	glog.V(4).Infof("Will load metac config file(s) from path %s", c.Path)
+	glog.V(4).Infof("Will load metac config(s) from path %s", c.Path)
 
-	files, readerr := ioutil.ReadDir(c.Path)
-	if readerr != nil {
-		return nil, readerr
+	files, readDirErr := ioutil.ReadDir(c.Path)
+	if readDirErr != nil {
+		return nil, readDirErr
+	}
+
+	if len(files) == 0 {
+		return nil, errors.Errorf("No metac config(s) found at %s", c.Path)
 	}
 
 	var out MetacConfigs
-	var loaderr error
 
 	// there can be multiple config files
 	for _, file := range files {
@@ -84,42 +84,26 @@ func (c *Config) Load() (MetacConfigs, error) {
 			// we don't want to load directory
 			continue
 		}
-		glog.V(4).Infof("Will load metac config file %s", file.Name())
+		fileNameWithPath := c.Path + file.Name()
+		glog.V(4).Infof("Will load metac config %s", fileNameWithPath)
 
-		f, openerr := os.Open(file.Name())
-		if openerr != nil {
-			glog.Errorf("Failed to open metac config file %s: %v", file.Name(), openerr)
-			return nil, openerr
-		}
-		defer func() {
-			if loaderr != nil {
-				glog.Errorf("%v", loaderr)
-			}
-			if closeerr := f.Close(); closeerr != nil {
-				glog.Fatal(closeerr)
-			}
-		}()
-
-		var buffer bytes.Buffer
-		s := bufio.NewScanner(f)
-		for s.Scan() {
-			buffer.Write(s.Bytes())
-		}
-		if loaderr = s.Err(); loaderr != nil {
-			loaderr = errors.Wrapf(loaderr, "Failed to load metac config %s", file.Name())
-			return nil, loaderr
+		contents, readFileErr := ioutil.ReadFile(fileNameWithPath)
+		if readFileErr != nil {
+			return nil, errors.Wrapf(
+				readFileErr, "Failed to read metac config %s", fileNameWithPath,
+			)
 		}
 
-		ul, loaderr := k8s.YAMLToUnstructuredSlice(buffer.Bytes())
+		ul, loaderr := k8s.YAMLToUnstructuredSlice(contents)
 		if loaderr != nil {
-			loaderr = errors.Wrapf(loaderr, "Failed to load metac config %s", file.Name())
+			loaderr = errors.Wrapf(loaderr, "Failed to load metac config %s", fileNameWithPath)
 			return nil, loaderr
 		}
 
-		glog.V(4).Infof("Metac config file %s loaded successfully", file.Name())
+		glog.V(4).Infof("Metac config %s loaded successfully", fileNameWithPath)
 		out = append(out, ul...)
 	}
 
-	glog.V(4).Infof("Metac config file(s) loaded successfully from path %s", c.Path)
+	glog.V(4).Infof("Metac config(s) loaded successfully from path %s", c.Path)
 	return out, nil
 }
