@@ -13,6 +13,8 @@ github.com/AmitKumarDas/metac v0.1.1-0.20191102055026-5df534cfd844 h1:CnPyDo/J6V
 github.com/AmitKumarDas/metac v0.1.1-0.20191102055026-5df534cfd844/go.mod h1:xLgChAG4WHBGdM2ucRyieWJ2r5MCFEi23gRNv+iix8U=
 github.com/AmitKumarDas/metac v0.1.1-0.20191102083300-1c3c1a468ac5 h1:865tFzbfT19pWMcbemFZe42iMAEr1t7ijPnTNI2xKsU=
 github.com/AmitKumarDas/metac v0.1.1-0.20191102083300-1c3c1a468ac5/go.mod h1:xLgChAG4WHBGdM2ucRyieWJ2r5MCFEi23gRNv+iix8U=
+github.com/AmitKumarDas/metac v0.1.1-0.20191102135317-d6ba051bd1f3 h1:BKrlBJZ4CPfAgCMmJSPlepgU0F8cSOBd3Mpx5MxRSVE=
+github.com/AmitKumarDas/metac v0.1.1-0.20191102135317-d6ba051bd1f3/go.mod h1:xLgChAG4WHBGdM2ucRyieWJ2r5MCFEi23gRNv+iix8U=
 github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78/go.mod h1:LmzpDX56iTiv29bbRTIsUNlaFfuhWRQBWjQdVyAevI8=
 github.com/Azure/go-autorest/autorest v0.9.0/go.mod h1:xyHB1BMZT0cuDHU7I0+g046+BFDTQ8rEZB0s4Yfa6bI=
 github.com/Azure/go-autorest/autorest/adal v0.5.0/go.mod h1:8Z9fGy2MpX0PvDjB1pEgQTmVqjGhiHBW7RJJEciWzS0=
