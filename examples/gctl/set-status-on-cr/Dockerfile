@@ -27,5 +27,5 @@ RUN apt-get update && \
   apt-get install --no-install-recommends -y ca-certificates && \
   rm -rf /var/lib/apt/lists/*
 
-COPY config.yaml /etc/config/metac/
+COPY config.yaml /etc/config/metac/config.yaml
 COPY --from=builder /go/bin/set-status-on-cr /usr/bin/set-status-on-cr
