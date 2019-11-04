@@ -3,5 +3,5 @@ apiVersion: examples.metac.io/v1
 kind: CoolNerd
 metadata:
   name: cool-status-on-me
-  namespace: amitd
+  namespace: set-status-on-cr
 ---

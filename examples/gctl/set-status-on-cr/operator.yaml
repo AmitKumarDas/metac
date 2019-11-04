@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: set-status-on-cr
-  namespace: default
+  namespace: set-status-on-cr
 spec:
   replicas: 1
   selector:
@@ -14,6 +14,7 @@ spec:
       labels:
         app: set-status-on-cr
     spec:
+      serviceAccountName: set-status-on-cr
       containers:
       - name: set-status-on-cr
         image: quay.io/amitkumardas/set-status-on-cr:latest
@@ -21,6 +22,6 @@ spec:
         args:
         - --logtostderr
         - --run-as-local
-        - -v=4
+        - -v=1
         - --discovery-interval=20s
 ---
