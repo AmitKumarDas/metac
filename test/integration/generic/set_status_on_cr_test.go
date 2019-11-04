@@ -32,10 +32,10 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// TestWatchStatus will verify if GenericController can be
+// TestSetStatusOnCR will verify if GenericController can be
 // used to implement setting of status against the watched
 // resource
-func TestWatchStatus(t *testing.T) {
+func TestSetStatusOnCR(t *testing.T) {
 	// namespace to setup GenericController
 	ctlNSNamePrefix := "gctl-test"
 

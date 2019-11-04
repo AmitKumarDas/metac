@@ -273,5 +273,8 @@ func (gc GenericController) Key() string {
 // GenericControllerKey returns key formatted type for the
 // given namespace & name values
 func GenericControllerKey(namespace, name string) string {
+	if namespace == "" {
+		return name
+	}
 	return namespace + "/" + name
 }

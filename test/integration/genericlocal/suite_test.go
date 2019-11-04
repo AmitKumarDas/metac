@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package generic
+package genericlocal
 
 import (
 	"testing"
@@ -27,8 +27,18 @@ import (
 // call.
 //
 // NOTE:
-// 	framework.TestMain provides setup & teardown features required for
-// all the individual testcases to run.
+// 	`func TestMain(m *testing.M) {...}`
+// is the canonical golang way to execute the test functions
+// present in all *_test.go files in this package.
+//
+// NOTE:
+// 	framework.TestWithConfigMetac provides the common dependencies
+// like setup & teardown to let this test package run properly.
+//
+// NOTE:
+// 	Instead of directly invoking m.Run() where m is *testing.M this
+// function delegates to framework's TestWithConfigMetac which in
+// turn invokes m.Run()
 func TestMain(m *testing.M) {
-	framework.TestWithCRDMetac(m.Run)
+	framework.TestWithConfigMetac(m.Run)
 }

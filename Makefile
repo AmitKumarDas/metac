@@ -72,3 +72,9 @@ integration-test-gctl: generated_files integration-dependencies
 	@PATH="$(PWD)/hack/bin:$(PATH)" \
 	go test ./test/integration/generic/... -v -timeout 5m \
 	-args --logtostderr -v=1
+
+.PHONY: integration-test-local-gctl
+integration-test-local-gctl: generated_files integration-dependencies
+	@PATH="$(PWD)/hack/bin:$(PATH)" \
+	go test ./test/integration/genericlocal/... -v -timeout 5m \
+	-args --logtostderr -v=1

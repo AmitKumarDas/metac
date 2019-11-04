@@ -604,7 +604,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 	statusChanged := !reflect.DeepEqual(finalWatchStatus, syncResult.Status)
 
 	glog.V(4).Infof(
-		"%s: Watch %s changes: Labels change %t: Anns change %t: Status change %t",
+		"%s: Watch %s changes: Labels change? %t: Anns change? %t: Status change? %t",
 		mgr, common.DescObjectAsKey(watch), labelsChanged, annotationsChanged, statusChanged,
 	)
 
@@ -621,7 +621,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 
 		hasSubResourceStatus := watchClient.HasSubresource("status")
 		glog.V(4).Infof(
-			"%s: Watch %s: Client has status as sub resource %t",
+			"%s: Watch %s: Client has status as sub resource? %t",
 			mgr, common.DescObjectAsKey(watch), hasSubResourceStatus,
 		)
 

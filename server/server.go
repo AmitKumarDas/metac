@@ -159,9 +159,19 @@ func (s *CRDBasedServer) Start(workerCount int) (stop func(), err error) {
 type ConfigBasedServer struct {
 	Server
 
-	// Path that has the Metac controllers' as config
-	// files(s)
-	MetacConfigPath string
+	// Path that has the config files(s) to run Metac
+	ConfigPath string
+
+	// Function that fetches GenericController instances to
+	// be used as configs to run Metac
+	//
+	// NOTE:
+	//	One may use ConfigPath or this function. ConfigPath has
+	// higher priority
+	GenericControllerAsConfigFn func() ([]*v1alpha1.GenericController, error)
+
+	// Number of workers per watch controller
+	workerCount int
 }
 
 func (s *ConfigBasedServer) String() string {
@@ -186,24 +196,33 @@ func (s *ConfigBasedServer) Start(workerCount int) (stop func(), err error) {
 	dynamicInformerFactory :=
 		dynamicinformer.NewSharedInformerFactory(dynamicClientset, s.InformerRelist)
 
+	// various generic meta controller options to setup meta controller
+	// that runs using these configurations
+	configOpts := []generic.ConfigBasedMetaControllerOption{
+		generic.SetGenericControllerAsConfigFn(s.GenericControllerAsConfigFn),
+		generic.SetMetaControllerConfigPath(s.ConfigPath),
+	}
+
 	genericMetac, err := generic.NewConfigBasedMetaController(
-		s.MetacConfigPath,
 		resourceMgr,
 		dynamicClientset,
 		dynamicInformerFactory,
 		workerCount,
+		configOpts...,
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	// Start various metacontrollers (controllers that spawn controllers).
 	// Each one requests the informers it needs from the factory.
 	metaControllers := []controller{
 		// TODO (@amitkumardas):
 		//
-		// Currently GenericController is supported for local mode.
-		// Support for other controllers will be introduced
-		// once local mode for GenericController works fine
+		// Currently GenericController is the only meta controller
+		// supported to run using config i.e. runaslocal flag.
+		// Support for other controllers will be introduced once
+		// config mode for GenericController works fine.
 		genericMetac,
 	}
 

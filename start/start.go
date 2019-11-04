@@ -120,8 +120,8 @@ func Start() {
 	// start metac either as config based or CRD based
 	if *runAsLocal {
 		configServer := &server.ConfigBasedServer{
-			Server:          mserver,
-			MetacConfigPath: *metacConfigPath,
+			Server:     mserver,
+			ConfigPath: *metacConfigPath,
 		}
 		stopServer, err = configServer.Start(*workerCount)
 	} else {

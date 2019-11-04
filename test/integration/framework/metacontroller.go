@@ -17,10 +17,13 @@ limitations under the License.
 package framework
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
+	"openebs.io/metac/server"
 	pointer "openebs.io/metac/third_party/kubernetes"
 )
 
@@ -176,4 +179,54 @@ func (f *Fixture) CreateGenericController(
 	})
 
 	return gc
+}
+
+// CreateGenericControllerAsMetacConfig creates a new instance of
+// GenericController instance
+//
+// NOTE:
+// 	As this does not create this resource in the kubernetes
+// api server this does not need a teadown callback
+func (f *Fixture) CreateGenericControllerAsMetacConfig(
+	name string, opts ...generic.Option,
+) *v1alpha1.GenericController {
+
+	// initialize the controller instance
+	gc := &v1alpha1.GenericController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: v1alpha1.GenericControllerSpec{
+			// Set a big resyncPeriod so tests can precisely control
+			// when syncs happen.
+			ResyncPeriodSeconds: pointer.Int32Ptr(3600),
+		},
+	}
+
+	// set other options if any
+	for _, o := range opts {
+		o(gc)
+	}
+
+	return gc
+}
+
+// StartMetacFromGenericControllerConfig starts Metac based
+// on the given config. It returns the stop function that 
+// should be invoked by the caller once caller's task is done.
+func (f *Fixture) StartMetacFromGenericControllerConfig(gctlAsConfigFn func() ([]*v1alpha1.GenericController, error)) (stop func()) {
+	var mserver = server.Server{
+		Config:            ApiserverConfig(),
+		DiscoveryInterval: 500 * time.Millisecond,
+		InformerRelist:    30 * time.Minute,
+	}
+	metacServer := &server.ConfigBasedServer{
+		Server:                      mserver,
+		GenericControllerAsConfigFn: gctlAsConfigFn,
+	}
+	stopMetacServer, err := metacServer.Start(5)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return stopMetacServer
 }
