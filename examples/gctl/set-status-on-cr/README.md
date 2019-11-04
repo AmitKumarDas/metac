@@ -11,13 +11,13 @@ is supposed to set status of a custom resource of kind `CoolNerd`.
 
 ```sh
 kubectl apply -f ns_and_crd.yaml
-kubectl create configmap set-status-on-cr --from-file=config
+kubectl apply -f rbac.yaml
 kubectl apply -f operator.yaml
 
 # verify if above was installed properly
 kubectl get ns
 kubectl get crd
-kubectl get deployment
+kubectl get deployment -n set-status-on-cr
 ```
 
 ### Create the Custom Resource
@@ -29,9 +29,7 @@ kubectl apply -f coolnerd.yaml
 Watch for the CR to get created with status
 
 ```sh
-kubectl get coolnerds --watch
-
-kubectl get coolnerds -oyaml
+kubectl get coolnerds -n set-status-on-cr -oyaml
 ```
 
 ### Cleanup
@@ -39,5 +37,6 @@ kubectl get coolnerds -oyaml
 ```sh
 kubectl delete -f coolnerd.yaml
 kubectl delete -f operator.yaml
+kubectl delete -f rbac.yaml
 kubectl delete -f ns_and_crd.yaml
 ```
