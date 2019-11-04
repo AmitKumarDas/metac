@@ -51,32 +51,75 @@ func getKubectlPath() (string, error) {
 	return exec.LookPath("kubectl")
 }
 
-// TestMain starts etcd, kube-apiserver, and metacontroller before
-// running tests. This is meant to be executed from within a _test.go
-// file's TestMain(m *testing.M) function.
+func execKubectl(args ...string) error {
+	execPath, err := exec.LookPath("kubectl")
+	if err != nil {
+		return errors.Wrapf(err, "Can't exec kubectl")
+	}
+
+	cmdline := append([]string{"--server", ApiserverURL()}, args...)
+	cmd := exec.Command(execPath, cmdline...)
+	return cmd.Run()
+}
+
+// TestWithCRDMetac starts etcd, kube-apiserver, and CRD based
+// metacontroller before running tests.
 //
 // Usage:
-// 	In some abc_test.go file in package abc
+// 	In test/integeration/somepackage/suite_test.go file have the
+// following to let this package i.e. somepackage bring up required
+// integration test related dependencies.
 //
 // ```go
-//	package abc
+//	package somepackage
 //
 //	import (
 //		"openebs.io/metac/test/integration/framework
 //	)
 //
 // 	func TestMain(m *testing.M) {
-//		framework.TestMain(m.Run())
+//		framework.TestWithCRDMetac(m.Run())
 //	}
 // ````
-func TestMain(tests func() int) {
-	if err := testMain(tests); err != nil {
+func TestWithCRDMetac(testRunFn func() int) {
+	if err := startCRDBasedMetaControllers(testRunFn); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 }
 
-func testMain(tests func() int) error {
+// TestWithConfigMetac starts etcd, kube-apiserver before
+// running tests.
+//
+// NOTE:
+//	Since config based metac depends on the config to start
+// Metac; Metac is not started in this function. It needs to
+// be started in individual test functions.
+//
+// Usage:
+// 	In test/integeration/somepackage/suite_test.go file have the
+// following to let this package i.e. somepackage bring up required
+// integration test related dependencies.
+//
+// ```go
+//	package somepackage
+//
+//	import (
+//		"openebs.io/metac/test/integration/framework
+//	)
+//
+// 	func TestMain(m *testing.M) {
+//		framework.TestWithConfigMetac(m.Run())
+//	}
+// ````
+func TestWithConfigMetac(testRunFn func() int) {
+	if err := startConfigBasedMetaControllers(testRunFn); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func startCRDBasedMetaControllers(testRunFn func() int) error {
 	if _, err := getKubectlPath(); err != nil {
 		return errors.New(installKubectlMsg)
 	}
@@ -164,19 +207,55 @@ func testMain(tests func() int) error {
 	resourceManager.Start(500 * time.Millisecond)
 
 	// Now run the actual tests
-	if exitCode := tests(); exitCode != 0 {
+	if exitCode := testRunFn(); exitCode != 0 {
 		return errors.Errorf("One or more tests failed: Exit code %d", exitCode)
 	}
 	return nil
 }
 
-func execKubectl(args ...string) error {
-	execPath, err := exec.LookPath("kubectl")
-	if err != nil {
-		return errors.Wrapf(err, "Can't exec kubectl")
+func startConfigBasedMetaControllers(testRunFn func() int) error {
+	if _, err := getKubectlPath(); err != nil {
+		return errors.New(installKubectlMsg)
 	}
 
-	cmdline := append([]string{"--server", ApiserverURL()}, args...)
-	cmd := exec.Command(execPath, cmdline...)
-	return cmd.Run()
+	stopEtcd, err := startEtcd()
+	if err != nil {
+		return errors.Wrapf(err, "Can't start etcd")
+	}
+	defer stopEtcd()
+
+	stopApiserver, err := startApiserver()
+	if err != nil {
+		return errors.Wrapf(err, "Can't start kube-apiserver")
+	}
+	defer stopApiserver()
+
+	klog.Info("Waiting for kube-apiserver to be ready")
+	start := time.Now()
+	for {
+		kubectlErr := execKubectl("version")
+		if kubectlErr == nil {
+			break
+		}
+		if time.Since(start) > time.Minute {
+			return errors.Wrapf(err, "Timed out for kube-apiserver to be ready")
+		}
+		time.Sleep(time.Second)
+	}
+	klog.Info("kube-apiserver is ready")
+
+	// Periodically refresh discovery to pick up newly-installed
+	// resources.
+	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(ApiserverConfig())
+	resourceManager = dynamicdiscovery.NewAPIResourceManager(discoveryClient)
+
+	// We don't care about stopping this cleanly since it has no
+	// external effects.
+	resourceManager.Start(500 * time.Millisecond)
+
+	// Now run the actual tests
+	if exitCode := testRunFn(); exitCode != 0 {
+		return errors.Errorf("One or more tests failed: Exit code %d", exitCode)
+	}
+	return nil
 }

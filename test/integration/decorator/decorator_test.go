@@ -36,7 +36,7 @@ import (
 // framework.TestMain provides setup & teardown features required for
 // all the individual testcases to run.
 func TestMain(m *testing.M) {
-	framework.TestMain(m.Run)
+	framework.TestWithCRDMetac(m.Run)
 }
 
 // TestSyncWebhook tests that the sync webhook triggers and passes the

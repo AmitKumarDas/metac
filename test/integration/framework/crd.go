@@ -146,7 +146,10 @@ func (f *Fixture) SetupNamespaceCRDAndItsCR(
 	*dynamicclientset.ResourceClient,
 	*unstructured.Unstructured,
 ) {
+	// set up custom resource definition
 	crd, resClient := f.SetupCRD(kind, v1beta1.NamespaceScoped)
+
+	// set up corresponding custom resource
 	obj := BuildUnstructObjFromCRD(crd, name)
 	for _, o := range opts {
 		o(obj)

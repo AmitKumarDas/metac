@@ -59,35 +59,94 @@ type MetaController struct {
 type ConfigBasedMetaController struct {
 	MetaController
 
+	// Path from which metac configs will be loaded
+	ConfigPath string
+
+	// Function that fetches all generic controller instances
+	// required to run Metac
+	//
+	// NOTE:
+	//	One can use either ConfigPath or this function. ConfigPath
+	// option has higher priority.
+	GenericControllerAsConfigFn func() ([]*v1alpha1.GenericController, error)
+
 	// Config instances of type GenericController required to run
 	// generic meta controllers. In other words these are the
 	// configurations to manage (start, stop) specific watch
 	// controllers
-	ControllerConfigs []*v1alpha1.GenericController
+	GenericControllerConfigs []*v1alpha1.GenericController
+}
+
+// ConfigBasedMetaControllerOption is a functional option to
+// mutate ConfigBasedMetaController instance
+//
+// This follows functional options pattern
+type ConfigBasedMetaControllerOption func(*ConfigBasedMetaController) error
+
+// SetGenericControllerAsConfigFn sets the config loader function
+// against the ConfigBasedMetaController instance
+func SetGenericControllerAsConfigFn(fn func() ([]*v1alpha1.GenericController, error)) ConfigBasedMetaControllerOption {
+	return func(c *ConfigBasedMetaController) error {
+		c.GenericControllerAsConfigFn = fn
+		return nil
+	}
+}
+
+// SetMetaControllerConfigPath sets the config loader function
+// against the ConfigBasedMetaController instance
+func SetMetaControllerConfigPath(path string) ConfigBasedMetaControllerOption {
+	return func(c *ConfigBasedMetaController) error {
+		c.ConfigPath = path
+		return nil
+	}
 }
 
 // NewConfigBasedMetaController returns a new instance of
 // ConfigBasedMetaController
 func NewConfigBasedMetaController(
-	metacConfigPath string,
 	resourceMgr *dynamicdiscovery.APIResourceManager,
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
 	workerCount int,
+	opts ...ConfigBasedMetaControllerOption,
 ) (*ConfigBasedMetaController, error) {
 
-	ul, err := config.New(metacConfigPath).Load()
-	if err != nil {
-		return nil, err
+	obj := &ConfigBasedMetaController{}
+	for _, o := range opts {
+		err := o(obj)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	gctls, err := ul.ListGenericControllers()
-	if err != nil {
-		return nil, err
+	if obj.ConfigPath == "" && obj.GenericControllerAsConfigFn == nil {
+		return nil,
+			errors.Errorf(
+				"New config metacontroller failed: Both ConfigPath & GenericControllerAsConfig can't be empty",
+			)
+	}
+
+	var gctlsAsConfig []*v1alpha1.GenericController
+	var gctlsAsConfigErr error
+	// NOTE: ConfigPath has higher priority to get the
+	// GenericController instances as configs to run Metac
+	if obj.ConfigPath != "" {
+		mconfigs, err := config.New(obj.ConfigPath).Load()
+		if err != nil {
+			return nil, err
+		}
+		gctlsAsConfig, gctlsAsConfigErr = mconfigs.ListGenericControllers()
+
+	} else {
+		gctlsAsConfig, gctlsAsConfigErr = obj.GenericControllerAsConfigFn()
+	}
+
+	if gctlsAsConfigErr != nil {
+		return nil, gctlsAsConfigErr
 	}
 
 	return &ConfigBasedMetaController{
-		ControllerConfigs: gctls,
+		GenericControllerConfigs: gctlsAsConfig,
 		MetaController: MetaController{
 			ResourceManager:    resourceMgr,
 			DynClientset:       dynClientset,
@@ -99,7 +158,7 @@ func NewConfigBasedMetaController(
 }
 
 func (mc *ConfigBasedMetaController) String() string {
-	return "LocalGCtl"
+	return "Local GenericController"
 }
 
 // Start generic meta controller by starting watch controllers
@@ -112,45 +171,60 @@ func (mc *ConfigBasedMetaController) Start() {
 		defer utilruntime.HandleCrash()
 
 		glog.Infof("Starting %s", mc)
-		defer glog.Infof("Shutting down %s", mc)
 
-		// In the metacontroller, we are only responsible for starting/stopping
-		// the watch controllers
-		for _, conf := range mc.ControllerConfigs {
-			if wCtl, ok := mc.WatchControllers[conf.Key()]; ok {
-				// The controller was already started.
-				if apiequality.Semantic.DeepEqual(conf.Spec, wCtl.GCtlConfig.Spec) {
-					// Nothing has changed.
-					continue
-				}
-
-				// Applying the new desired state of GenericController
-				// config implies stop old controller & recreate with new
-				// config
-				wCtl.Stop()
-				delete(mc.WatchControllers, conf.Key())
-			}
-
-			// watch controller
-			wc, err := newWatchController(
-				mc.ResourceManager,
-				mc.DynClientset,
-				mc.DynInformerFactory,
-				conf,
-			)
-			if err != nil {
-				panic(errors.Wrapf(err, "%s: Watch controller failed", mc))
-			}
-
-			// start this watch controller
-			wc.Start(mc.WorkerCount)
-			mc.WatchControllers[conf.Key()] = wc
+		// we run this as a continuous process
+		// until all the configs are loaded
+		for mc.processNextWorkItem() {
 		}
 	}()
 }
 
+func (mc *ConfigBasedMetaController) processNextWorkItem() bool {
+	var isContinue bool
+
+	// In this metacontroller, we are only responsible for
+	// starting/stopping the relevant watch based controllers
+	for _, conf := range mc.GenericControllerConfigs {
+		key := conf.Key()
+		if _, ok := mc.WatchControllers[key]; ok {
+			// NOTE:
+			//	One needs to be careful not to use duplicate
+			// GenericController configs. Duplicate here implies
+			// more than one configs having same namespace & name.
+
+			// Already added
+			continue
+		}
+
+		// watch controller i.e. a controller based on the resource
+		// specified in the watch field of GenericController
+		wc, err := newWatchController(
+			mc.ResourceManager,
+			mc.DynClientset,
+			mc.DynInformerFactory,
+			conf,
+		)
+		if err != nil {
+			isContinue = true
+			utilruntime.HandleError(
+				errors.Wrapf(err, "%s: Failed to sync key %s: Will retry", mc, key),
+			)
+			// Try starting the next watch controller
+			// Current watch controller will be retried eventually
+			continue
+		}
+
+		// start this watch controller
+		wc.Start(mc.WorkerCount)
+		mc.WatchControllers[key] = wc
+	}
+	return isContinue
+}
+
 // Stop stops this MetaController
 func (mc *ConfigBasedMetaController) Stop() {
+	glog.Infof("Shutting down %s", mc)
+
 	// Stop metacontroller first so there's no more changes
 	// to watch controllers.
 	<-mc.doneCh
@@ -223,7 +297,7 @@ func NewCRDBasedMetaController(
 
 // String implements Stringer interface
 func (mc *CRDBasedMetaController) String() string {
-	return "CRDGCtl"
+	return "CRD GenericController"
 }
 
 // Start starts this MetaController
