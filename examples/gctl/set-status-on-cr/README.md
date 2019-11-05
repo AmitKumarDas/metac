@@ -1,7 +1,6 @@
 ## Set status on Custom Resource
 
-This is an example of a single binary Kubernetes controller. This controller
-is supposed to set status of a custom resource of kind `CoolNerd`.
+This is an example of a single binary Kubernetes controller. The controller logic is implemented in Go and packaged in a container. This controller will wait for the `CoolNerd` custom resource in $NAMESPACE to be created. Once created, it will update the CR Status. In this case, go code and config are the main files to be understood.
 
 ### Prerequisites
 
