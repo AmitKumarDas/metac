@@ -18,6 +18,7 @@ package generic
 
 import (
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -75,6 +76,20 @@ type ConfigBasedMetaController struct {
 	// configurations to manage (start, stop) specific watch
 	// controllers
 	GenericControllerConfigs []*v1alpha1.GenericController
+
+	// Total timeout for any condition to succeed.
+	//
+	// NOTE:
+	//	This is currently used to load config that is required
+	// to run Metac.
+	WaitTimeoutForCondition time.Duration
+
+	// Interval between retries for any condition to succeed.
+	//
+	// NOTE:
+	// 	This is currently used to load config that is required
+	// to run Metac
+	WaitIntervalForCondition time.Duration
 }
 
 // ConfigBasedMetaControllerOption is a functional option to
@@ -111,7 +126,12 @@ func NewConfigBasedMetaController(
 	opts ...ConfigBasedMetaControllerOption,
 ) (*ConfigBasedMetaController, error) {
 
-	obj := &ConfigBasedMetaController{}
+	obj := &ConfigBasedMetaController{
+		WaitTimeoutForCondition:  30 * time.Minute,
+		WaitIntervalForCondition: 1 * time.Second,
+	}
+
+	// run the options over ConfigBasedMetaController instance
 	for _, o := range opts {
 		err := o(obj)
 		if err != nil {
@@ -145,16 +165,16 @@ func NewConfigBasedMetaController(
 		return nil, gctlsAsConfigErr
 	}
 
-	return &ConfigBasedMetaController{
-		GenericControllerConfigs: gctlsAsConfig,
-		MetaController: MetaController{
-			ResourceManager:    resourceMgr,
-			DynClientset:       dynClientset,
-			DynInformerFactory: dynInformerFactory,
-			WorkerCount:        workerCount,
-			WatchControllers:   make(map[string]*watchController),
-		},
-	}, nil
+	obj.GenericControllerConfigs = gctlsAsConfig
+	obj.MetaController = MetaController{
+		ResourceManager:    resourceMgr,
+		DynClientset:       dynClientset,
+		DynInformerFactory: dynInformerFactory,
+		WorkerCount:        workerCount,
+		WatchControllers:   make(map[string]*watchController),
+	}
+
+	return obj, nil
 }
 
 func (mc *ConfigBasedMetaController) String() string {
@@ -174,14 +194,47 @@ func (mc *ConfigBasedMetaController) Start() {
 
 		// we run this as a continuous process
 		// until all the configs are loaded
-		for mc.processNextWorkItem() {
+		condErr := mc.wait(mc.startAllWatchControllers)
+		if condErr != nil {
+			glog.Fatalf("%s: Failed to start: %v", mc, condErr)
 		}
 	}()
 }
 
-func (mc *ConfigBasedMetaController) processNextWorkItem() bool {
-	var isContinue bool
+// wait polls the condition until it's true, with a configured
+// interval and timeout.
+//
+// The condition function returns a bool indicating whether it
+// is satisfied, as well as an error which should be non-nil if
+// and only if the function was unable to determine whether or
+// not the condition is satisfied (for example if the check
+// involves calling a remote server and the request failed).
+func (mc *ConfigBasedMetaController) wait(condition func() (bool, error)) error {
+	// mark the start time
+	start := time.Now()
+	for {
+		done, err := condition()
+		if err == nil && done {
+			return nil
+		}
+		if time.Since(start) > mc.WaitTimeoutForCondition {
+			return errors.Errorf(
+				"%s: Wait condition timed out %s: %v", mc, mc.WaitTimeoutForCondition, err,
+			)
+		}
+		if err != nil {
+			// Log error, but keep trying until timeout.
+			glog.V(4).Infof("%s: Wait condition failed: Will retry: %v", mc, err)
+		} else {
+			glog.V(4).Infof("%s: Waiting for condition to succeed: Will retry", mc)
+		}
+		time.Sleep(mc.WaitIntervalForCondition)
+	}
+}
 
+// startAllWatchControllers starts all the watch controllers
+// that are specified as config for this binary
+func (mc *ConfigBasedMetaController) startAllWatchControllers() (bool, error) {
 	// In this metacontroller, we are only responsible for
 	// starting/stopping the relevant watch based controllers
 	for _, conf := range mc.GenericControllerConfigs {
@@ -205,20 +258,14 @@ func (mc *ConfigBasedMetaController) processNextWorkItem() bool {
 			conf,
 		)
 		if err != nil {
-			isContinue = true
-			utilruntime.HandleError(
-				errors.Wrapf(err, "%s: Failed to sync key %s: Will retry", mc, key),
-			)
-			// Try starting the next watch controller
-			// Current watch controller will be retried eventually
-			continue
+			return false, errors.Wrapf(err, "%s: Failed to sync key %s: Will retry", mc, key)
 		}
 
 		// start this watch controller
 		wc.Start(mc.WorkerCount)
 		mc.WatchControllers[key] = wc
 	}
-	return isContinue
+	return true, nil
 }
 
 // Stop stops this MetaController
