@@ -17,7 +17,6 @@ require (
 	k8s.io/client-go v0.0.0-20191008115822-1210218b4a26
 	k8s.io/code-generator v0.0.0-20191003035328-700b1226c0bd
 	k8s.io/klog v1.0.0
-	k8s.io/klog/v2 v2.0.0-20190919174302-ab80cd2723c2 // indirect
 )
 
 replace (

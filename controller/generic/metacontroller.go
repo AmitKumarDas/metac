@@ -258,7 +258,7 @@ func (mc *ConfigBasedMetaController) startAllWatchControllers() (bool, error) {
 			conf,
 		)
 		if err != nil {
-			return false, errors.Wrapf(err, "%s: Failed to sync key %s: Will retry", mc, key)
+			return false, errors.Wrapf(err, "%s: Failed to sync key %s", mc, key)
 		}
 
 		// start this watch controller
