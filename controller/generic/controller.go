@@ -915,7 +915,7 @@ func makeAllSelector(
 ) (watchSelector, attachmentSelector *Selector, selErr error) {
 
 	// selector for watch
-	wSel, err := NewSelector(SelectRuleFromResource(resourceMgr, schema.Spec.Watch))
+	wSel, err := NewSelector(FromGCtlResourceSelectRequirements(resourceMgr, schema.Spec.Watch))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -925,9 +925,7 @@ func makeAllSelector(
 	for _, attachment := range schema.Spec.Attachments {
 		options = append(
 			options,
-			SelectRuleFromResource(
-				resourceMgr, attachment.GenericControllerResource,
-			),
+			FromGCtlResourceSelectRequirements(resourceMgr, attachment.GenericControllerResource),
 		)
 	}
 

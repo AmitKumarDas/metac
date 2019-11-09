@@ -94,11 +94,11 @@ func (m AnnotationSelectorsByGK) Get(group, kind string) labels.Selector {
 // "functional options" pattern
 type SelectorOption func(*Selector) error
 
-// SelectRuleFromResource mutates the given Selector instance
-// based on server API resource manager and GenericControllerResource
-func SelectRuleFromResource(
+// FromGCtlResourceSelectRequirements builds the Selector instance
+// based on GenericControllerResource's select requirements
+func FromGCtlResourceSelectRequirements(
 	resourceMgr *dynamicdiscovery.APIResourceManager,
-	resource v1alpha1.GenericControllerResource,
+	gctlResource v1alpha1.GenericControllerResource,
 ) SelectorOption {
 	return func(s *Selector) error {
 		var err error
@@ -108,54 +108,54 @@ func SelectRuleFromResource(
 		}
 
 		// fetch the resource from the discovered set
-		resObj := resourceMgr.GetByResource(resource.APIVersion, resource.Resource)
-		if resObj == nil {
+		gctlResObj := resourceMgr.GetByResource(gctlResource.APIVersion, gctlResource.Resource)
+		if gctlResObj == nil {
 			return errors.Errorf(
 				"Selector failed: Can't find resource %s/%s",
-				resource.APIVersion, resource.Resource,
+				gctlResource.APIVersion, gctlResource.Resource,
 			)
 		}
 
 		lblSel := labels.Everything()
 		// Convert the label selector to the internal form.
-		if resource.LabelSelector != nil {
-			lblSel, err = metav1.LabelSelectorAsSelector(resource.LabelSelector)
+		if gctlResource.LabelSelector != nil {
+			lblSel, err = metav1.LabelSelectorAsSelector(gctlResource.LabelSelector)
 			if err != nil {
 				return errors.Wrapf(
 					err, "Label selector for %s/%s failed",
-					resource.APIVersion, resource.Resource,
+					gctlResource.APIVersion, gctlResource.Resource,
 				)
 			}
 		}
-		s.labelSelectors.Set(resObj.Group, resObj.Kind, lblSel)
+		s.labelSelectors.Set(gctlResObj.Group, gctlResObj.Kind, lblSel)
 
 		annSel := labels.Everything()
 		// Convert the annotation selector to a label selector, then to
 		// internal form.
-		if resource.AnnotationSelector != nil {
+		if gctlResource.AnnotationSelector != nil {
 			labelSelector := &metav1.LabelSelector{
-				MatchLabels:      resource.AnnotationSelector.MatchAnnotations,
-				MatchExpressions: resource.AnnotationSelector.MatchExpressions,
+				MatchLabels:      gctlResource.AnnotationSelector.MatchAnnotations,
+				MatchExpressions: gctlResource.AnnotationSelector.MatchExpressions,
 			}
 			annSel, err = metav1.LabelSelectorAsSelector(labelSelector)
 			if err != nil {
 				return errors.Wrapf(
 					err, "Annotation selector for %s/%s failed",
-					resource.APIVersion, resource.Resource,
+					gctlResource.APIVersion, gctlResource.Resource,
 				)
 			}
 		}
-		s.annotationSelectors.Set(resObj.Group, resObj.Kind, annSel)
+		s.annotationSelectors.Set(gctlResObj.Group, gctlResObj.Kind, annSel)
 
 		// Set NameSelector to everything if it is empty
 		//
 		// NOTE:
 		// 	Empty nameselector evaluates to true for any names
-		nameSel := resource.NameSelector
+		nameSel := gctlResource.NameSelector
 		if nameSel == nil {
 			nameSel = []string{}
 		}
-		s.nameSelectors.Set(resObj.Group, resObj.Kind, nameSel)
+		s.nameSelectors.Set(gctlResObj.Group, gctlResObj.Kind, nameSel)
 
 		return nil
 	}
@@ -166,6 +166,9 @@ func NewSelector(options ...SelectorOption) (*Selector, error) {
 	s := &Selector{}
 
 	// init all the selector strategies
+	//
+	// NOTE:
+	// 	Ensure that each option point to different resource kind
 	s.nameSelectors = NameSelectorsByGK(make(map[string]v1alpha1.NameSelector))
 	s.labelSelectors = LabelSelectorsByGK(make(map[string]labels.Selector))
 	s.annotationSelectors = AnnotationSelectorsByGK(make(map[string]labels.Selector))
@@ -189,11 +192,6 @@ func (s *Selector) Matches(obj *unstructured.Unstructured) bool {
 	nameSelector := s.nameSelectors.Get(apiGroup, obj.GetKind())
 	labelSelector := s.labelSelectors.Get(apiGroup, obj.GetKind())
 	annotationSelector := s.annotationSelectors.Get(apiGroup, obj.GetKind())
-
-	// if labelSelector == nil || annotationSelector == nil || nameSelector == nil {
-	// 	// This object is not a kind we care about
-	// 	return false
-	// }
 
 	// It must match all selectors.
 	return labelSelector.Matches(labels.Set(obj.GetLabels())) &&

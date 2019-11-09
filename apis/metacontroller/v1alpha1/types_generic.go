@@ -146,13 +146,24 @@ type GenericControllerResource struct {
 	ResourceRule `json:",inline"`
 
 	// Include the resource if name selector matches
+	//
+	// This is ANDed with other selectors if present
 	NameSelector NameSelector `json:"nameSelector,omitempty"`
 
 	// Include the resource if label selector matches
+	//
+	// This is ANDed with other selectors if present
 	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
 
 	// Include the resource if annotation selector matches
+	//
+	// This is ANDed with other selectors if present
 	AnnotationSelector *AnnotationSelector `json:"annotationSelector,omitempty"`
+
+	// Include the resource if resource selector matches
+	//
+	// This is ANDed with other selectors if present
+	ResourceSelector *ResourceSelector `json:"resourceSelector,omitempty"`
 }
 
 // GenericControllerAttachment represents a resources that takes
