@@ -1,0 +1,14 @@
+---
+apiVersion: metac.openebs.io/v1alpha1
+kind: GenericController
+metadata:
+  name: set-status-on-cr
+spec:
+  watch:
+    apiVersion: examples.metac.io/v1
+    resource: coolnerds
+  hooks:
+    sync:
+      inline:
+        funcName: sync/cool-nerd
+---

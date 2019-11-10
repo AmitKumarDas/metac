@@ -18,6 +18,7 @@ package config
 
 import (
 	"io/ioutil"
+	"strings"
 
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
@@ -80,11 +81,23 @@ func (c *Config) Load() (MetacConfigs, error) {
 
 	// there can be multiple config files
 	for _, file := range files {
-		if file.IsDir() {
+		fileName := file.Name()
+		if file.IsDir() || file.Mode().IsDir() {
+			glog.V(4).Infof(
+				"Will skip metac config %s at path %s: Not a file", fileName, c.Path,
+			)
 			// we don't want to load directory
 			continue
 		}
-		fileNameWithPath := c.Path + file.Name()
+		if !strings.HasSuffix(fileName, ".yaml") && !strings.HasSuffix(fileName, ".json") {
+			glog.V(4).Infof(
+				"Will skip metac config %s at path %s: Not yaml or json", fileName, c.Path,
+			)
+			// we support either proper yaml or json file only
+			continue
+		}
+
+		fileNameWithPath := c.Path + fileName
 		glog.V(4).Infof("Will load metac config %s", fileNameWithPath)
 
 		contents, readFileErr := ioutil.ReadFile(fileNameWithPath)

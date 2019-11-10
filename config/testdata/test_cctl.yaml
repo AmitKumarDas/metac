@@ -1,0 +1,23 @@
+---
+apiVersion: metac.openebs.io/v1alpha1
+kind: CompositeController
+metadata:
+  name: bluegreen-controller
+spec:
+  parentResource:
+    apiVersion: ctl.enisoc.com/v1
+    resource: bluegreendeployments
+  childResources:
+  - apiVersion: v1
+    resource: services
+    updateStrategy:
+      method: InPlace
+  - apiVersion: extensions/v1beta1
+    resource: replicasets
+    updateStrategy:
+      method: InPlace
+  hooks:
+    sync:
+      webhook:
+        url: http://bluegreen-controller.metac/sync
+---

@@ -30,6 +30,7 @@ openebs_ns="openebs"
 echo -e "\n++ Installing operator"
 kubectl apply -f operator_ns.yaml
 kubectl apply -f operator_rbac.yaml
+kubectl create configmap uninstall-openebs -n uninstall-openebs --from-file=config
 kubectl apply -f operator.yaml
 echo -e "\n++ Installed operator successfully"
 
