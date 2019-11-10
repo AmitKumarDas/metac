@@ -1,0 +1,63 @@
+apiVersion: metac.openebs.io/v1alpha1
+kind: GenericController
+metadata:
+  name: uninstall-openebs
+spec:
+  # controller keeps a watch on namespace resource
+  watch:
+    apiVersion: v1
+    resource: namespaces
+    nameSelector:
+    # controller needs to deal with openebs namespace only
+    - openebs
+  attachments:
+  - apiVersion: apiextensions.k8s.io/v1beta1
+    resource: customresourcedefinitions
+    # controller needs to deal with openebs CRDs only
+    nameSelector:
+    - castemplates.openebs.io
+    - runtasks.openebs.io
+    - storagepoolclaims.openebs.io
+    - cstorpoolinstances.openebs.io
+    - storagepools.openebs.io
+    - cstorpools.openebs.io
+    - cstorvolumes.openebs.io
+    - cstorvolumeclaims.openebs.io
+    - cstorvolumereplicas.openebs.io
+    - cstorbackups.openebs.io
+    - cstorcompletedbackups.openebs.io
+    - cstorrestores.openebs.io
+    - upgradetasks.openebs.io
+  # controller needs to deal with openebs custom resources only
+  - apiVersion: openebs.io/v1alpha1
+    resource: castemplates
+  - apiVersion: openebs.io/v1alpha1
+    resource: runtasks
+  - apiVersion: openebs.io/v1alpha1
+    resource: storagepoolclaims
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorpoolinstances
+  - apiVersion: openebs.io/v1alpha1
+    resource: storagepools
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorpools
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorvolumes
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorvolumeclaims
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorvolumereplicas
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorbackups
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorcompletedbackups
+  - apiVersion: openebs.io/v1alpha1
+    resource: cstorrestores
+  - apiVersion: openebs.io/v1alpha1
+    resource: upgradetasks
+  hooks:
+    # controller gets triggered only when the watch resource
+    # i.e. openebs namespace is being deleted
+    finalize:
+      inline:
+        funcName: finalize/namespace

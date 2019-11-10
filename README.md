@@ -7,14 +7,14 @@ Metacontroller is an add-on for Kubernetes that makes it easy to write and deplo
 ## Features
 These are some the features that metac supports:
 - Abstracts Kubernetes code from business logic
-- Implements various MetaControllers that helps in above abstraction
+- Implements various meta controllers that helps in above abstraction
     - CompositeController (cluster scoped)
     - DecoratorController (cluster scoped)
     - GenericController (namespace scoped)
 - Business logic _(read reconciliation logic)_ can be exposed as http services
     - API based development as first class citizen
 - MetaControllers are defined as Kubernetes CustomResourceDefinitions
-- GenericController _(one of the meta controllers)_ can be either deployed as:
+- GenericController _(which is one of the meta controllers)_ can be either deployed as:
     - Kubernetes CRD, or
     - YAML config to metac binary
 - GenericController lets business logic invoked as in-line function call(s)

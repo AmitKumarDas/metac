@@ -1,0 +1,36 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uninstall-openebs
+  namespace: uninstall-openebs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: uninstall-openebs
+  template:
+    metadata:
+      labels:
+        app: uninstall-openebs
+    spec:
+      serviceAccountName: uninstall-openebs
+      containers:
+      - name: uninstall-openebs
+        image: quay.io/amitkumardas/uninstall-openebs:latest
+        command: ["/usr/bin/uninstall-openebs"]
+        args:
+        - --logtostderr
+        - --run-as-local
+        - -v=1
+        - --discovery-interval=20s
+        volumeMounts:
+        - name: config
+          mountPath: /etc/config/metac
+      volumes:
+      - name: config
+        configMap:
+          # configmap provides the config file that
+          # is used by this controller binary
+          name: install-uninstall-crd
+---

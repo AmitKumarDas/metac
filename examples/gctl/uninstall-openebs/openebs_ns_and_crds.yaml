@@ -1,0 +1,499 @@
+---
+# This has been copied from following link:
+# https://github.com/openebs/openebs/blob/master/k8s/openebs-operator.yaml
+#
+# Create the OpenEBS namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openebs
+---
+# Create Maya Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openebs-maya-operator
+  namespace: openebs
+---
+# Define Role that allows operations on K8s pods/deployments
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: openebs-maya-operator
+rules:
+- apiGroups: ["*"]
+  resources: ["nodes", "nodes/proxy"]
+  verbs: ["*"]
+- apiGroups: ["*"]
+  resources: ["namespaces", "services", "pods", "pods/exec", "deployments", "deployments/finalizers", "replicationcontrollers", "replicasets", "events", "endpoints", "configmaps", "secrets", "jobs", "cronjobs"]
+  verbs: ["*"]
+- apiGroups: ["*"]
+  resources: ["statefulsets", "daemonsets"]
+  verbs: ["*"]
+- apiGroups: ["*"]
+  resources: ["resourcequotas", "limitranges"]
+  verbs: ["list", "watch"]
+- apiGroups: ["*"]
+  resources: ["ingresses", "horizontalpodautoscalers", "verticalpodautoscalers", "poddisruptionbudgets", "certificatesigningrequests"]
+  verbs: ["list", "watch"]
+- apiGroups: ["*"]
+  resources: ["storageclasses", "persistentvolumeclaims", "persistentvolumes"]
+  verbs: ["*"]
+- apiGroups: ["volumesnapshot.external-storage.k8s.io"]
+  resources: ["volumesnapshots", "volumesnapshotdatas"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: [ "get", "list", "create", "update", "delete", "patch"]
+- apiGroups: ["*"]
+  resources: [ "disks", "blockdevices", "blockdeviceclaims"]
+  verbs: ["*" ]
+- apiGroups: ["*"]
+  resources: [ "cstorpoolclusters", "storagepoolclaims", "storagepoolclaims/finalizers", "cstorpoolclusters/finalizers", "storagepools"]
+  verbs: ["*" ]
+- apiGroups: ["*"]
+  resources: [ "castemplates", "runtasks"]
+  verbs: ["*" ]
+- apiGroups: ["*"]
+  resources: [ "cstorpools", "cstorpools/finalizers", "cstorvolumereplicas", "cstorvolumes", "cstorvolumeclaims"]
+  verbs: ["*" ]
+- apiGroups: ["*"]
+  resources: [ "cstorpoolinstances", "cstorpoolinstances/finalizers"]
+  verbs: ["*" ]
+- apiGroups: ["*"]
+  resources: [ "cstorbackups", "cstorrestores", "cstorcompletedbackups"]
+  verbs: ["*" ]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "watch", "list", "delete", "update", "create"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+  verbs: ["get","create", "delete", "update", "patch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+- apiGroups: ["*"]
+  resources: [ "upgradetasks"]
+  verbs: ["*" ]
+---
+# Bind the Service Account with the Role Privileges.
+# TODO: Check if default account also needs to be there
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: openebs-maya-operator
+subjects:
+- kind: ServiceAccount
+  name: openebs-maya-operator
+  namespace: openebs
+roleRef:
+  kind: ClusterRole
+  name: openebs-maya-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: castemplates.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Cluster
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: castemplates
+    # singular name to be used as an alias on the CLI and for display
+    singular: castemplate
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: CASTemplate
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - cast
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: runtasks.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Namespaced
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: runtasks
+    # singular name to be used as an alias on the CLI and for display
+    singular: runtask
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: RunTask
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - rtask
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  # storagepoolclaim will be deprecated
+  name: storagepoolclaims.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Cluster
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: storagepoolclaims
+    # singular name to be used as an alias on the CLI and for display
+    singular: storagepoolclaim
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: StoragePoolClaim
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - spc
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: cstorpoolinstances.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Namespaced
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: cstorpoolinstances
+    # singular name to be used as an alias on the CLI and for display
+    singular: cstorpoolinstance
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: CStorPoolInstance
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - cspi
+  additionalPrinterColumns:
+  - JSONPath: .spec.hostName
+    name: HostName
+    description: Host name where cstorpool instances scheduled
+    type: string
+  - JSONPath: .status.capacity.used
+    name: Allocated
+    description: The amount of storage space within the pool that has been physically allocated
+    type: string
+  - JSONPath: .status.capacity.free
+    name: Free
+    description: The amount of free space available in the pool
+    type: string
+  - JSONPath: .status.capacity.total
+    name: Capacity
+    description: Total size of the storage pool
+    type: string
+  - JSONPath: .status.phase
+    name: Status
+    description: Identifies the current health of the pool
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: storagepools.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Cluster
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: storagepools
+    # singular name to be used as an alias on the CLI and for display
+    singular: storagepool
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: StoragePool
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - sp
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: cstorpools.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Cluster
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: cstorpools
+    # singular name to be used as an alias on the CLI and for display
+    singular: cstorpool
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: CStorPool
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - csp
+  additionalPrinterColumns:
+  - JSONPath: .status.capacity.used
+    name: Allocated
+    description: The amount of storage space within the pool that has been physically allocated
+    type: string
+  - JSONPath: .status.capacity.free
+    name: Free
+    description: The amount of free space available in the pool
+    type: string
+  - JSONPath: .status.capacity.total
+    name: Capacity
+    description: Total size of the storage pool
+    type: string
+  - JSONPath: .status.phase
+    name: Status
+    description: Identifies the current health of the pool
+    type: string
+  - JSONPath: .spec.poolSpec.poolType
+    name: Type
+    description: The type of the storage pool
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: cstorvolumes.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Namespaced
+  names:
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: CStorVolume
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: cstorvolumes
+    # singular name to be used as an alias on the CLI and for display
+    singular: cstorvolume
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - cstorvolume
+  additionalPrinterColumns:
+  - JSONPath: .status.phase
+    name: Status
+    description: Identifies the current health of the target
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
+  - JSONPath: .status.capacity
+    description: Current volume capacity
+    name: Capacity
+    type: string
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: cstorvolumeclaims.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Namespaced
+  names:
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: CStorVolumeClaim
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: cstorvolumeclaims
+    # singular name to be used as an alias on the CLI and for display
+    singular: cstorvolumeclaim
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - cstorvolumeclaim
+    - cvc
+  additionalPrinterColumns:
+  - JSONPath: .status.phase
+    name: Status
+    description: Identifies the current health of the target
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: cstorvolumereplicas.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Namespaced
+  names:
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: CStorVolumeReplica
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: cstorvolumereplicas
+    # singular name to be used as an alias on the CLI and for display
+    singular: cstorvolumereplica
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - cvr
+  additionalPrinterColumns:
+  - JSONPath: .status.capacity.used
+    name: Used
+    description: The amount of space that is "logically" consumed by this dataset
+    type: string
+  - JSONPath: .status.capacity.totalAllocated
+    name: Allocated
+    description: The amount of disk space consumed by a dataset and all its descendents
+    type: string
+  - JSONPath: .status.phase
+    name: Status
+    description: Identifies the current health of the replicas
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: Age
+    type: date
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: cstorbackups.openebs.io
+spec:
+  group: openebs.io
+  version: v1alpha1
+  scope: Namespaced
+  names:
+    plural: cstorbackups
+    singular: cstorbackup
+    kind: CStorBackup
+    shortNames:
+    - cbkp
+    - cbkps
+    - cbackups
+    - cbackup
+  additionalPrinterColumns:
+    - JSONPath: .spec.volumeName
+      name: volume
+      description: volume on which backup performed
+      type: string
+    - JSONPath: .spec.backupName
+      name: backup/schedule
+      description: Backup/schedule name
+      type: string
+    - JSONPath: .status
+      name: Status
+      description: Backup status
+      type: string
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: cstorcompletedbackups.openebs.io
+spec:
+  group: openebs.io
+  version: v1alpha1
+  scope: Namespaced
+  names:
+    plural: cstorcompletedbackups
+    singular: cstorcompletedbackup
+    kind: CStorCompletedBackup
+    shortNames:
+    - cbkpc
+    - cbackupcompleted
+  additionalPrinterColumns:
+    - JSONPath: .spec.volumeName
+      name: volume
+      description: volume on which backup performed
+      type: string
+    - JSONPath: .spec.backupName
+      name: backup/schedule
+      description: Backup/schedule name
+      type: string
+    - JSONPath: .spec.prevSnapName
+      name: lastSnap
+      description: Last successful backup snapshot
+      type: string
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: cstorrestores.openebs.io
+spec:
+  group: openebs.io
+  version: v1alpha1
+  scope: Namespaced
+  names:
+    plural: cstorrestores
+    singular: cstorrestore
+    kind: CStorRestore
+    shortNames:
+    - crst
+    - crsts
+    - crestores
+    - crestore
+  additionalPrinterColumns:
+    - JSONPath: .spec.restoreName
+      name: backup
+      description: backup name which is  restored
+      type: string
+    - JSONPath: .spec.volumeName
+      name: volume
+      description: volume on which restore performed
+      type: string
+    - JSONPath: .status
+      name: Status
+      description: Restore status
+      type: string
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: upgradetasks.openebs.io
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: openebs.io
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1alpha1
+  # either Namespaced or Cluster
+  scope: Namespaced
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: upgradetasks
+    # singular name to be used as an alias on the CLI and for display
+    singular: upgradetask
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: UpgradeTask
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - utask
+---
