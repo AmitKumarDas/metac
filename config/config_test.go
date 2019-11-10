@@ -22,6 +22,26 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
+func TestConfigLoad(t *testing.T) {
+	config := &Config{
+		Path: "testdata/",
+	}
+	mConfigs, err := config.Load()
+	if err != nil {
+		t.Fatalf("Expected no error: Got %v", err)
+	}
+	if len(mConfigs) != 3 {
+		t.Fatalf("Expected metac config count 3: Got %d", len(mConfigs))
+	}
+	gctls, err := mConfigs.ListGenericControllers()
+	if err != nil {
+		t.Fatalf("Expected no error while listing gctls: Got %v", err)
+	}
+	if len(gctls) != 1 {
+		t.Fatalf("Expected gctl count 1: Got %d", len(gctls))
+	}
+}
+
 func TestMetacConfigsListGeneric(t *testing.T) {
 	ul, err := k8s.YAMLToUnstructuredSlice([]byte(`
 ---
