@@ -22,7 +22,7 @@ spec:
         args:
         - --logtostderr
         - --run-as-local
-        - -v=1
+        - -v=4
         - --discovery-interval=20s
         volumeMounts:
         - name: config
@@ -32,5 +32,5 @@ spec:
         configMap:
           # configmap provides the config file that
           # is used by this controller binary
-          name: install-uninstall-crd
+          name: uninstall-openebs
 ---
