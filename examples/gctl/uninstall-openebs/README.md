@@ -29,7 +29,8 @@ kubectl get deployment -n uninstall-openebs
 ### Create OpenEBS namespace & related resources
 
 ```sh
-kubectl apply -f openebs_ns_and_crds.yaml
+kubectl apply -f openebs_ns.yaml
+kubectl apply -f openebs_sa_and_crds.yaml
 kubectl apply -f openebs_crs.yaml
 ```
 

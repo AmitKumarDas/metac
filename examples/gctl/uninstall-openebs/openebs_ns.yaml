@@ -1,0 +1,10 @@
+---
+# This has been copied from following link:
+# https://github.com/openebs/openebs/blob/master/k8s/openebs-operator.yaml
+#
+# Create the OpenEBS namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openebs
+---
