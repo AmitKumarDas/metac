@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: uninstall-openebs
+  namespace: uninstall-openebs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: uninstall-openebs
+rules:
+- apiGroups:
+  - openebs.io
+  resources:
+  - castemplates
+  verbs:
+  - list
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: uninstall-openebs
+subjects:
+- kind: ServiceAccount
+  name: uninstall-openebs
+  namespace: uninstall-openebs
+roleRef:
+  kind: ClusterRole
+  name: uninstall-openebs
+  apiGroup: rbac.authorization.k8s.io
+---

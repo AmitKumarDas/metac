@@ -1,0 +1,104 @@
+---
+apiVersion: openebs.io/v1alpha1
+kind: CASTemplate
+metadata:
+  name: storage-pool-read-default
+spec: 
+  taskNamespace: {{ env "OPENEBS_NAMESPACE" }}
+  run:
+    tasks:
+    - storage-pool-read-default
+  output: storage-pool-read-output-default
+---
+apiVersion: openebs.io/v1alpha1
+kind: RunTask
+metadata:
+  name: storage-pool-read-default
+  finalizers:
+  - openebs-protect
+spec: 
+  meta: |
+    id: readstoragepool
+    apiVersion: openebs.io/v1alpha1
+    kind: CStorPool
+    action: get
+    objectName: {{ .Storagepool.owner }}
+  post: |
+      {{- .JsonResult | toString | saveAs "readstoragepool.read" .TaskResult | noop -}}
+---
+apiVersion: openebs.io/v1alpha1
+kind: StoragePoolClaim
+metadata:
+  name: cstor-sparse-pool
+  finalizers:
+  - openebs-protect
+  annotations:
+    cas.openebs.io/config: |
+      #For default sparse pool set the limit at 2Gi to safegaurd
+      # cstor pool from consuming more memory and causing the node
+      # to get into memory pressure condition. By default K8s will set the
+      # Requests to the same value as Limits. For example, when Limit is
+      # set to 2Gi, the pool could get stuck in pending schedule state,
+      # if node doesn't have Requested (2Gi) memory.
+      # Hence setting the Requests to a minimum (0.5Gi).
+      - name: PoolResourceRequests
+        value: |-
+            memory: 0.5Gi
+            cpu: 100m
+      - name: PoolResourceLimits
+        value: |-
+            memory: 2Gi
+            cpu: 500m
+      #- name: AuxResourceLimits
+      #  value: |-
+      #      memory: 1Gi
+      #      cpu: 100m
+spec:
+  name: cstor-sparse-pool
+  type: sparse
+  maxPools: 3
+  poolSpec:
+    poolType: striped
+---
+apiVersion: openebs.io/v1alpha1
+kind: UpgradeTask
+metadata:
+  name: my-upgrade
+  finalizers:
+  - openebs-protect
+---
+apiVersion: openebs.io/v1alpha1
+kind: CStorRestore
+metadata:
+  name: my-cstor-restore
+  finalizers:
+  - openebs-protect
+---
+apiVersion: openebs.io/v1alpha1
+kind: CStorCompletedBackup
+metadata:
+  name: my-cstor-completed-backup
+  finalizers:
+  - openebs-protect
+---
+apiVersion: openebs.io/v1alpha1
+kind: CStorVolumeReplica
+metadata:
+  name: my-cstor-volume-replica
+  finalizers:
+  - openebs-protect
+---
+apiVersion: openebs.io/v1alpha1
+kind: CStorVolumeClaim
+metadata:
+  name: my-cstor-volume-claim
+  finalizers:
+  - openebs-protect
+---
+apiVersion: openebs.io/v1alpha1
+kind: CStorVolume
+metadata:
+  name: my-cstor-volume-claim
+  finalizers:
+  - openebs-protect
+---

@@ -6,7 +6,6 @@ This is an example of a single binary Kubernetes controller. The controller logi
 
 * Kubernetes 1.8+ is recommended for its improved CRD support, especially garbage collection.
 * Install following yamls
-* Install appropriate RBAC policies (TODO)
 
 ```sh
 kubectl apply -f ns_and_crd.yaml
