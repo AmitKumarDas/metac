@@ -13,11 +13,12 @@ These are some the features that metac supports:
     - GenericController (namespace scoped)
 - Business logic _(read reconciliation logic)_ can be exposed as http services
     - API based development as first class citizen
-- MetaControllers are defined as Kubernetes CustomResourceDefinitions
-- GenericController _(which is one of the meta controllers)_ can be either deployed as:
-    - Kubernetes CRD, or
-    - YAML config to metac binary
-- GenericController lets business logic invoked as in-line function call(s)
+- MetaControllers are deployed as Kubernetes custom resources
+    - However, GenericController _(one of the meta controllers)_ can either be deployed as:
+        - Kubernetes custom resources, or
+        - YAML config to metac binary
+- Ability to import metac as a go library
+    - GenericController lets business logic invoked as in-line function call(s)
     - This is an additional way to invoke logic other than http calls
     - Hence, no need to write reconcile logic as http services if not desired
 

@@ -127,7 +127,8 @@ func newWatchController(
 			// This gets applied against the watch s.t GenericController
 			// has a chance to handle finalize hook i.e. handle deletion
 			// of watch resource
-			Name: "protect.gctl.metac.openebs.io/" + config.Namespace + "-" + config.Name,
+			Name: "protect.gctl.metac.openebs.io/" +
+				common.DescMetaAsSanitisedNSName(config.GetObjectMeta()),
 
 			// Enable if Finalize field is set in the generic controller
 			Enabled: config.Spec.Hooks.Finalize != nil,
