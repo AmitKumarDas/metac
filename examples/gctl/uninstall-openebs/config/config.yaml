@@ -3,6 +3,12 @@ kind: GenericController
 metadata:
   name: uninstall-openebs
 spec:
+  # controller should be able to update attachments
+  # i.e. remove finalizers if any
+  updateAny: true
+  # controller should be able to remove attachments
+  # i.e. remove custom resources & then their definitions
+  deleteAny: true
   # controller keeps a watch on namespace resource
   watch:
     apiVersion: v1

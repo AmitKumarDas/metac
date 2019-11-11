@@ -34,16 +34,24 @@ import (
 // SyncHookResponse have the resources that form the desired state
 // w.r.t the watched resource. These resources are known as
 // attachments.
-func finalizeNamespace(req *generic.SyncHookRequest, resp *generic.SyncHookResponse) error {
+func finalizeNamespace(request *generic.SyncHookRequest, response *generic.SyncHookResponse) error {
 	var hasAtLeastOneCustomResource bool
-	if resp == nil {
-		resp = &generic.SyncHookResponse{}
+	if response == nil {
+		response = &generic.SyncHookResponse{}
 	}
 
-	for _, attachment := range resp.Attachments {
+	if request.Attachments.IsEmpty() {
+		// setting finalized to true indicates metac to complete
+		// this reconcilation i.e. remove metac finalizer from watch
+		// resource
+		response.Finalized = true
+		return nil
+	}
+
+	for _, attachment := range request.Attachments.List() {
 		if attachment.GetKind() == "CustomResourceDefinition" {
 			// maintain all CRDs till no custom resources are observed
-			resp.Attachments = append(resp.Attachments, attachment)
+			response.Attachments = append(response.Attachments, attachment)
 			continue
 		}
 
@@ -52,7 +60,7 @@ func finalizeNamespace(req *generic.SyncHookRequest, resp *generic.SyncHookRespo
 
 			// remove all the finalizers
 			attachmentCopy.SetFinalizers([]string{})
-			resp.Attachments = append(resp.Attachments, attachmentCopy)
+			response.Attachments = append(response.Attachments, attachmentCopy)
 		}
 
 		hasAtLeastOneCustomResource = true
@@ -64,7 +72,7 @@ func finalizeNamespace(req *generic.SyncHookRequest, resp *generic.SyncHookRespo
 		// attachments.
 		//
 		// In other words, this deletes OpenEBS CRDs.
-		resp.Attachments = nil
+		response.Attachments = nil
 	}
 
 	return nil
