@@ -170,6 +170,15 @@ func namespaceNameOrName(obj *unstructured.Unstructured) string {
 	return obj.GetName()
 }
 
+func namespaceNameOrNameFromMeta(obj metav1.Object) string {
+	if obj.GetNamespace() != "" {
+		return fmt.Sprintf(
+			"%s/%s", obj.GetNamespace(), obj.GetName(),
+		)
+	}
+	return obj.GetName()
+}
+
 // describeObject returns a human-readable string to identify a
 // given object.
 func describeObject(obj *unstructured.Unstructured) string {
@@ -189,6 +198,12 @@ func sanitiseAPIVersion(version string) string {
 // format corresponding to the given object
 func DescObjAsSanitisedNSName(obj *unstructured.Unstructured) string {
 	return strings.ReplaceAll(namespaceNameOrName(obj), "/", "-")
+}
+
+// DescMetaAsSanitisedNSName returns the sanitised namespace name
+// format corresponding to the given meta object
+func DescMetaAsSanitisedNSName(obj metav1.Object) string {
+	return strings.ReplaceAll(namespaceNameOrNameFromMeta(obj), "/", "-")
 }
 
 // DescObjectAsKey returns a machine readable string of the provided
