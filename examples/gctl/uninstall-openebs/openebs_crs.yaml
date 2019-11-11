@@ -4,7 +4,7 @@ kind: CASTemplate
 metadata:
   name: storage-pool-read-default
 spec: 
-  taskNamespace: {{ env "OPENEBS_NAMESPACE" }}
+  taskNamespace: something
   run:
     tasks:
     - storage-pool-read-default
@@ -103,7 +103,7 @@ metadata:
 apiVersion: openebs.io/v1alpha1
 kind: CStorVolume
 metadata:
-  name: my-cstor-volume-claim
+  name: my-cstor-volume
   namespace: openebs
   finalizers:
   - openebs-protect
