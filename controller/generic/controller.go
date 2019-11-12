@@ -724,6 +724,16 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 				Watch:                      watch,
 				UpdateAny:                  mgr.GCtlConfig.Spec.UpdateAny,
 				DeleteAny:                  mgr.GCtlConfig.Spec.DeleteAny,
+
+				// TODO (@amitkumardas):
+				//
+				// Need to decide if this field should be part of
+				// GenericController specs like UpdateAny & DeleteAny?
+				//
+				// This is currently set to true if this request is being
+				// processed by finalize hook. In other words, this is set
+				// to true during finalize hook invocation.
+				UpdateDuringPendingDelete: k8s.BoolPtr(syncRequest.Finalizing),
 			},
 
 			DynamicClientSet: mgr.DynamicClientSet,

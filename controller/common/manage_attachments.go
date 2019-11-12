@@ -76,6 +76,10 @@ type AttachmentExecuteBase struct {
 	// these attachments were not created due to the watch set in this
 	// executor.
 	DeleteAny *bool
+
+	// If UpdateDuringPendingDelete is set to true it will proceed with
+	// updating the resource even if this resource is pending deletion
+	UpdateDuringPendingDelete *bool
 }
 
 // String implements Stringer interface
@@ -271,6 +275,15 @@ func (e AttachmentResourcesExecutor) String() string {
 	return e.AttachmentExecuteBase.String()
 }
 
+// IsUpdateDuringPendingDelete returns true if update is allowed
+// even if the targeted resource is pending deletion
+func (e AttachmentResourcesExecutor) IsUpdateDuringPendingDelete() bool {
+	if e.UpdateDuringPendingDelete == nil {
+		return false
+	}
+	return *e.UpdateDuringPendingDelete
+}
+
 // Update updates the observed attachment to its desired attachment
 func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructured) error {
 	// TODO (@amitkumardas):
@@ -283,11 +296,11 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		ns = e.Watch.GetNamespace()
 	}
 
-	// Leave it alone if it's pending deletion
-	if oObj.GetDeletionTimestamp() != nil {
+	// Leave it alone if it's pending deletion && updating during
+	// pending deletion is not enabled
+	if oObj.GetDeletionTimestamp() != nil && !e.IsUpdateDuringPendingDelete() {
 		glog.V(4).Infof(
-			"%s: Can't update %s: Pending deletion",
-			e, DescObjectAsKey(dObj),
+			"%s: Can't update %s: Pending deletion", e, DescObjectAsKey(dObj),
 		)
 		return nil
 	}
@@ -333,8 +346,7 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		// it gets deleted by someone else i.e. we won't delete it
 		// ourselves
 		glog.V(4).Infof(
-			"%s: Can't update %s: It's OnDelete update strategy or resource not available",
-			e, DescObjectAsKey(dObj),
+			"%s: Can't update %s: UpdateStrategy=%q", e, DescObjectAsKey(dObj), method,
 		)
 		return nil
 	}
@@ -369,8 +381,7 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		oObj.UnstructuredContent(),
 	) {
 		glog.V(4).Infof(
-			"%s: Can't update %s: Nothing changed.",
-			e, DescObjectAsKey(dObj),
+			"%s: Can't update %s: Nothing changed.", e, DescObjectAsKey(dObj),
 		)
 		return nil
 	}
