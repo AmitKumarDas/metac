@@ -34,33 +34,61 @@ spec:
     - cstorcompletedbackups.openebs.io
     - cstorrestores.openebs.io
     - upgradetasks.openebs.io
+    updateStrategy:
+      method: InPlace
   # controller needs to deal with openebs custom resources only
   - apiVersion: openebs.io/v1alpha1
     resource: castemplates
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: runtasks
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: storagepoolclaims
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorpoolinstances
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: storagepools
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorpools
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorvolumes
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorvolumeclaims
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorvolumereplicas
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorbackups
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorcompletedbackups
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: cstorrestores
+    updateStrategy:
+      method: InPlace
   - apiVersion: openebs.io/v1alpha1
     resource: upgradetasks
+    updateStrategy:
+      method: InPlace
   hooks:
     # controller gets triggered only when the watch resource
     # i.e. openebs namespace is being deleted
