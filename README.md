@@ -1,8 +1,10 @@
 # Metac `pronounced [meta-see]`
-It is [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller) and more. Metac has additional features derived from various production needs of projects such as [OpenEBS](https://github.com/openebs) & [LitmusChaos](https://github.com/litmuschaos). In addition, metac solves most of the user issues raised in [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller/issues).
+It is [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller) and more. Long term vision of Metac is to provide a toolkit that lets users to manage their infrastructures on Kubernetes.
+
+Metac started when development on metacontroller stopped. Metac has implemented most of the major enhancements & issues raised in [metacontroller](https://github.com/GoogleCloudPlatform/metacontroller/issues). In adition, some of Metac's features are a derivation from production needs of projects such as [OpenEBS](https://github.com/openebs) & [LitmusChaos](https://github.com/litmuschaos).
 
 ## Motivation
-Metacontroller is an add-on for Kubernetes that makes it easy to write and deploy [custom controllers](https://kubernetes.io/docs/concepts/api-extension/custom-resources/#custom-controllers) in the form of [simple scripts](https://metacontroller.app).
+Metac is an add-on for Kubernetes that makes it easy to write and deploy [custom controllers](https://kubernetes.io/docs/concepts/api-extension/custom-resources/#custom-controllers) in the form of [simple scripts](https://metacontroller.app). One can get a feel of implementing controllers from various sample implementations found in the examples folder. These examples showcase various approaches, programming languages (including jsonnet) to implement controllers. 
 
 ## Features
 These are some the features that metac supports:
@@ -15,12 +17,17 @@ These are some the features that metac supports:
     - API based development as first class citizen
 - MetaControllers are deployed as Kubernetes custom resources
     - However, GenericController _(one of the meta controllers)_ can either be deployed as:
-        - Kubernetes custom resources, or
-        - YAML config to metac binary
+        - 1/ Kubernetes based custom resources, or
+        - 2/ YAML config file.
 - Ability to import metac as a go library
     - GenericController lets business logic invoked as in-line function call(s)
     - This is an additional way to invoke logic other than http calls
     - Hence, no need to write reconcile logic as http services if not desired
+
+## Using Metac
+If you want to use Metac via web based hooks then Metac can be deployed as a StatefulSet with images found at this [registry](https://quay.io/repository/amitkumardas/metac?tab=tags). However, if you want to use inline hooks, you need to import Metac into your go based controller implementation. In addition, you need to make use of go modules to import the master version of Metac into your codebase.
+
+In case, you want to deploy Metac via `helm`, use this [helm chart](https://github.com/AmitKumarDas/metac/tree/master/helm/metac).
 
 ## Differences from metacontroller
 Metac tries to be compatible with the original metacontroller. However, there may be breaking changes that one needs to be careful about. If one has been using the metacontroller and tries to use metac, then one should be aware of below changes:
@@ -36,9 +43,16 @@ If you are migrating from Metacontroller to Metac you'll need to cleanup the old
 kubectl get <comma separated list of your resource types here> --no-headers --all-namespaces | awk '{print $2 " -n " $1}' | xargs -L1 -P 50 -r kubectl patch -p '{"metadata":{"finalizers": [null]}}' --type=merge
 ```
 
+## Roadmap
+These are the broad areas of focus for metac:
+- [x] business controllers
+- [ ] test controllers
+- [ ] debug controllers
+- [ ] compliance controllers
+
 ## Documentation
 
-Please see the [documentation site](https://metacontroller.app) for details on how to install, use, or contribute to Metacontroller.
+This is the existing i.e. [metacontroller site](https://metacontroller.app) that provides most of the important details about Metacontroller. Since metac does not differ from Metacontroller except for new enhancements and fixes, this doc site holds good.
 
 ## Contact
 
@@ -46,13 +60,8 @@ Please file [GitHub issues](issues) for bugs, feature requests, and proposals.
 
 Use the [meeting notes/agenda](https://docs.google.com/document/d/1HV_Fr0wIW9tr5OZwK_6oGux_OhcGtxxWWV6dCYJR9Cw/) to discuss specific features/topics with the community.
 
-Use the [mailing list](https://groups.google.com/forum/#!forum/metacontroller)
-for questions and comments, or join the
-[#metacontroller](https://kubernetes.slack.com/messages/metacontroller/) channel on
+Join [#metacontroller](https://kubernetes.slack.com/messages/metacontroller/) channel on
 [Kubernetes Slack](http://slack.kubernetes.io).
-
-Subscribe to the [announce list](https://groups.google.com/forum/#!forum/metacontroller-announce)
-for low-frequency project updates like new releases.
 
 ## Contributing
 
