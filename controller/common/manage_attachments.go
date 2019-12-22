@@ -549,29 +549,29 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 			continue
 		}
 
-		// check which watch created this resource in the first place
-		ann := obj.GetAnnotations()
-		wantWatch := string(e.Watch.GetUID())
-		gotWatch := ""
-		if ann != nil {
-			gotWatch = ann[attachmentCreateAnnotationKey]
-		}
-
-		if gotWatch != wantWatch && !deleteAny {
-			// Skip objects that was not created due to this watch
-			glog.V(4).Infof(
-				"%s: Can't delete %s: Annotation %s has %q want %q: DeleteAny %t",
-				e,
-				DescObjectAsKey(obj),
-				attachmentCreateAnnotationKey,
-				gotWatch,
-				wantWatch,
-				deleteAny,
-			)
-			continue
-		}
-
 		if e.Desired == nil || e.Desired[name] == nil {
+			// check which watch created this resource in the first place
+			ann := obj.GetAnnotations()
+			wantWatch := string(e.Watch.GetUID())
+			gotWatch := ""
+			if ann != nil {
+				gotWatch = ann[attachmentCreateAnnotationKey]
+			}
+
+			if gotWatch != wantWatch && !deleteAny {
+				// Skip objects that was not created due to this watch
+				glog.V(4).Infof(
+					"%s: Can't delete %s: Annotation %s has %q want %q: DeleteAny %t",
+					e,
+					DescObjectAsKey(obj),
+					attachmentCreateAnnotationKey,
+					gotWatch,
+					wantWatch,
+					deleteAny,
+				)
+				continue
+			}
+
 			// This observed object wasn't listed as desired.
 			// Hence, this is the right candidate to be deleted.
 			glog.V(4).Infof("%s: Deleting %s", e, DescObjectAsKey(obj))
