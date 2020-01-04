@@ -1,6 +1,6 @@
 module openebs.io/metac
 
-go 1.12
+go 1.13.5
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
