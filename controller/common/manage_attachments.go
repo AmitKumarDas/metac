@@ -18,11 +18,9 @@ package common
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/golang/glog"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +48,11 @@ type AttachmentExecuteBase struct {
 	// followed while executing update operation against an
 	// attachment
 	GetChildUpdateStrategyByGK func(group, kind string) v1alpha1.ChildUpdateMethod
+
+	// IsPatchByGK returns true if attachment based on the
+	// given api group & kind need to be patched versus the
+	// default 3-way merge during update operations.
+	IsPatchByGK func(group, kind string) bool
 
 	// Resource that is under watch. A watch might be related
 	// to the attachments. For example, a watch object might
@@ -262,7 +265,7 @@ type AttachmentResourcesExecutor struct {
 	// resource name.
 	//
 	// It is important to have all resources in these maps
-	// belong to a one apiVersion & kind.
+	// belong to a **same** apiVersion & kind.
 	//
 	// This apiVersion and kind corresponds to
 	// DynamicResourceClient property of this instance.
@@ -285,24 +288,28 @@ func (e AttachmentResourcesExecutor) IsUpdateDuringPendingDelete() bool {
 }
 
 // Update updates the observed attachment to its desired attachment
-func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructured) error {
+//
+// NOTE:
+//	Return value with bool datatype indicates a update or no update.
+func (e *AttachmentResourcesExecutor) Update(
+	observedObj, desiredObj *unstructured.Unstructured) (bool, error) {
 	// TODO (@amitkumardas):
 	//
 	// Should this be desired object's namespace or
 	// current object's namespace. Updating the namespace
 	// may not work just by taking up the desired object's namespace.
-	ns := dObj.GetNamespace()
+	ns := desiredObj.GetNamespace()
 	if ns == "" {
 		ns = e.Watch.GetNamespace()
 	}
 
 	// Leave it alone if it's pending deletion && updating during
 	// pending deletion is not enabled
-	if oObj.GetDeletionTimestamp() != nil && !e.IsUpdateDuringPendingDelete() {
+	if observedObj.GetDeletionTimestamp() != nil && !e.IsUpdateDuringPendingDelete() {
 		glog.V(4).Infof(
-			"%s: Can't update %s: Pending deletion", e, DescObjectAsKey(dObj),
+			"%s: Can't update %s: Pending deletion", e, DescObjectAsKey(desiredObj),
 		)
-		return nil
+		return false, nil
 	}
 
 	// if controller has rights to update any attachments
@@ -311,28 +318,27 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		updateAny = *e.UpdateAny
 	}
 
-	// check if this object was created due to a
-	// GenericController watch
-	ann := oObj.GetAnnotations()
-	wantWatch := string(e.Watch.GetUID())
-	gotWatch := ""
-	if ann != nil {
-		gotWatch = ann[attachmentCreateAnnotationKey]
+	// Check if this object was created due to a GenericController watch
+	observedAnns := observedObj.GetAnnotations()
+	currentWatchUID := string(e.Watch.GetUID())
+	createdByWatchUID := ""
+	if observedAnns != nil {
+		createdByWatchUID = observedAnns[attachmentCreateAnnotationKey]
 	}
 
-	// if watches don't match && this controller is not granted
+	// If watches don't match && this controller is not granted
 	// to update any arbitrary attachments then skip this update
-	if gotWatch != wantWatch && !updateAny {
+	if createdByWatchUID != currentWatchUID && !updateAny {
 		glog.V(4).Infof(
-			"%s: Can't update %s: Annotation %s has %q want %q: UpdateAny %t",
+			"%s: Won't update %s: Annotation %s has %q got %q: UpdateAny %t",
 			e,
-			DescObjectAsKey(dObj),
+			DescObjectAsKey(desiredObj),
 			attachmentCreateAnnotationKey,
-			gotWatch,
-			wantWatch,
+			createdByWatchUID,
+			currentWatchUID,
 			updateAny,
 		)
-		return nil
+		return false, nil
 	}
 
 	// Check the update strategy for this child kind
@@ -346,99 +352,123 @@ func (e *AttachmentResourcesExecutor) Update(oObj, dObj *unstructured.Unstructur
 		// it gets deleted by someone else i.e. we won't delete it
 		// ourselves
 		glog.V(4).Infof(
-			"%s: Can't update %s: UpdateStrategy=%q", e, DescObjectAsKey(dObj), method,
+			"%s: Won't update %s: UpdateStrategy=%q", e, DescObjectAsKey(desiredObj), method,
 		)
-		return nil
+		return false, nil
 	}
-
-	// Set who is responsible for this update. In other words set the
-	// watch details in the annotations
-	if ann == nil {
-		ann = make(map[string]string)
-	}
-	ann[string(e.Watch.GetUID())+attachmentUpdateAnnotationKeySuffix] =
-		DescObjectAsSanitisedKey(e.Watch)
-	dObj.SetAnnotations(ann)
 
 	// 3-way merge
+	//
 	// Construct the annotation key that holds the last applied
 	// state. The annotation key is based on the current watch.
 	//
 	// NOTE:
 	// 	This lets an attachment to be updated independently even
-	// with multiple updates triggered via different watches.
+	// with multiple updates (read 3-way merges) triggered due to
+	// different watches.
 	lastAppliedKey := string(e.Watch.GetUID()) + lastAppliedAnnotationKeySuffix
+
+	// Check if its a patch based update vs. 3-way merge based update
+	if e.IsPatchByGK(e.DynamicResourceClient.Group, e.DynamicResourceClient.Kind) {
+		// Since patch is enabled; resource based on this api group
+		// & kind will be patched versus the standard 3-way merge based
+		// update.
+		//
+		// NOTE:
+		// 	We set last applied state as observed instance's content.
+		// This last applied state is then set against the same observed
+		// instance's annotation.
+		//
+		// This lets metac to have full control of all the fields during
+		// the 3-way merge operation. This way of executing 3-way merge
+		// to arbitrary resources is equivalent to apply operation of
+		// resources created by metac controllers.
+		//
+		// NOTE:
+		// 	However, the final merged instance is saved in the cluster
+		// with desired instance's content as the last applied state.
+		err := dynamicapply.SetLastAppliedByAnnKey(
+			observedObj,
+			observedObj.UnstructuredContent(),
+			lastAppliedKey,
+		)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	// Invoke Merge from a new instance of Apply struct
 	a := NewApplyFromAnnKey(lastAppliedKey)
-	uObj, err := a.Merge(oObj, dObj)
+	mergedObj, err := a.Merge(observedObj, desiredObj)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	// Attempt an update, if the 3-way merge
-	// resulted in any changes.
-	if reflect.DeepEqual(
-		uObj.UnstructuredContent(),
-		oObj.UnstructuredContent(),
-	) {
+	// Proceed for update, only if above merge resulted in any
+	// differences between observed state vs. desired state
+	isDiff, err := a.HasMergeDiff()
+	if err != nil {
+		return false, err
+	}
+	if !isDiff {
 		glog.V(4).Infof(
-			"%s: Can't update %s: Nothing changed.", e, DescObjectAsKey(dObj),
+			"%s: Won't update %s: Nothing changed.", e, DescObjectAsKey(desiredObj),
 		)
-		return nil
+		return false, nil
 	}
-
-	if glog.V(5) {
-		glog.Infof(
-			"%s: Diff: a=observed, b=desired:\n%s",
-			e,
-			cmp.Diff(
-				oObj.UnstructuredContent(),
-				uObj.UnstructuredContent(),
-			),
-		)
-	}
+	glog.V(4).Infof(
+		"%s: Will update %s: Diff is found between its observed & desired states.",
+		e, DescObjectAsKey(desiredObj),
+	)
 
 	// Act based on the update strategy for this child kind.
 	switch method {
 	case v1alpha1.ChildUpdateRecreate, v1alpha1.ChildUpdateRollingRecreate:
 		// Delete the object (now) and recreate it (on the next sync).
-		glog.V(4).Infof("%s: Deleting %s for update", e, DescObjectAsKey(dObj))
-
-		uid := oObj.GetUID()
+		glog.V(4).Infof("%s: Deleting %s for update", e, DescObjectAsKey(desiredObj))
+		uid := observedObj.GetUID()
 		// Explicitly request deletion propagation, which is what users expect,
 		// since some objects default to orphaning for backwards compatibility.
 		propagation := metav1.DeletePropagationBackground
 		err := e.DynamicResourceClient.Namespace(ns).Delete(
-			dObj.GetName(),
+			desiredObj.GetName(),
 			&metav1.DeleteOptions{
 				Preconditions:     &metav1.Preconditions{UID: &uid},
 				PropagationPolicy: &propagation,
 			},
 		)
 		if err != nil {
-			return err
+			return false, err
 		}
-
-		glog.Infof("%s: Deleted %s for update", e, DescObjectAsKey(dObj))
+		glog.Infof("%s: Deleted %s for update", e, DescObjectAsKey(desiredObj))
 	case v1alpha1.ChildUpdateInPlace, v1alpha1.ChildUpdateRollingInPlace:
 		// Update the object in-place.
-		glog.V(4).Infof("%s: Updating %s", e, DescObjectAsKey(dObj))
-
+		glog.V(4).Infof("%s: Updating %s", e, DescObjectAsKey(desiredObj))
+		// Set who is responsible for this update.
+		// In other words set the watch details in the annotations
+		updatedAnns := mergedObj.GetAnnotations()
+		if updatedAnns == nil {
+			updatedAnns = make(map[string]string)
+		}
+		updatedAnns[string(e.Watch.GetUID())+attachmentUpdateAnnotationKeySuffix] =
+			DescObjectAsSanitisedKey(e.Watch)
+		mergedObj.SetAnnotations(updatedAnns)
+		// update the merged state at the cluster
 		_, err := e.DynamicResourceClient.Namespace(ns).Update(
-			uObj, metav1.UpdateOptions{},
+			mergedObj, metav1.UpdateOptions{},
 		)
 		if err != nil {
-			return err
+			return false, err
 		}
-
-		glog.V(2).Infof("%s: Updated %s", e, DescObjectAsKey(dObj))
+		glog.V(3).Infof("%s: Updated %s", e, DescObjectAsKey(desiredObj))
 	default:
-		return errors.Errorf(
+		return false, errors.Errorf(
 			"%s: Invalid update strategy %s for %s",
-			e, method, DescObjectAsKey(dObj),
+			e, method, DescObjectAsKey(desiredObj),
 		)
 	}
-
-	return nil
+	// this resulted in an actual update
+	return true, nil
 }
 
 // Create creates the desired attachment
@@ -477,8 +507,8 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 	ann[attachmentCreateAnnotationKey] = string(e.Watch.GetUID())
 	dObj.SetAnnotations(ann)
 
-	// Attachments are set with watch as the owner reference
-	// if watch is flagged to be the owner
+	// Attachments are set with current watch as
+	// the owner reference if watch is flagged to be the owner
 	if e.IsWatchOwner != nil && *e.IsWatchOwner {
 		watchAsOwnerRef := MakeOwnerRef(e.Watch)
 
@@ -511,7 +541,7 @@ func (e *AttachmentResourcesExecutor) CreateOrUpdate() error {
 			// -------------------------------------------
 			// try update since object already exists
 			// -------------------------------------------
-			err := e.Update(oObj, dObj)
+			_, err := e.Update(oObj, dObj)
 			if err != nil {
 				errs = appendErrIfNotNil(errs, err)
 			}
@@ -631,8 +661,8 @@ type AnyAttachmentsCreateUpdater []*AttachmentResourcesExecutor
 func (list AnyAttachmentsCreateUpdater) CreateOrUpdate() error {
 	var errs []error
 
-	for _, exec := range list {
-		errs = appendErrIfNotNil(errs, exec.CreateOrUpdate())
+	for _, createUpdater := range list {
+		errs = appendErrIfNotNil(errs, createUpdater.CreateOrUpdate())
 	}
 	return utilerrors.NewAggregate(errs)
 }

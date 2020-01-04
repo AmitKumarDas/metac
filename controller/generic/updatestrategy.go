@@ -26,7 +26,7 @@ import (
 	dynamicdiscovery "openebs.io/metac/dynamic/discovery"
 )
 
-type attachmentUpdateStrategyFinder struct {
+type attachmentUpdateStrategyManager struct {
 	// strategies holds update strategies of attachments
 	// corresponding to GenericController
 	strategies map[string]*v1alpha1.GenericControllerAttachmentUpdateStrategy
@@ -37,7 +37,7 @@ type attachmentUpdateStrategyFinder struct {
 }
 
 // String implements Stringer interface
-func (mgr attachmentUpdateStrategyFinder) String() string {
+func (mgr attachmentUpdateStrategyManager) String() string {
 	return "attachmentUpdateStrategyManager"
 }
 
@@ -48,20 +48,20 @@ func makeUpdateStrategyKeyFromGK(apiGroup, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiGroup)
 }
 
-// newAttachmentUpdateStrategyFinder returns a new instance of
+// newAttachmentUpdateStrategyManager returns a new instance of
 // attachmentUpdateStrategyManager.
-func newAttachmentUpdateStrategyFinder(
+func newAttachmentUpdateStrategyManager(
 	resourceMgr *dynamicdiscovery.APIResourceManager,
 	attachments []v1alpha1.GenericControllerAttachment,
-) (*attachmentUpdateStrategyFinder, error) {
-
-	mgr := &attachmentUpdateStrategyFinder{
+) (*attachmentUpdateStrategyManager, error) {
+	// create a new instance of attachmentUpdateStrategyManager
+	mgr := &attachmentUpdateStrategyManager{
 		strategies: make(
 			map[string]*v1alpha1.GenericControllerAttachmentUpdateStrategy,
 		),
 		defaultMethod: v1alpha1.ChildUpdateOnDelete,
 	}
-
+	// init the strategies
 	for _, attachment := range attachments {
 		// no need to store default strategy since no need to lookup later.
 		// This can also remove the need to maintain the map of strategies
@@ -92,22 +92,31 @@ func newAttachmentUpdateStrategyFinder(
 
 // getStrategyByGK returns the attachment upgrade strategy
 // based on the given api group & kind
-func (mgr attachmentUpdateStrategyFinder) getStrategyByGK(
+func (mgr attachmentUpdateStrategyManager) getStrategyByGK(
 	apiGroup, kind string,
 ) *v1alpha1.GenericControllerAttachmentUpdateStrategy {
-
 	return mgr.strategies[makeUpdateStrategyKeyFromGK(apiGroup, kind)]
 }
 
 // GetStrategyByGKOrDefault returns the attachment update strategy
 // based on the given api group & kind
-func (mgr attachmentUpdateStrategyFinder) GetStrategyByGKOrDefault(
+func (mgr attachmentUpdateStrategyManager) GetStrategyByGKOrDefault(
 	apiGroup, kind string,
 ) v1alpha1.ChildUpdateMethod {
-
 	strategy := mgr.getStrategyByGK(apiGroup, kind)
 	if strategy == nil || strategy.Method == "" {
 		return mgr.defaultMethod
 	}
 	return strategy.Method
+}
+
+// IsPatchByGK returns true if attachment based on the
+// given api group & kind need to be patched versus the
+// default 3-way merge during update operations.
+func (mgr attachmentUpdateStrategyManager) IsPatchByGK(apiGroup, kind string) bool {
+	strategy := mgr.getStrategyByGK(apiGroup, kind)
+	if strategy == nil || strategy.Patch == nil {
+		return false
+	}
+	return *strategy.Patch
 }

@@ -21,11 +21,11 @@ import (
 	"reflect"
 
 	"github.com/golang/glog"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/util/diff"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
@@ -55,6 +55,15 @@ type Apply struct {
 	// NOTE:
 	//	This is typically invoked before calling SetLastAppliedFn
 	SanitizeLastAppliedFn func(lastApplied map[string]interface{})
+
+	// isRun is set to true if Merge operation was invoked sucessfully
+	isRun bool
+
+	// isEqual is set to true if observed & desired states were equal
+	//
+	// NOTE:
+	//	This should be used after invoking Merge operation
+	isEqual bool
 }
 
 // NewApplyFromAnnKey returns a new instance of Apply based on the provided
@@ -82,7 +91,7 @@ func NewApplyFromAnnKey(key string) *Apply {
 // Merge applies the update against the original object in the
 // style of kubectl apply
 func (a *Apply) Merge(
-	orig, update *unstructured.Unstructured,
+	observed, desired *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 
 	// defaults to old way
@@ -97,7 +106,7 @@ func (a *Apply) Merge(
 		a.SanitizeLastAppliedFn = func(l map[string]interface{}) {}
 	}
 
-	return a.merge(orig, update)
+	return a.merge(observed, desired)
 }
 
 // merge applies the update against the original object
@@ -106,20 +115,20 @@ func (a *Apply) Merge(
 // NOTE:
 //	This should be invoked from the public Merge method
 func (a *Apply) merge(
-	orig, update *unstructured.Unstructured,
+	observed, desired *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 
 	// state that was last applied by this controller
-	lastApplied, err := a.GetLastAppliedFn(orig)
+	lastApplied, err := a.GetLastAppliedFn(observed)
 	if err != nil {
 		return nil, err
 	}
 
-	newObj := &unstructured.Unstructured{}
-	newObj.Object, err = dynamicapply.Merge(
-		orig.UnstructuredContent(),
+	merged := &unstructured.Unstructured{}
+	merged.Object, err = dynamicapply.Merge(
+		observed.UnstructuredContent(),
 		lastApplied,
-		update.UnstructuredContent(),
+		desired.UnstructuredContent(),
 	)
 	if err != nil {
 		return nil, err
@@ -131,23 +140,56 @@ func (a *Apply) merge(
 	// recreates.
 	//
 	// See: https://github.com/GoogleCloudPlatform/metacontroller/issues/76
-	if err := revertObjectMetaSystemFields(newObj, orig); err != nil {
+	if err := revertObjectMetaSystemFields(merged, observed); err != nil {
 		return nil, errors.Wrapf(err, "Failed to revert ObjectMeta system fields")
 	}
 
 	// Revert status because we don't currently support a parent changing
 	// status of its children, so we need to ensure no diffs on the children
 	// involve status.
-	if err := revertField(newObj, orig, "status"); err != nil {
+	if err := revertField(merged, observed, "status"); err != nil {
 		return nil, errors.Wrapf(err, "Failed to revert .status")
 	}
 
-	// sanitize the last applied state before storing the same
-	// in the newly formed object
-	a.SanitizeLastAppliedFn(update.UnstructuredContent())
-	a.SetLastAppliedFn(newObj, update.UnstructuredContent())
+	// set flags to let consumers of this function take appropriate decisions
+	//
+	// One of the examples of consumers using these flags can be checking
+	// for diff; since this function not only merges the states but also
+	// sets last applied info
+	a.isRun = true
+	a.isEqual =
+		reflect.DeepEqual(merged.UnstructuredContent(), observed.UnstructuredContent())
 
-	return newObj, nil
+	if !a.isEqual {
+		// log the diff if verbose log level is enabled
+		glog.V(5).Infof(
+			"Desired %s: Diff: a=observed, b=new:\n%s",
+			DescObjectAsKey(desired),
+			cmp.Diff(
+				observed.UnstructuredContent(),
+				merged.UnstructuredContent(),
+			),
+		)
+	}
+
+	// store desired content as the last applied state
+	// against this newly merged object
+	//
+	// NOTE:
+	//	sanitize last applied state before storing it
+	a.SanitizeLastAppliedFn(desired.UnstructuredContent())
+	a.SetLastAppliedFn(merged, desired.UnstructuredContent())
+
+	return merged, nil
+}
+
+// HasMergeDiff returns true if Merge invocation found any
+// differences between observed & desired states
+func (a *Apply) HasMergeDiff() (bool, error) {
+	if !a.isRun {
+		return false, errors.Errorf("Invalid invocation: Merge has not been invoked")
+	}
+	return !a.isEqual, nil
 }
 
 // objectMetaSystemFields is a list of JSON field names within ObjectMeta
@@ -334,14 +376,6 @@ func updateChildren(
 			if reflect.DeepEqual(newObj.UnstructuredContent(), oldObj.UnstructuredContent()) {
 				// Nothing changed.
 				continue
-			}
-			if glog.V(5) {
-				glog.Infof(
-					"reflect diff: a=observed, b=desired:\n%s",
-					diff.ObjectReflectDiff(
-						oldObj.UnstructuredContent(), newObj.UnstructuredContent(),
-					),
-				)
 			}
 
 			// Leave it alone if it's pending deletion.

@@ -218,6 +218,594 @@ func TestMerge(t *testing.T) {
 				]
 			}`,
 		},
+		//
+		// test labels
+		//
+		{
+			name: "labels with no changes && no last applied",
+			observed: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+		},
+		{
+			name: "labels with no changes && with last applied",
+			observed: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+		},
+		{
+			name: "labels with updates, removals & additions && no last applied",
+			observed: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"labels": {
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+			}`,
+		},
+		{
+			name: "labels with updates, removals & additions && with last applied",
+			observed: `{
+				"metadata": {
+					"labels": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"labels": {
+						"name": "app"
+					}
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"labels": {
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"labels": {
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+			}`,
+		},
+		//
+		// test annotations
+		//
+		{
+			name: "annotations with no changes && no last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+		},
+		{
+			name: "annotations with no changes && with last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+		},
+		{
+			name: "annotations with updates, removals & addtions && no last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"annotations": {
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+			}`,
+		},
+		{
+			name: "annotations with updates, removals & additions && with last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"annotations": {
+						"name": "app"
+					}
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"annotations": {
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {
+						"type": "simple storage",
+						"ssd": "true"
+					}
+				}
+			}`,
+		},
+		{
+			name: "empty annotations && no last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"annotations": {}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+		},
+		{
+			name: "empty annotations && last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"annotations": {}
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {}
+				}
+			}`,
+		},
+		{
+			name: "nil annotations && no last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {}
+      		}`,
+			want: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+		},
+		{
+			name: "nil annotations && last applied",
+			observed: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"annotations": {
+						"name": "app",
+						"type": "storage"
+					}
+				}
+			}`,
+			desired: `{
+				"metadata": {}
+      		}`,
+			want: `{
+				"metadata": {}
+			}`,
+		},
+
+		//
+		// test finalizers
+		//
+		{
+			name: "finalizers with no changes && no last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+		},
+		{
+			name: "finalizers with no changes && with last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+		},
+		{
+			name: "finalizers with removals & addtions && no last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"finalizers": [
+						"app-two-protect",
+						"storage-protect"
+					]
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": [
+						"app-two-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+		},
+		{
+			name: "finalizers with removals & additions && with last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect"
+					]
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"finalizers": [
+						"app-two-protect",
+						"storage-protect"
+					]
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": [
+						"app-two-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+		},
+		{
+			name: "empty finalizers && no last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {
+					"finalizers": []
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": []
+				}
+			}`,
+		},
+		{
+			name: "empty finalizers && last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			desired: `{
+				"metadata": {
+					"finalizers": []
+				}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": []
+				}
+			}`,
+		},
+		{
+			name: "nil finalizers && no last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"metadata": {}
+      		}`,
+			want: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+		},
+		{
+			name: "nil finalizers && last applied",
+			observed: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			lastApplied: `{
+				"metadata": {
+					"finalizers": [
+						"app-protect",
+						"storage-protect"
+					]
+				}
+			}`,
+			desired: `{
+				"metadata": {}
+      		}`,
+			want: `{
+				"metadata": {}
+			}`,
+		},
 	}
 
 	for _, tc := range table {
