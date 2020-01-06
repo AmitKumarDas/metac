@@ -178,10 +178,20 @@ type GenericControllerAttachment struct {
 	UpdateStrategy *GenericControllerAttachmentUpdateStrategy `json:"updateStrategy,omitempty"`
 }
 
-// GenericControllerAttachmentUpdateStrategy represents the update strategy
-// to be followed for the attachments
+// GenericControllerAttachmentUpdateStrategy represents the update
+// strategy to be followed for the attachments
 type GenericControllerAttachmentUpdateStrategy struct {
+	// Method determines the specific update strategy to be followed
 	Method ChildUpdateMethod `json:"method,omitempty"`
+
+	// Patch will patch the resource content by overriding the
+	// observed state from desired state.
+	//
+	// NOTE:
+	//	This does not follow the standard 3-way merge path and
+	// does a plain override of the observed instance from desired
+	// instance.
+	Patch *bool `json:"patch,omitempty"`
 }
 
 // GenericControllerStatusPhase represents various execution states

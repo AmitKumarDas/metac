@@ -705,7 +705,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 	if watch.GetDeletionTimestamp() == nil || mgr.finalizer.ShouldFinalize(watch) {
 
 		// build a new instance of attachment update strategy finder
-		updateStrategyMgr, err := newAttachmentUpdateStrategyFinder(
+		updateStrategyMgr, err := newAttachmentUpdateStrategyManager(
 			mgr.ResourceManager,
 			mgr.GCtlConfig.Spec.Attachments,
 		)
@@ -721,6 +721,7 @@ func (mgr *watchController) syncWatchObj(watch *unstructured.Unstructured) error
 		attMgr := &common.AttachmentManager{
 			AttachmentExecuteBase: common.AttachmentExecuteBase{
 				GetChildUpdateStrategyByGK: updateStrategyMgr.GetStrategyByGKOrDefault,
+				IsPatchByGK:                updateStrategyMgr.IsPatchByGK,
 				Watch:                      watch,
 				UpdateAny:                  mgr.GCtlConfig.Spec.UpdateAny,
 				DeleteAny:                  mgr.GCtlConfig.Spec.DeleteAny,
