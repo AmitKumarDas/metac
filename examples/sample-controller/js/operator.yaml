@@ -1,0 +1,73 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: foos.samplecontroller.k8s.io
+spec:
+  group: samplecontroller.k8s.io
+  version: v1alpha1
+  scope: Namespaced
+  names:
+    plural: foos
+    singular: foo
+    kind: Foo
+    shortNames:
+    - foo
+  subresources:
+    status: {}
+---
+apiVersion: metac.openebs.io/v1alpha1
+kind: CompositeController
+metadata:
+  name: sample-controller
+spec:
+  generateSelector: true
+  parentResource:
+    apiVersion: samplecontroller.k8s.io/v1alpha1
+    resource: foos
+  childResources:
+  - apiVersion: apps/v1
+    resource: deployments
+    updateStrategy:
+      method: InPlace
+  hooks:
+    sync:
+      webhook:
+        url: http://sample-controller.metac/sync
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-controller
+  namespace: metac
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-controller
+  template:
+    metadata:
+      labels:
+        app: sample-controller
+    spec:
+      containers:
+      - name: controller
+        image: metacontroller/nodejs-server:0.1
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: hooks
+          mountPath: /node/hooks
+      volumes:
+      - name: hooks
+        configMap:
+          name: sample-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-controller
+  namespace: metac
+spec:
+  selector:
+    app: sample-controller
+  ports:
+  - port: 80
