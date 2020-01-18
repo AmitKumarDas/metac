@@ -5,6 +5,7 @@ set -u
 
 echo ""
 echo "+++ Will install binaries required to run integration test(s)"
+echo "+++ NOTE: Remove binaries from hack/bin if new versions are needed"
 echo ""
 
 # This script downloads kubectl, kube-apiserver & etcd binaries
@@ -15,12 +16,12 @@ echo ""
 # found in the PATH.
 
 # This is the kube-apiserver version to test against.
-KUBE_VERSION="${KUBE_VERSION:-v1.11.3}"
+KUBE_VERSION="${KUBE_VERSION:-v1.16.4}"
 KUBERNETES_RELEASE_URL="${KUBERNETES_RELEASE_URL:-https://dl.k8s.io}"
 
 # This should be the etcd version downloaded by 
 # kubernetes/hack/lib/etcd.sh as of the above Kubernetes version.
-ETCD_VERSION="${ETCD_VERSION:-v3.2.18}"
+ETCD_VERSION="${ETCD_VERSION:-v3.4.3}"
 
 mkdir -p hack/bin
 cd hack/bin
