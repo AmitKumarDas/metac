@@ -63,7 +63,7 @@ spec:
     spec:
       containers:
       - name: controller
-        image: rahulchheda1997/thing-controller:ci
+        image: quay.io/amitkumardas/thing-controller:ci
         command: ["thing-controller"]
 ---
 apiVersion: v1
