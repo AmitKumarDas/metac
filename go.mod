@@ -17,6 +17,7 @@ require (
 	k8s.io/client-go v0.17.0
 	k8s.io/code-generator v0.17.0
 	k8s.io/klog v1.0.0
+	sigs.k8s.io/controller-tools v0.2.4
 )
 
 replace (

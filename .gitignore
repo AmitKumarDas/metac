@@ -2,5 +2,6 @@
 /vendor/
 /metac
 /hack/bin/
+/manifests/crds/
 .*.swp
 .history

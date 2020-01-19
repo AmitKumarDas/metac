@@ -1,86 +1,1567 @@
+
+---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (devel)
+  creationTimestamp: null
   name: compositecontrollers.metac.openebs.io
 spec:
   group: metac.openebs.io
-  version: v1alpha1
-  scope: Cluster
   names:
-    plural: compositecontrollers
-    singular: compositecontroller
     kind: CompositeController
+    listKind: CompositeControllerList
+    plural: compositecontrollers
     shortNames:
     - cctl
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  name: decoratorcontrollers.metac.openebs.io
-spec:
-  group: metac.openebs.io
-  version: v1alpha1
+    singular: compositecontroller
   scope: Cluster
-  names:
-    plural: decoratorcontrollers
-    singular: decoratorcontroller
-    kind: DecoratorController
-    shortNames:
-    - dctl
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            childResources:
+              items:
+                properties:
+                  apiVersion:
+                    type: string
+                  resource:
+                    type: string
+                  updateStrategy:
+                    properties:
+                      method:
+                        description: ChildUpdateMethod represents a typed constant
+                          to determine the update strategy of a child resource
+                        type: string
+                      statusChecks:
+                        properties:
+                          conditions:
+                            items:
+                              properties:
+                                reason:
+                                  type: string
+                                status:
+                                  type: string
+                                type:
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                            type: array
+                        type: object
+                    type: object
+                required:
+                - apiVersion
+                - resource
+                type: object
+              type: array
+            generateSelector:
+              type: boolean
+            hooks:
+              properties:
+                finalize:
+                  description: Hook refers to the logic that builds the desired state
+                    of resources
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+                postUpdateChild:
+                  description: Hook refers to the logic that builds the desired state
+                    of resources
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+                preUpdateChild:
+                  description: Hook refers to the logic that builds the desired state
+                    of resources
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+                sync:
+                  description: Hook refers to the logic that builds the desired state
+                    of resources
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+              type: object
+            parentResource:
+              properties:
+                apiVersion:
+                  type: string
+                resource:
+                  type: string
+                revisionHistory:
+                  properties:
+                    fieldPaths:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+              required:
+              - apiVersion
+              - resource
+              type: object
+            resyncPeriodSeconds:
+              format: int32
+              type: integer
+          required:
+          - parentResource
+          type: object
+        status:
+          type: object
+      required:
+      - metadata
+      - spec
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (devel)
+  creationTimestamp: null
   name: controllerrevisions.metac.openebs.io
 spec:
   group: metac.openebs.io
-  version: v1alpha1
-  scope: Namespaced
   names:
+    kind: ControllerRevision
+    listKind: ControllerRevisionList
     plural: controllerrevisions
     singular: controllerrevision
-    kind: ControllerRevision
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        children:
+          items:
+            properties:
+              apiGroup:
+                type: string
+              kind:
+                type: string
+              names:
+                items:
+                  type: string
+                type: array
+            required:
+            - apiGroup
+            - kind
+            - names
+            type: object
+          type: array
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        parentPatch:
+          type: object
+      required:
+      - metadata
+      - parentPatch
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (devel)
+  creationTimestamp: null
+  name: decoratorcontrollers.metac.openebs.io
+spec:
+  group: metac.openebs.io
+  names:
+    kind: DecoratorController
+    listKind: DecoratorControllerList
+    plural: decoratorcontrollers
+    shortNames:
+    - dctl
+    singular: decoratorcontroller
+  scope: Cluster
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            attachments:
+              items:
+                properties:
+                  apiVersion:
+                    type: string
+                  resource:
+                    type: string
+                  updateStrategy:
+                    properties:
+                      method:
+                        description: ChildUpdateMethod represents a typed constant
+                          to determine the update strategy of a child resource
+                        type: string
+                    type: object
+                required:
+                - apiVersion
+                - resource
+                type: object
+              type: array
+            hooks:
+              properties:
+                finalize:
+                  description: Hook refers to the logic that builds the desired state
+                    of resources
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+                sync:
+                  description: Hook refers to the logic that builds the desired state
+                    of resources
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+              type: object
+            resources:
+              items:
+                properties:
+                  annotationSelector:
+                    properties:
+                      matchAnnotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      matchExpressions:
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                    type: object
+                  apiVersion:
+                    type: string
+                  labelSelector:
+                    description: A label selector is a label query over a set of resources.
+                      The result of matchLabels and matchExpressions are ANDed. An
+                      empty label selector matches all objects. A null label selector
+                      matches no objects.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A
+                          single {key,value} in the matchLabels map is equivalent
+                          to an element of matchExpressions, whose key field is "key",
+                          the operator is "In", and the values array contains only
+                          "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                  resource:
+                    type: string
+                required:
+                - apiVersion
+                - resource
+                type: object
+              type: array
+            resyncPeriodSeconds:
+              format: int32
+              type: integer
+          required:
+          - resources
+          type: object
+        status:
+          type: object
+      required:
+      - metadata
+      - spec
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (devel)
+  creationTimestamp: null
   name: genericcontrollers.metac.openebs.io
 spec:
   group: metac.openebs.io
-  version: v1alpha1
-  scope: Namespaced
   names:
-    plural: genericcontrollers
-    singular: genericcontroller
     kind: GenericController
+    listKind: GenericControllerList
+    plural: genericcontrollers
     shortNames:
     - gctl
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  labels:
-    app.openebs.io/name: metac
-  name: metac
-  namespace: metac
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.openebs.io/name: metac
-  serviceName: ""
-  template:
-    metadata:
-      labels:
-        app.openebs.io/name: metac
-    spec:
-      serviceAccountName: metac
-      containers:
-      - name: metac
-        image: quay.io/amitkumardas/metac:latest
-        command: ["/usr/bin/metac"]
-        args:
-        - --logtostderr
-        - -v=1
-        - --discovery-interval=20s
-  volumeClaimTemplates: []
+    singular: genericcontroller
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: GenericController defines GenericController API schema
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: GenericControllerSpec is the specifications for GenericController
+            API
+          properties:
+            attachments:
+              description: "Attachments are the resources that may be read, created,
+                updated, or deleted as part of formation of the desired state. Attachments
+                are provided along with the watch resource to the sync hooks. \n NOTE:
+                \tGenericController is by default limited to only update & delete
+                the attachments that were created by its controller instance. Other
+                attachments (i.e. the ones created via some other means) are used
+                for readonly purposes during reconciliation."
+              items:
+                description: GenericControllerAttachment represents a resources that
+                  takes part in sync &/or finalize.
+                properties:
+                  annotationSelector:
+                    description: "Include the resource if annotation selector matches
+                      \n This is ANDed with other selectors if present"
+                    properties:
+                      matchAnnotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      matchExpressions:
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                    type: object
+                  apiVersion:
+                    type: string
+                  labelSelector:
+                    description: "Include the resource if label selector matches \n
+                      This is ANDed with other selectors if present"
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A
+                          single {key,value} in the matchLabels map is equivalent
+                          to an element of matchExpressions, whose key field is "key",
+                          the operator is "In", and the values array contains only
+                          "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                  nameSelector:
+                    description: "Include the resource if name selector matches \n
+                      This is ANDed with other selectors if present"
+                    items:
+                      type: string
+                    type: array
+                  resource:
+                    type: string
+                  resourceSelector:
+                    description: "Include the resource if resource selector matches
+                      \n This is ANDed with other selectors if present"
+                    properties:
+                      selectorTerms:
+                        description: A list of selector terms. This list of terms
+                          are ORed.
+                        items:
+                          description: A SelectorTerm is a query over various match
+                            representations. The result of match(-es) are ANDed.
+                          properties:
+                            matchAnnotationExpressions:
+                              description: "MatchAnnotationExpressions is a list of
+                                label selector requirements. The requirements are
+                                ANDed. \n The key as well value is matched against
+                                the target's annotations. \n This is optional"
+                              items:
+                                description: A label selector requirement is a selector
+                                  that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: operator represents a key's relationship
+                                      to a set of values. Valid operators are In,
+                                      NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: values is an array of string values.
+                                      If the operator is In or NotIn, the values array
+                                      must be non-empty. If the operator is Exists
+                                      or DoesNotExist, the values array must be empty.
+                                      This array is replaced during a strategic merge
+                                      patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                            matchAnnotations:
+                              additionalProperties:
+                                type: string
+                              description: "MatchAnnotations is a map of {key,value}
+                                pairs. A single {key,value} in the MatchAnnotations
+                                map is equivalent to an element of MatchAnnotationExpressions,
+                                whose key field is \"key\", the operator is \"In\",
+                                and the value contains a string value. The requirements
+                                are ANDed. \n The key as well value is matched against
+                                the target's annotations. \n This is optional"
+                              type: object
+                            matchFieldExpressions:
+                              description: "MatchFieldExpressions is a list of field
+                                selector requirements. The requirements are AND-ed.
+                                \n The label selector requirement key should represent
+                                the nested field path of the target under match separated
+                                by dot(s) i.e. '.' \n This is optional"
+                              items:
+                                description: A label selector requirement is a selector
+                                  that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: operator represents a key's relationship
+                                      to a set of values. Valid operators are In,
+                                      NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: values is an array of string values.
+                                      If the operator is In or NotIn, the values array
+                                      must be non-empty. If the operator is Exists
+                                      or DoesNotExist, the values array must be empty.
+                                      This array is replaced during a strategic merge
+                                      patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                            matchFields:
+                              additionalProperties:
+                                type: string
+                              description: "MatchFields is a map i.e. key value pairs
+                                based field selector. A single {key,value} in the
+                                MatchFields map is equivalent to an element of matchFieldExpressions,
+                                whose key field is \"key\", the operator is \"In\",
+                                and the value contains only a string value. \n A key
+                                should represent the nested field path of the target
+                                under match separated by dot(s) i.e. '.' \n A MatchFields
+                                is converted into a list of LabelSelectorRequirement
+                                that are AND-ed to determine if the selector matches
+                                its target or not. \n This is optional"
+                              type: object
+                            matchLabelExpressions:
+                              description: "MatchLabelExpressions is a list of label
+                                selector requirements. The requirements are ANDed.
+                                \n The label selector requirement's key as well value
+                                is matched against the target's labels. \n This is
+                                optional"
+                              items:
+                                description: A label selector requirement is a selector
+                                  that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: operator represents a key's relationship
+                                      to a set of values. Valid operators are In,
+                                      NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: values is an array of string values.
+                                      If the operator is In or NotIn, the values array
+                                      must be non-empty. If the operator is Exists
+                                      or DoesNotExist, the values array must be empty.
+                                      This array is replaced during a strategic merge
+                                      patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: "MatchLabels is a map of {key,value} pairs.
+                                A single {key,value} in the MatchLabels map is equivalent
+                                to an element of MatchLabelExpressions, whose key
+                                field is \"key\", the operator is \"In\", and the
+                                value contains a string value. The requirements are
+                                AND-ed. \n The key as well value is matched against
+                                the target's labels. \n This is optional"
+                              type: object
+                            matchSlice:
+                              additionalProperties:
+                                items:
+                                  type: string
+                                type: array
+                              description: "MatchSlice is a map i.e. key value pairs
+                                based slice selector. A single {key,value} in the
+                                MatchSlice map is equivalent to an element of matchSliceExpressions,
+                                whose key field is \"key\", the operator is \"In\",
+                                and the value contains array of string values. \n
+                                A key should represent the nested field path of the
+                                target under match separated by dot(s) i.e. '.' \n
+                                A MatchSlice is converted into a list of SliceSelectorRequirement
+                                that are AND-ed to determine if the selector matches
+                                its target or not. \n This is optional"
+                              type: object
+                            matchSliceExpressions:
+                              description: "MatchSliceExpressions is a list of slice
+                                selector requirements. These requirements are AND-ed
+                                to determine if the selector matches its target or
+                                not. \n The slice selector requirement key should
+                                represent the nested field path of the target under
+                                match separated by dot(s) i.e. '.' \n This is optional"
+                              items:
+                                description: "SliceSelectorRequirement contains values,
+                                  a key, and an operator that relates the key and
+                                  values. The zero value of Requirement is invalid.
+                                  \n NOTE: \tRequirement implements both set based
+                                  match and exact match. \n NOTE: \tRequirement should
+                                  be initialized via appropriate constructors for
+                                  creating a valid SliceSelectorRequirement."
+                                properties:
+                                  key:
+                                    description: Key is the target's nested path that
+                                      the selector applies to
+                                    type: string
+                                  operator:
+                                    description: Operator represents the key's relationship
+                                      to a set of values
+                                    type: string
+                                  values:
+                                    description: Values is an array of string values
+                                      corresponding to the key
+                                    items:
+                                      type: string
+                                    type: array
+                                required:
+                                - key
+                                - operator
+                                - values
+                                type: object
+                              type: array
+                            matchWatch:
+                              description: "MatchReference is a list of keys where
+                                each key holds the path to a field present in target
+                                resource as well as the reference resource. A single
+                                key in the MatchReference list is equivalent to an
+                                element of MatchReferenceExpressions, whose key field
+                                is \"key\", and the operator is \"Equals\". \n A key
+                                should represent the nested field path of the target
+                                as well watch separated by dot(s) e.g. 'metadata.name'
+                                \n A MatchReference is converted into a list of LabelSelectorRequirement
+                                that are AND-ed to determine if the selector marks
+                                its target as a match or no match. \n This is optional"
+                              items:
+                                type: string
+                              type: array
+                            matchWatchExpressions:
+                              description: "MatchReferenceExpressions is a list of
+                                field selector requirements. The requirements are
+                                AND-ed. \n A label selector requirement key should
+                                represent the nested field path of the target separated
+                                by dot(s) e.g. 'metadata.uid' \n This result of each
+                                item in this list of LabelSelectorRequirements is
+                                AND-ed to determine if the selector marks its target
+                                as a match or no match. \n This is optional"
+                              items:
+                                description: "ReferenceSelectorRequirement contains
+                                  a key and an operator. Operator performs match related
+                                  operations against key and corresponding values.
+                                  Values are derived from the target object and the
+                                  reference object. \n NOTE: \tTarget refers to any
+                                  arbitrary resource instance whereas reference resource
+                                  refers to the parent / watch resource in various
+                                  meta controllers."
+                                properties:
+                                  key:
+                                    description: Key is the target's nested path that
+                                      the selector applies to. The nested path is
+                                      separated by dot(s) e.g. 'metadata.namespace'
+                                    type: string
+                                  operator:
+                                    description: Operator represents the key's relationship
+                                      to a string value
+                                    type: string
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                          required:
+                          - matchAnnotationExpressions
+                          - matchAnnotations
+                          - matchFieldExpressions
+                          - matchFields
+                          - matchLabelExpressions
+                          - matchLabels
+                          - matchSlice
+                          - matchSliceExpressions
+                          - matchWatch
+                          - matchWatchExpressions
+                          type: object
+                        type: array
+                    required:
+                    - selectorTerms
+                    type: object
+                  updateStrategy:
+                    description: UpdateStrategy to be used for the resource to take
+                      into account the changes due to sync/finalize
+                    properties:
+                      method:
+                        description: Method determines the specific update strategy
+                          to be followed
+                        type: string
+                      patch:
+                        description: "Patch will patch the resource content by overriding
+                          the observed state from desired state. \n NOTE: \tThis does
+                          not follow the standard 3-way merge path and does a plain
+                          override of the observed instance from desired instance."
+                        type: boolean
+                    type: object
+                required:
+                - apiVersion
+                - resource
+                type: object
+              type: array
+            deleteAny:
+              description: "DeleteAny enables this controller to execute delete operations
+                against any attachments. \n NOTE: \tThis tunable changes the default
+                working mode of GenericController. When set to true, the controller
+                instance is granted with the permission to delete any attachments
+                even if these attachments were not created by this controller instance.
+                \n NOTE: \tThis is optional. However this should not be set to true
+                if ReadOnly is set to true."
+              type: boolean
+            hooks:
+              description: Hooks to be invoked to arrive at the desired state
+              properties:
+                finalize:
+                  description: Hook that gets invoked during delete reconciliation
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+                sync:
+                  description: Hook that gets invoked during create/update reconciliation
+                  properties:
+                    inline:
+                      description: Inline invocation to arrive at desired state
+                      properties:
+                        funcName:
+                          type: string
+                      type: object
+                    webhook:
+                      description: Webhook invocation to arrive at desired state
+                      properties:
+                        path:
+                          type: string
+                        service:
+                          properties:
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              type: string
+                          required:
+                          - name
+                          - namespace
+                          type: object
+                        timeout:
+                          type: string
+                        url:
+                          type: string
+                      type: object
+                  type: object
+              type: object
+            parameters:
+              additionalProperties:
+                type: string
+              description: "Parameters represent a set of key value pairs that can
+                be used by the sync hook implementation logic. \n NOTE: \tThis is
+                optional"
+              type: object
+            readOnly:
+              description: "ReadOnly disables this controller from executing create,
+                delete & update operations against any attachments. \n In other words,
+                when set to true, GenericController can update only the watch resource
+                & is disabled to perform any operation i.e. 'create', 'delete' or
+                'update' against any attachments. \n This can be used by sync / finalize
+                hook implementations to read the attachments & update the watch. One
+                should be able to perform sync operations faster in this mode, if
+                the requirement fits this tunable. \n NOTE: \tThis is optional. However
+                this should not be set to true if UpdateAny or DeleteAny is set to
+                true. \n NOTE: \tReadOnly overrides UpdateAny and DeleteAny tunables"
+              type: boolean
+            resyncPeriodSeconds:
+              description: "ResyncPeriodSeconds is the time interval in seconds after
+                which the GenericController's reconcile gets triggered. In other words
+                this is the interval of reconciliation which runs as a continuous
+                loop \n NOTE: \tThis is optional"
+              format: int32
+              type: integer
+            updateAny:
+              description: "UpdateAny enables this controller to execute update operations
+                against any attachments. \n NOTE: \tThis tunable changes the default
+                working mode of GenericController. When set to true, the controller
+                instance is granted with the permission to update any attachments
+                even if these attachments were not created by this controller instance.
+                \n NOTE: \tThis is optional. However this should not be set to true
+                if ReadOnly is set to true."
+              type: boolean
+            watch:
+              description: Resource that is under watch by GenericController. Any
+                actions i.e. 'create', 'update' or 'delete' of this resource will
+                trigger this GenericController's sync process.
+              properties:
+                annotationSelector:
+                  description: "Include the resource if annotation selector matches
+                    \n This is ANDed with other selectors if present"
+                  properties:
+                    matchAnnotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    matchExpressions:
+                      items:
+                        description: A label selector requirement is a selector that
+                          contains values, a key, and an operator that relates the
+                          key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies
+                              to.
+                            type: string
+                          operator:
+                            description: operator represents a key's relationship
+                              to a set of values. Valid operators are In, NotIn, Exists
+                              and DoesNotExist.
+                            type: string
+                          values:
+                            description: values is an array of string values. If the
+                              operator is In or NotIn, the values array must be non-empty.
+                              If the operator is Exists or DoesNotExist, the values
+                              array must be empty. This array is replaced during a
+                              strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                  type: object
+                apiVersion:
+                  type: string
+                labelSelector:
+                  description: "Include the resource if label selector matches \n
+                    This is ANDed with other selectors if present"
+                  properties:
+                    matchExpressions:
+                      description: matchExpressions is a list of label selector requirements.
+                        The requirements are ANDed.
+                      items:
+                        description: A label selector requirement is a selector that
+                          contains values, a key, and an operator that relates the
+                          key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies
+                              to.
+                            type: string
+                          operator:
+                            description: operator represents a key's relationship
+                              to a set of values. Valid operators are In, NotIn, Exists
+                              and DoesNotExist.
+                            type: string
+                          values:
+                            description: values is an array of string values. If the
+                              operator is In or NotIn, the values array must be non-empty.
+                              If the operator is Exists or DoesNotExist, the values
+                              array must be empty. This array is replaced during a
+                              strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: matchLabels is a map of {key,value} pairs. A single
+                        {key,value} in the matchLabels map is equivalent to an element
+                        of matchExpressions, whose key field is "key", the operator
+                        is "In", and the values array contains only "value". The requirements
+                        are ANDed.
+                      type: object
+                  type: object
+                nameSelector:
+                  description: "Include the resource if name selector matches \n This
+                    is ANDed with other selectors if present"
+                  items:
+                    type: string
+                  type: array
+                resource:
+                  type: string
+                resourceSelector:
+                  description: "Include the resource if resource selector matches
+                    \n This is ANDed with other selectors if present"
+                  properties:
+                    selectorTerms:
+                      description: A list of selector terms. This list of terms are
+                        ORed.
+                      items:
+                        description: A SelectorTerm is a query over various match
+                          representations. The result of match(-es) are ANDed.
+                        properties:
+                          matchAnnotationExpressions:
+                            description: "MatchAnnotationExpressions is a list of
+                              label selector requirements. The requirements are ANDed.
+                              \n The key as well value is matched against the target's
+                              annotations. \n This is optional"
+                            items:
+                              description: A label selector requirement is a selector
+                                that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: operator represents a key's relationship
+                                    to a set of values. Valid operators are In, NotIn,
+                                    Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: values is an array of string values.
+                                    If the operator is In or NotIn, the values array
+                                    must be non-empty. If the operator is Exists or
+                                    DoesNotExist, the values array must be empty.
+                                    This array is replaced during a strategic merge
+                                    patch.
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                          matchAnnotations:
+                            additionalProperties:
+                              type: string
+                            description: "MatchAnnotations is a map of {key,value}
+                              pairs. A single {key,value} in the MatchAnnotations
+                              map is equivalent to an element of MatchAnnotationExpressions,
+                              whose key field is \"key\", the operator is \"In\",
+                              and the value contains a string value. The requirements
+                              are ANDed. \n The key as well value is matched against
+                              the target's annotations. \n This is optional"
+                            type: object
+                          matchFieldExpressions:
+                            description: "MatchFieldExpressions is a list of field
+                              selector requirements. The requirements are AND-ed.
+                              \n The label selector requirement key should represent
+                              the nested field path of the target under match separated
+                              by dot(s) i.e. '.' \n This is optional"
+                            items:
+                              description: A label selector requirement is a selector
+                                that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: operator represents a key's relationship
+                                    to a set of values. Valid operators are In, NotIn,
+                                    Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: values is an array of string values.
+                                    If the operator is In or NotIn, the values array
+                                    must be non-empty. If the operator is Exists or
+                                    DoesNotExist, the values array must be empty.
+                                    This array is replaced during a strategic merge
+                                    patch.
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                          matchFields:
+                            additionalProperties:
+                              type: string
+                            description: "MatchFields is a map i.e. key value pairs
+                              based field selector. A single {key,value} in the MatchFields
+                              map is equivalent to an element of matchFieldExpressions,
+                              whose key field is \"key\", the operator is \"In\",
+                              and the value contains only a string value. \n A key
+                              should represent the nested field path of the target
+                              under match separated by dot(s) i.e. '.' \n A MatchFields
+                              is converted into a list of LabelSelectorRequirement
+                              that are AND-ed to determine if the selector matches
+                              its target or not. \n This is optional"
+                            type: object
+                          matchLabelExpressions:
+                            description: "MatchLabelExpressions is a list of label
+                              selector requirements. The requirements are ANDed. \n
+                              The label selector requirement's key as well value is
+                              matched against the target's labels. \n This is optional"
+                            items:
+                              description: A label selector requirement is a selector
+                                that contains values, a key, and an operator that
+                                relates the key and values.
+                              properties:
+                                key:
+                                  description: key is the label key that the selector
+                                    applies to.
+                                  type: string
+                                operator:
+                                  description: operator represents a key's relationship
+                                    to a set of values. Valid operators are In, NotIn,
+                                    Exists and DoesNotExist.
+                                  type: string
+                                values:
+                                  description: values is an array of string values.
+                                    If the operator is In or NotIn, the values array
+                                    must be non-empty. If the operator is Exists or
+                                    DoesNotExist, the values array must be empty.
+                                    This array is replaced during a strategic merge
+                                    patch.
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            description: "MatchLabels is a map of {key,value} pairs.
+                              A single {key,value} in the MatchLabels map is equivalent
+                              to an element of MatchLabelExpressions, whose key field
+                              is \"key\", the operator is \"In\", and the value contains
+                              a string value. The requirements are AND-ed. \n The
+                              key as well value is matched against the target's labels.
+                              \n This is optional"
+                            type: object
+                          matchSlice:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            description: "MatchSlice is a map i.e. key value pairs
+                              based slice selector. A single {key,value} in the MatchSlice
+                              map is equivalent to an element of matchSliceExpressions,
+                              whose key field is \"key\", the operator is \"In\",
+                              and the value contains array of string values. \n A
+                              key should represent the nested field path of the target
+                              under match separated by dot(s) i.e. '.' \n A MatchSlice
+                              is converted into a list of SliceSelectorRequirement
+                              that are AND-ed to determine if the selector matches
+                              its target or not. \n This is optional"
+                            type: object
+                          matchSliceExpressions:
+                            description: "MatchSliceExpressions is a list of slice
+                              selector requirements. These requirements are AND-ed
+                              to determine if the selector matches its target or not.
+                              \n The slice selector requirement key should represent
+                              the nested field path of the target under match separated
+                              by dot(s) i.e. '.' \n This is optional"
+                            items:
+                              description: "SliceSelectorRequirement contains values,
+                                a key, and an operator that relates the key and values.
+                                The zero value of Requirement is invalid. \n NOTE:
+                                \tRequirement implements both set based match and
+                                exact match. \n NOTE: \tRequirement should be initialized
+                                via appropriate constructors for creating a valid
+                                SliceSelectorRequirement."
+                              properties:
+                                key:
+                                  description: Key is the target's nested path that
+                                    the selector applies to
+                                  type: string
+                                operator:
+                                  description: Operator represents the key's relationship
+                                    to a set of values
+                                  type: string
+                                values:
+                                  description: Values is an array of string values
+                                    corresponding to the key
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - key
+                              - operator
+                              - values
+                              type: object
+                            type: array
+                          matchWatch:
+                            description: "MatchReference is a list of keys where each
+                              key holds the path to a field present in target resource
+                              as well as the reference resource. A single key in the
+                              MatchReference list is equivalent to an element of MatchReferenceExpressions,
+                              whose key field is \"key\", and the operator is \"Equals\".
+                              \n A key should represent the nested field path of the
+                              target as well watch separated by dot(s) e.g. 'metadata.name'
+                              \n A MatchReference is converted into a list of LabelSelectorRequirement
+                              that are AND-ed to determine if the selector marks its
+                              target as a match or no match. \n This is optional"
+                            items:
+                              type: string
+                            type: array
+                          matchWatchExpressions:
+                            description: "MatchReferenceExpressions is a list of field
+                              selector requirements. The requirements are AND-ed.
+                              \n A label selector requirement key should represent
+                              the nested field path of the target separated by dot(s)
+                              e.g. 'metadata.uid' \n This result of each item in this
+                              list of LabelSelectorRequirements is AND-ed to determine
+                              if the selector marks its target as a match or no match.
+                              \n This is optional"
+                            items:
+                              description: "ReferenceSelectorRequirement contains
+                                a key and an operator. Operator performs match related
+                                operations against key and corresponding values. Values
+                                are derived from the target object and the reference
+                                object. \n NOTE: \tTarget refers to any arbitrary
+                                resource instance whereas reference resource refers
+                                to the parent / watch resource in various meta controllers."
+                              properties:
+                                key:
+                                  description: Key is the target's nested path that
+                                    the selector applies to. The nested path is separated
+                                    by dot(s) e.g. 'metadata.namespace'
+                                  type: string
+                                operator:
+                                  description: Operator represents the key's relationship
+                                    to a string value
+                                  type: string
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                        required:
+                        - matchAnnotationExpressions
+                        - matchAnnotations
+                        - matchFieldExpressions
+                        - matchFields
+                        - matchLabelExpressions
+                        - matchLabels
+                        - matchSlice
+                        - matchSliceExpressions
+                        - matchWatch
+                        - matchWatchExpressions
+                        type: object
+                      type: array
+                  required:
+                  - selectorTerms
+                  type: object
+              required:
+              - apiVersion
+              - resource
+              type: object
+          required:
+          - watch
+          type: object
+        status:
+          description: GenericControllerStatus represents the current state of this
+            controller
+          properties:
+            conditions:
+              items:
+                description: "GenericControllerCondition represents a condition that
+                  can be used to represent the current state of this controller. This
+                  can also be used to indicate if this controller can proceed further.
+                  \n Condition will be used only when it is required. It should be
+                  used sparingly to reduce the sync hot loop that gets kicked in when
+                  an observed resource is updated during its reconcile."
+                properties:
+                  assert:
+                    description: Assert represents the assertion status of a sync/finalize
+                      attachement specified in this controller.
+                    type: string
+                  error:
+                    description: Error message if any about this condition
+                    type: string
+                  help:
+                    description: Help message if any to recover from this error
+                    type: string
+                  id:
+                    description: ID uniquely represents a condition from a list of
+                      conditions. This can have a one-to-one mapping against each
+                      sync/finalize attachment.
+                    type: string
+                  lastUpdatedTimestamp:
+                    description: LastUpdatedTimestamp is the last timestamp when this
+                      condition got added/updated
+                    format: date-time
+                    type: string
+                  message:
+                    description: Descriptive message about this condition
+                    type: string
+                  state:
+                    description: State represents the execution status of a sync/finalize
+                      attachement specified in this controller.
+                    type: string
+                required:
+                - id
+                - state
+                type: object
+              type: array
+            phase:
+              description: GenericControllerStatusPhase represents various execution
+                states supported by GenericController
+              type: string
+          required:
+          - phase
+          type: object
+      required:
+      - metadata
+      - spec
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

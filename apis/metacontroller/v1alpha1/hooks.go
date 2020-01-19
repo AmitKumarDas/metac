@@ -20,6 +20,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // Hook refers to the logic that builds the desired
 // state of resources
+// +kubebuilder:object:generate=false
 type Hook struct {
 	// Webhook invocation to arrive at desired state
 	Webhook *Webhook `json:"webhook,omitempty"`
