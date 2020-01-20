@@ -39,7 +39,7 @@ bins: generated_files $(IMG_NAME)
 $(IMG_NAME): $(ALL_SRC)
 	@echo "+ Generating $(IMG_NAME) binary"
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-		go build -mod=vendor -tags bins $(GO_FLAGS) -o $@ ./main.go
+	  go build -mod=vendor -tags bins $(GO_FLAGS) -o $@ ./main.go
 
 $(ALL_SRC): ;
 
@@ -52,9 +52,10 @@ generated_files: vendor
 # Generate manifests e.g. CRD, RBAC etc.
 .PHONY: manifests
 manifests: generated_files
+	@echo "+ Generating $(IMG_NAME) crds"
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./apis/..." output:crd:artifacts:config=manifests/crds
 	@cat manifests/crds/*.yaml > manifests/metacontroller.yaml
-	@echo -n '{{ if .Values.crds.cleanup }}' > helm/metac/templates/crds.yaml && \
+	@echo '{{ if .Values.crds.cleanup }}' > helm/metac/templates/crds.yaml && \
 	  cat manifests/metacontroller.yaml >> helm/metac/templates/crds.yaml && \
 	  echo '{{- end }}' >> helm/metac/templates/crds.yaml
 	@rm -rf manifests/crds
@@ -82,23 +83,23 @@ unit-test: generated_files
 	@go test -mod=vendor ${PKGS}
 
 .PHONY: integration-dependencies
-integration-dependencies:
+integration-dependencies: manifests
 	@./hack/get-kube-binaries.sh
 
 # Integration test makes use of kube-apiserver, etcd & kubectl
 # binaries. This does not require metac binary or docker image.
 # This can be run on one's laptop or Travis like CI environments.
 .PHONY: integration-test
-integration-test: generated_files integration-dependencies
+integration-test: integration-dependencies
 	@go test -mod=vendor ./test/integration/... -v -short -timeout 5m \
 	-args --logtostderr -v=1
 
 .PHONY: integration-test-gctl
-integration-test-gctl: generated_files integration-dependencies
+integration-test-gctl: integration-dependencies
 	@go test -mod=vendor ./test/integration/generic/... -v -timeout 5m \
 	-args --logtostderr -v=1
 
 .PHONY: integration-test-local-gctl
-integration-test-local-gctl: generated_files integration-dependencies
+integration-test-local-gctl: integration-dependencies
 	@go test -mod=vendor ./test/integration/genericlocal/... -v -timeout 5m \
 	-args --logtostderr -v=1
