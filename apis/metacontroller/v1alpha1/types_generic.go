@@ -23,12 +23,16 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced,shortName=gctl
 // GenericController defines GenericController API schema
 type GenericController struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   GenericControllerSpec   `json:"spec"`
+	Spec GenericControllerSpec `json:"spec"`
+	// +optional
 	Status GenericControllerStatus `json:"status,omitempty"`
 }
 
@@ -278,6 +282,7 @@ type GenericControllerCondition struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
 // GenericControllerList is a collection of GenericController API schemas
 type GenericControllerList struct {
 	metav1.TypeMeta `json:",inline"`

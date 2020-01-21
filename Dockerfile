@@ -7,14 +7,16 @@ WORKDIR /go/src/openebs.io/metac/
 COPY go.mod go.mod
 COPY go.sum go.sum
 
+# copy build manifests
+COPY Makefile Makefile
+
 # ensure vendoring is up-to-date by running make vendor in your local
 # setup
 #
 # we cache the vendored dependencies before building and copying source
 # so that we don't need to re-download when source changes don't invalidate
 # our downloaded layer
-RUN GO111MODULE=on go mod download
-RUN GO111MODULE=on go mod vendor
+RUN make vendor
 
 # copy build manifests
 COPY . .
@@ -30,17 +32,16 @@ WORKDIR /go/src/openebs.io/metac/
 COPY go.mod go.mod
 COPY go.sum go.sum
 
+# copy build manifests
+COPY Makefile Makefile
+
 # ensure vendoring is up-to-date by running make vendor in your local
 # setup
 #
 # we cache the vendored dependencies before building and copying source
 # so that we don't need to re-download when source changes don't invalidate
 # our downloaded layer
-RUN GO111MODULE=on go mod download
-RUN GO111MODULE=on go mod vendor
-
-# copy build manifests
-COPY Makefile Makefile
+RUN make vendor
 
 # copy source files
 COPY *.go ./

@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 contains API Schema definitions for the metac v1 API group
+// +kubebuilder:object:generate=true
+// +groupName=metac.openebs.io
 package v1alpha1
 
 import (
@@ -26,11 +29,15 @@ import (
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster,shortName=cctl
 type CompositeController struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   CompositeControllerSpec   `json:"spec"`
+	Spec CompositeControllerSpec `json:"spec"`
+	// +optional
 	Status CompositeControllerStatus `json:"status,omitempty"`
 }
 
@@ -123,6 +130,7 @@ type CompositeControllerStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
 type CompositeControllerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -133,6 +141,9 @@ type CompositeControllerList struct {
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced
 type ControllerRevision struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
@@ -149,6 +160,7 @@ type ControllerRevisionChildren struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
 type ControllerRevisionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -160,11 +172,15 @@ type ControllerRevisionList struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster,shortName=dctl
 type DecoratorController struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   DecoratorControllerSpec   `json:"spec"`
+	Spec DecoratorControllerSpec `json:"spec"`
+	// +optional
 	Status DecoratorControllerStatus `json:"status,omitempty"`
 }
 
@@ -207,6 +223,7 @@ type DecoratorControllerStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// +kubebuilder:object:root=true
 type DecoratorControllerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
