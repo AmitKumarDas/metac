@@ -23,7 +23,7 @@ kubectl get crd
 kubectl get sts -n metac
 ```
 
-### Deploy the BlueGreen controller
+### Deploy the sample controller
 
 ```sh
 # embed javascript controller logic into a configmap
