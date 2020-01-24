@@ -33,19 +33,6 @@ spec:
       webhook:
         url: http://thing-controller.metacontroller/sync
 ---
-  # apiVersion: metac.openebs.io/v1alpha1
-  # kind: GenericController
-  # metadata:
-  #   name: set-status-on-cr
-  # spec:
-  #   watch:
-  #     apiVersion: examples.metac.io/v1
-  #     resource: coolnerds
-  #   hooks:
-  #     sync:
-  #       inline:
-  #         funcName: sync/cool-nerd
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -63,7 +50,7 @@ spec:
     spec:
       containers:
       - name: controller
-        image: quay.io/amitkumardas/thing-controller:ci
+        image: quay.io/amitkumardas/thing-controller:latest
         command: ["thing-controller"]
 ---
 apiVersion: v1
