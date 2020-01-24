@@ -1,4 +1,4 @@
-apiVersion: ctl.enisoc.com/v1
+apiVersion: examples.metac.io/v1
 kind: Thing
 metadata:
   name: thing-1
