@@ -54,6 +54,7 @@ func WithHookSchema(schema *v1alpha1.Hook) hooks.InvokerOption {
 			// set various webhook options
 			SetWebhookURLFromSchema(schema.Webhook),
 			SetWebhookTimeoutFromSchemaOrDefault(schema.Webhook),
+			SetWebhookCABundleFromSchemaOrDefault(schema.Webhook),
 		)
 		if err != nil {
 			return err
@@ -128,6 +129,15 @@ func SetWebhookTimeoutFromSchemaOrDefault(schema *v1alpha1.Webhook) webhook.Invo
 
 		t := *(schema.Timeout)
 		caller.Timeout = t.Duration
+		return nil
+	}
+}
+
+// SetWebhookCABundleFromSchemaOrDefault evaluates webhook timeout and sets the
+// evaluated timeout against WebhookCaller instance
+func SetWebhookCABundleFromSchemaOrDefault(schema *v1alpha1.Webhook) webhook.InvokerOption {
+	return func(caller *webhook.Invoker) error {
+		caller.CABundle = *schema.CABundle
 		return nil
 	}
 }

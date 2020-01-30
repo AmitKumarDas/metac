@@ -32,11 +32,11 @@ type Hook struct {
 // Webhook refers to the logic that gets invoked as
 // as web hook to arrive at the desired state
 type Webhook struct {
-	URL     *string          `json:"url,omitempty"`
-	Timeout *metav1.Duration `json:"timeout,omitempty"`
-
-	Path    *string           `json:"path,omitempty"`
-	Service *ServiceReference `json:"service,omitempty"`
+	URL      *string           `json:"url,omitempty"`
+	Timeout  *metav1.Duration  `json:"timeout,omitempty"`
+	CABundle *string           `json:"caBundle,omitempty"`
+	Path     *string           `json:"path,omitempty"`
+	Service  *ServiceReference `json:"service,omitempty"`
 }
 
 // Inline refers to the logic that gets invoked as inline

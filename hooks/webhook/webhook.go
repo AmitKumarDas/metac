@@ -19,6 +19,8 @@ package webhook
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	gojson "encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -33,7 +35,8 @@ import (
 // Invoker manages invocation of webhook
 type Invoker struct {
 	// webhook URL
-	URL string
+	URL      string
+	CABundle string
 
 	// webhook invocation timeout
 	Timeout time.Duration
@@ -77,8 +80,18 @@ func (i *Invoker) Invoke(request, response interface{}) error {
 		glog.Infof("%s: Will invoke %q", i, reqBodyIndent)
 	}
 
-	// Send request.
 	client := &http.Client{Timeout: i.Timeout}
+	if i.CABundle != "" {
+		caPool := x509.NewCertPool()
+		caPool.AppendCertsFromPEM([]byte(i.CABundle))
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: caPool,
+			},
+		}
+	}
+
+	// Send request.
 	resp, err := client.Post(i.URL, "application/json", bytes.NewReader(reqBody))
 	if err != nil {
 		return errors.Wrapf(err, "%s: Failed to invoke", i)

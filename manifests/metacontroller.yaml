@@ -109,6 +109,8 @@ spec:
                           type: string
                         url:
                           type: string
+                        caBundle:
+                          type: string
                       type: object
                   type: object
                 postUpdateChild:
@@ -144,6 +146,8 @@ spec:
                         timeout:
                           type: string
                         url:
+                          type: string
+                        caBundle:
                           type: string
                       type: object
                   type: object
@@ -181,6 +185,8 @@ spec:
                           type: string
                         url:
                           type: string
+                        caBundle:
+                          type: string
                       type: object
                   type: object
                 sync:
@@ -216,6 +222,8 @@ spec:
                         timeout:
                           type: string
                         url:
+                          type: string
+                        caBundle:
                           type: string
                       type: object
                   type: object
@@ -421,6 +429,8 @@ spec:
                           type: string
                         url:
                           type: string
+                        caBundle:
+                          type: string
                       type: object
                   type: object
                 sync:
@@ -456,6 +466,8 @@ spec:
                         timeout:
                           type: string
                         url:
+                          type: string
+                        caBundle:
                           type: string
                       type: object
                   type: object
@@ -1056,6 +1068,8 @@ spec:
                           type: string
                         url:
                           type: string
+                        caBundle:
+                          type: string
                       type: object
                   type: object
                 sync:
@@ -1090,6 +1104,8 @@ spec:
                         timeout:
                           type: string
                         url:
+                          type: string
+                        caBundle:
                           type: string
                       type: object
                   type: object
