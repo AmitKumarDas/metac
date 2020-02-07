@@ -580,10 +580,11 @@ func TestMerge(t *testing.T) {
 		},
 
 		//
-		// test finalizers
+		// test finalizers i.e. list of strings
+		// As per the logic desired will win always
 		//
 		{
-			name: "finalizers with no changes && no last applied",
+			name: "finalizers - observed == desired && no last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -611,7 +612,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "finalizers with no changes && with last applied",
+			name: "finalizers - observed == desired == last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -646,7 +647,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "finalizers with removals & addtions && no last applied",
+			name: "finalizers - desired has old, remove & add && no last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -674,7 +675,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "finalizers with removals & additions && with last applied",
+			name: "finalizers - desired with old, remove & add && with last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -708,7 +709,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "empty finalizers && no last applied",
+			name: "finalizers - desired = empty && no last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -730,7 +731,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "empty finalizers && last applied",
+			name: "finalizers - desired = empty && last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -759,7 +760,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "nil finalizers && no last applied",
+			name: "finalizers - desired = nil && no last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -782,7 +783,7 @@ func TestMerge(t *testing.T) {
 			}`,
 		},
 		{
-			name: "nil finalizers && last applied",
+			name: "finalizers - desired = nil && last applied",
 			observed: `{
 				"metadata": {
 					"finalizers": [
@@ -804,6 +805,1170 @@ func TestMerge(t *testing.T) {
       		}`,
 			want: `{
 				"metadata": {}
+			}`,
+		},
+		//
+		// k8s style - list map - i.e. an array of maps
+		//
+		// NOTE:
+		// 	At-least one of the field across the lists should be a
+		// **known merge key** to consider the list as list of maps
+		//
+		// NOTE:
+		//	List(s) with known merge key get executed as mergeListMap
+		//
+		{
+			name: "list map - desired = nil && last applied = nil",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"spec": {}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - desired = empty && last applied = nil",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - desired = empty && last applied = empty",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - desired = empty && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = empty && desired = empty && last applied",
+			observed: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = empty && desired && last applied",
+			observed: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = empty && desired && last applied = empty",
+			observed: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = nil && desired && last applied = nil",
+			observed: `{
+				"spec": {}
+			}`,
+			lastApplied: `{
+				"spec": {}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101",
+							"desc": "blah"
+						},
+						{
+							"name": "node-201",
+							"desc": "blah"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = different order && desired = add && last applied = nil",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101"
+						},
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed && desired = remove, add && last applied = nil",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed && desired = remove, add && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = different order && desired && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101"
+						},
+						{
+							"name": "node-201"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			name: "list map - observed = different order && desired = remove && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-401"
+						},
+						{
+							"name": "node-301"
+						},
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-401"
+						},
+						{
+							"name": "node-301"
+						},
+						{
+							"name": "node-201"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-101"
+						},
+						{
+							"name": "node-401"
+						},
+						{
+							"name": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"name": "node-401"
+						},
+						{
+							"name": "node-301"
+						},
+						{
+							"name": "node-101"
+						}
+					]
+				}
+			}`,
+		},
+		//
+		// list map - Unknown Merge Key - umk
+		//
+		// NOTE:
+		//	List(s) with unknown merge key gets executed as mergeArray
+		//
+		{
+			// Hint: this gets executed as mergeMap
+			name: "list map - umk - desired = {} && last applied = {}",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"spec": {}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - desired = [] && last applied = {}",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - desired = [] && last applied = []",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - desired = [] && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed = [] && desired = [] && last applied",
+			observed: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": []
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed = [] && desired && last applied",
+			observed: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed = [] && desired && last applied = []",
+			observed: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": []
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeMap
+			name: "list map - umk - observed = {} && desired && last applied = {}",
+			observed: `{
+				"spec": {}
+			}`,
+			lastApplied: `{
+				"spec": {}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101",
+							"desc": "blah-101"
+						},
+						{
+							"nodeName": "node-201",
+							"desc": "blah-201"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed = different order && desired = add && last applied = {}",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101"
+						},
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101"
+						},
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed && desired = remove & add && last applied = {}",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed && desired = remove & add && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk - observed = different order && desired && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101"
+						},
+						{
+							"nodeName": "node-201"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101"
+						},
+						{
+							"nodeName": "node-201"
+						}
+					]
+				}
+			}`,
+		},
+		{
+			// Hint: this gets executed as mergeArray
+			name: "list map - umk- observed = different order && desired = remove && last applied = observed",
+			observed: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-401"
+						},
+						{
+							"nodeName": "node-301"
+						},
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			lastApplied: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-401"
+						},
+						{
+							"nodeName": "node-301"
+						},
+						{
+							"nodeName": "node-201"
+						},
+						{
+							"nodeName": "node-101"
+						}
+					]
+				}
+			}`,
+			desired: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101"
+						},
+						{
+							"nodeName": "node-401"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
+      		}`,
+			want: `{
+				"spec": {
+					"nodes": [
+						{
+							"nodeName": "node-101"
+						},
+						{
+							"nodeName": "node-401"
+						},
+						{
+							"nodeName": "node-301"
+						}
+					]
+				}
 			}`,
 		},
 	}
@@ -811,34 +1976,35 @@ func TestMerge(t *testing.T) {
 	for _, tc := range table {
 		observed := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(tc.observed), &observed); err != nil {
-			t.Errorf("%v: can't unmarshal tc.observed: %v", tc.name, err)
+			t.Errorf("%s: Can't unmarshal tc.observed: %v", tc.name, err)
 			continue
 		}
 		lastApplied := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(tc.lastApplied), &lastApplied); err != nil {
-			t.Errorf("%v: can't unmarshal tc.lastApplied: %v", tc.name, err)
+			t.Errorf("%s: Can't unmarshal tc.lastApplied: %v", tc.name, err)
 			continue
 		}
 		desired := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(tc.desired), &desired); err != nil {
-			t.Errorf("%v: can't unmarshal tc.desired: %v", tc.name, err)
+			t.Errorf("%s: Can't unmarshal tc.desired: %v", tc.name, err)
 			continue
 		}
 		want := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(tc.want), &want); err != nil {
-			t.Errorf("%v: can't unmarshal tc.want: %v", tc.name, err)
+			t.Errorf("%s: Can't unmarshal tc.want: %v", tc.name, err)
 			continue
 		}
 
 		got, err := Merge(observed, lastApplied, desired)
 		if err != nil {
-			t.Errorf("%v: Merge error: %v", tc.name, err)
+			t.Errorf("%s: Merge error: %v", tc.name, err)
 			continue
 		}
 
 		if !reflect.DeepEqual(got, want) {
-			t.Logf("reflect diff: a=got, b=want:\n%s", diff.ObjectReflectDiff(got, want))
-			t.Errorf("%v: Merge() = %#v, want %#v", tc.name, got, want)
+			t.Errorf("%s:\nGot: %v\nWant: %v\nDiff: %s",
+				tc.name, got, want, diff.ObjectReflectDiff(got, want),
+			)
 		}
 	}
 }

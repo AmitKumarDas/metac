@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"k8s.io/apimachinery/pkg/util/json"
+
 	"github.com/golang/glog"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
@@ -160,11 +162,19 @@ func (a *Apply) merge(
 	a.isEqual =
 		reflect.DeepEqual(merged.UnstructuredContent(), observed.UnstructuredContent())
 
-	if !a.isEqual {
-		// log the diff if verbose log level is enabled
-		glog.V(5).Infof(
-			"Desired %s: Diff: a=observed, b=new:\n%s",
+	// log the diff or no diff at verbose log level
+	if glog.V(5) {
+		oJSON, _ := json.Marshal(observed.UnstructuredContent())
+		dJSON, _ := json.Marshal(desired.UnstructuredContent())
+		lAJSON, _ := json.Marshal(lastApplied)
+
+		glog.Infof(
+			"%s: IsEqual %t: \nObserved: %s\nLastApplied: %s\nDesired: %s\nDiff observed vs merged: %s",
 			DescObjectAsKey(desired),
+			a.isEqual,
+			oJSON,
+			lAJSON,
+			dJSON,
 			cmp.Diff(
 				observed.UnstructuredContent(),
 				merged.UnstructuredContent(),
@@ -172,12 +182,12 @@ func (a *Apply) merge(
 		)
 	}
 
-	// store desired content as the last applied state
-	// against this newly merged object
-	//
-	// NOTE:
-	//	sanitize last applied state before storing it
+	// sanitize desired content before setting it as the
+	// last applied state
 	a.SanitizeLastAppliedFn(desired.UnstructuredContent())
+
+	// store sanitized desired content as the last applied state
+	// against this newly merged object
 	a.SetLastAppliedFn(merged, desired.UnstructuredContent())
 
 	return merged, nil
