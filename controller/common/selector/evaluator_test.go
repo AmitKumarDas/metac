@@ -353,6 +353,78 @@ func TestEvalIsLabelMatch(t *testing.T) {
 			isError: false,
 			isMatch: true,
 		},
+		"MatchLabels selector && matching labels && value has -": {
+			selector: v1alpha1.SelectorTerm{
+				MatchLabels: map[string]string{
+					"app": "trial-1",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app": "trial-1",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"MatchLabels selector && matching labels && special char .": {
+			selector: v1alpha1.SelectorTerm{
+				MatchLabels: map[string]string{
+					"app.io": "trial",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app.io": "trial",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"MatchLabels selector && matching labels && special char /": {
+			selector: v1alpha1.SelectorTerm{
+				MatchLabels: map[string]string{
+					"app/io": "trial",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app/io": "trial",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"MatchLabels selector && matching labels && special char / and .": {
+			selector: v1alpha1.SelectorTerm{
+				MatchLabels: map[string]string{
+					"app.io/type": "trial",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"labels": map[string]interface{}{
+							"app.io/type": "trial",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
 		"Match && Expression label selector && matching labels": {
 			selector: v1alpha1.SelectorTerm{
 				MatchLabels: map[string]string{
@@ -635,7 +707,76 @@ func TestEvalIsSliceMatchFinalizers(t *testing.T) {
 		isError  bool
 		isMatch  bool
 	}{
-		"Match all finalizers via In operator": {
+		"Match two finalizers of three": {
+			selector: v1alpha1.SelectorTerm{
+				MatchSlice: map[string][]string{
+					"metadata.finalizers": []string{
+						"pvc-protect",
+						"app-protect",
+					},
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"finalizers": []interface{}{
+							"pvc-protect",
+							"storage-protect",
+							"app-protect",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: false,
+		},
+		"Match one finalizer of three": {
+			selector: v1alpha1.SelectorTerm{
+				MatchSlice: map[string][]string{
+					"metadata.finalizers": []string{
+						"pvc-protect",
+					},
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"finalizers": []interface{}{
+							"pvc-protect",
+							"storage-protect",
+							"app-protect",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: false,
+		},
+		"Match all finalizers": {
+			selector: v1alpha1.SelectorTerm{
+				MatchSlice: map[string][]string{
+					"metadata.finalizers": []string{
+						"pvc-protect",
+						"storage-protect",
+						"app-protect",
+					},
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"finalizers": []interface{}{
+							"pvc-protect",
+							"storage-protect",
+							"app-protect",
+						},
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"Match all finalizers + In operator": {
 			selector: v1alpha1.SelectorTerm{
 				MatchSliceExpressions: []v1alpha1.SliceSelectorRequirement{
 					v1alpha1.SliceSelectorRequirement{
@@ -659,7 +800,7 @@ func TestEvalIsSliceMatchFinalizers(t *testing.T) {
 			isError: false,
 			isMatch: true,
 		},
-		"Match all finalizers via Equals operator": {
+		"Match all finalizers + Equals operator": {
 			selector: v1alpha1.SelectorTerm{
 				MatchSliceExpressions: []v1alpha1.SliceSelectorRequirement{
 					v1alpha1.SliceSelectorRequirement{
@@ -683,7 +824,7 @@ func TestEvalIsSliceMatchFinalizers(t *testing.T) {
 			isError: false,
 			isMatch: true,
 		},
-		"Match no finalizers via NotIn operator": {
+		"Match no finalizers + NotIn operator": {
 			selector: v1alpha1.SelectorTerm{
 				MatchSliceExpressions: []v1alpha1.SliceSelectorRequirement{
 					v1alpha1.SliceSelectorRequirement{
@@ -707,7 +848,7 @@ func TestEvalIsSliceMatchFinalizers(t *testing.T) {
 			isError: false,
 			isMatch: true,
 		},
-		"Match no finalizers via NotEquals operator": {
+		"Match no finalizers + NotEquals operator": {
 			selector: v1alpha1.SelectorTerm{
 				MatchSliceExpressions: []v1alpha1.SliceSelectorRequirement{
 					v1alpha1.SliceSelectorRequirement{
@@ -731,7 +872,7 @@ func TestEvalIsSliceMatchFinalizers(t *testing.T) {
 			isError: false,
 			isMatch: true,
 		},
-		"Match all finalizers via all operators": {
+		"Match all finalizers + All operators": {
 			selector: v1alpha1.SelectorTerm{
 				MatchSliceExpressions: []v1alpha1.SliceSelectorRequirement{
 					v1alpha1.SliceSelectorRequirement{
@@ -864,6 +1005,9 @@ func TestEvalIsSliceMatchFinalizers(t *testing.T) {
 			if !mock.isError && err != nil {
 				t.Fatalf("%s: Expected no error: Got %v", name, err)
 			}
+			if mock.isError {
+				return
+			}
 			if mock.isMatch && !match {
 				t.Fatalf("%s: Expected match: Got no match", name)
 			}
@@ -902,6 +1046,70 @@ func TestEvalIsFieldMatch(t *testing.T) {
 			target:  nil,
 			isError: true,
 			isMatch: false,
+		},
+		"MatchFields selector && matching target": {
+			selector: v1alpha1.SelectorTerm{
+				MatchFields: map[string]string{
+					"spec.path": "my-path",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"path": "my-path",
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"MatchFields selector && matching target && value with /": {
+			selector: v1alpha1.SelectorTerm{
+				MatchFields: map[string]string{
+					"spec.path": "/dev/sdb",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"path": "/dev/sdb",
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"MatchFields selector && matching target && value with numbers": {
+			selector: v1alpha1.SelectorTerm{
+				MatchFields: map[string]string{
+					"spec.path": "1234",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"path": "1234",
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
+		},
+		"MatchFields selector && matching target && value is like uuid": {
+			selector: v1alpha1.SelectorTerm{
+				MatchFields: map[string]string{
+					"spec.path": "1234-1232-asdfssed-12esee-212",
+				},
+			},
+			target: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"spec": map[string]interface{}{
+						"path": "1234-1232-asdfssed-12esee-212",
+					},
+				},
+			},
+			isError: false,
+			isMatch: true,
 		},
 		"MatchFields selector && matching fields": {
 			selector: v1alpha1.SelectorTerm{

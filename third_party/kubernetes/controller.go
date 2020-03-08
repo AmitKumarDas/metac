@@ -1,9 +1,12 @@
 /*
-Copyright 2016 The Kubernetes Authors.
+Copyright 2016 The MayaData Authors.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,10 +20,10 @@ package kubernetes
 // TODO(enisoc): Move the upstream code to somewhere better.
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
@@ -35,23 +38,31 @@ func WaitForCacheSync(
 	stopCh <-chan struct{},
 	cacheSyncs ...cache.InformerSynced,
 ) bool {
-	glog.Infof("Waiting for caches to sync for controller %q", controllerName)
-
+	glog.V(7).Infof(
+		"Waiting for caches to sync for controller %q",
+		controllerName,
+	)
 	if !cache.WaitForCacheSync(stopCh, cacheSyncs...) {
-		utilruntime.HandleError(fmt.Errorf(
-			"Unable to sync caches for controller %q", controllerName,
-		))
+		utilruntime.HandleError(
+			errors.Errorf(
+				"Can't sync caches for controller %q",
+				controllerName,
+			),
+		)
 		return false
 	}
-
-	glog.Infof("Caches are synced for controller %q", controllerName)
+	glog.V(7).Infof(
+		"Caches are synced for controller %q",
+		controllerName,
+	)
 	return true
 }
 
 // WaitForCacheSyncFn is a typed function that adheres to
 // cache.WaitForCacheSync signature
 type WaitForCacheSyncFn func(
-	stop <-chan struct{}, isSyncFns ...cache.InformerSynced,
+	stop <-chan struct{},
+	isSyncFns ...cache.InformerSynced,
 ) bool
 
 // CacheSyncTimeTaken is a decorator around WaitForCacheSyncFn
@@ -68,7 +79,6 @@ func CacheSyncTimeTaken(
 			controllerName,
 			time.Now().Sub(start),
 		)
-
 		return fn(stop, isSyncFns...)
 	}
 }
@@ -83,9 +93,12 @@ func CacheSyncFailureAsError(
 	return func(stop <-chan struct{}, isSyncFns ...cache.InformerSynced) bool {
 		synced := fn(stop, isSyncFns...)
 		if !synced {
-			utilruntime.HandleError(fmt.Errorf(
-				"Unable to sync caches for controller %s", controllerName,
-			))
+			utilruntime.HandleError(
+				errors.Errorf(
+					"Unable to sync caches for controller %s",
+					controllerName,
+				),
+			)
 		}
 		return synced
 	}

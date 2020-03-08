@@ -88,9 +88,12 @@ type AttachmentExecuteBase struct {
 // String implements Stringer interface
 func (m AttachmentExecuteBase) String() string {
 	var strs []string
-	strs = append(strs, "AttachmentExecutor")
+	strs = append(strs, "AttachmentExecutor:")
 	if m.Watch != nil {
-		strs = append(strs, DescObjectAsKey(m.Watch))
+		strs = append(
+			strs,
+			fmt.Sprintf("Watch %s", DescObjectAsKey(m.Watch)),
+		)
 	}
 	if m.IsWatchOwner != nil {
 		strs = append(strs, fmt.Sprintf("IsWatchOwner=%t", *m.IsWatchOwner))
@@ -306,8 +309,10 @@ func (e *AttachmentResourcesExecutor) Update(
 	// Leave it alone if it's pending deletion && updating during
 	// pending deletion is not enabled
 	if observedObj.GetDeletionTimestamp() != nil && !e.IsUpdateDuringPendingDelete() {
-		glog.V(4).Infof(
-			"%s: Can't update %s: Pending deletion", e, DescObjectAsKey(desiredObj),
+		glog.V(5).Infof(
+			"Can't update %s: Pending deletion: %s",
+			DescObjectAsKey(desiredObj),
+			e,
 		)
 		return false, nil
 	}
@@ -329,21 +334,22 @@ func (e *AttachmentResourcesExecutor) Update(
 	// If watches don't match && this controller is not granted
 	// to update any arbitrary attachments then skip this update
 	if createdByWatchUID != currentWatchUID && !updateAny {
-		glog.V(4).Infof(
-			"%s: Won't update %s: Annotation %s has %q got %q: UpdateAny %t",
-			e,
+		glog.V(6).Infof(
+			"Won't update %s: Annotation %s = %q want %q: UpdateAny = %t: %s",
 			DescObjectAsKey(desiredObj),
 			attachmentCreateAnnotationKey,
 			createdByWatchUID,
 			currentWatchUID,
 			updateAny,
+			e,
 		)
 		return false, nil
 	}
 
 	// Check the update strategy for this child kind
 	method := e.GetChildUpdateStrategyByGK(
-		e.DynamicResourceClient.Group, e.DynamicResourceClient.Kind,
+		e.DynamicResourceClient.Group,
+		e.DynamicResourceClient.Kind,
 	)
 
 	// Skip update if update strategy does not allow
@@ -351,8 +357,11 @@ func (e *AttachmentResourcesExecutor) Update(
 		// This means we don't try to update anything unless
 		// it gets deleted by someone else i.e. we won't delete it
 		// ourselves
-		glog.V(4).Infof(
-			"%s: Won't update %s: UpdateStrategy=%q", e, DescObjectAsKey(desiredObj), method,
+		glog.V(6).Infof(
+			"Won't update %s: UpdateStrategy=%q: %s",
+			DescObjectAsKey(desiredObj),
+			method,
+			e,
 		)
 		return false, nil
 	}
@@ -397,8 +406,9 @@ func (e *AttachmentResourcesExecutor) Update(
 		}
 	}
 
-	// Invoke Merge from a new instance of Apply struct
+	// create a new instance of Apply
 	a := NewApplyFromAnnKey(lastAppliedKey)
+	// invoke 3-way merge
 	mergedObj, err := a.Merge(observedObj, desiredObj)
 	if err != nil {
 		return false, err
@@ -411,21 +421,28 @@ func (e *AttachmentResourcesExecutor) Update(
 		return false, err
 	}
 	if !isDiff {
-		glog.V(4).Infof(
-			"%s: Won't update %s: Nothing changed.", e, DescObjectAsKey(desiredObj),
+		glog.V(7).Infof(
+			"Won't update %s: Nothing changed: %s",
+			DescObjectAsKey(desiredObj),
+			e,
 		)
 		return false, nil
 	}
-	glog.V(4).Infof(
-		"%s: Will update %s: Diff is found between its observed & desired states.",
-		e, DescObjectAsKey(desiredObj),
+	glog.V(6).Infof(
+		"Will update %s since observed != desired: %s",
+		DescObjectAsKey(desiredObj),
+		e,
 	)
 
 	// Act based on the update strategy for this child kind.
 	switch method {
 	case v1alpha1.ChildUpdateRecreate, v1alpha1.ChildUpdateRollingRecreate:
 		// Delete the object (now) and recreate it (on the next sync).
-		glog.V(4).Infof("%s: Deleting %s for update", e, DescObjectAsKey(desiredObj))
+		glog.V(4).Infof(
+			"Deleting %s for update: %s",
+			DescObjectAsKey(desiredObj),
+			e,
+		)
 		uid := observedObj.GetUID()
 		// Explicitly request deletion propagation, which is what users expect,
 		// since some objects default to orphaning for backwards compatibility.
@@ -440,10 +457,18 @@ func (e *AttachmentResourcesExecutor) Update(
 		if err != nil {
 			return false, err
 		}
-		glog.Infof("%s: Deleted %s for update", e, DescObjectAsKey(desiredObj))
+		glog.Infof(
+			"Deleted %s for update: %s",
+			DescObjectAsKey(desiredObj),
+			e,
+		)
 	case v1alpha1.ChildUpdateInPlace, v1alpha1.ChildUpdateRollingInPlace:
 		// Update the object in-place.
-		glog.V(4).Infof("%s: Updating %s", e, DescObjectAsKey(desiredObj))
+		glog.V(6).Infof(
+			"Updating %s: %s",
+			DescObjectAsKey(desiredObj),
+			e,
+		)
 		// Set who is responsible for this update.
 		// In other words set the watch details in the annotations
 		updatedAnns := mergedObj.GetAnnotations()
@@ -460,11 +485,17 @@ func (e *AttachmentResourcesExecutor) Update(
 		if err != nil {
 			return false, err
 		}
-		glog.V(3).Infof("%s: Updated %s", e, DescObjectAsKey(desiredObj))
+		glog.V(6).Infof(
+			"Updated %s: %s",
+			DescObjectAsKey(desiredObj),
+			e,
+		)
 	default:
 		return false, errors.Errorf(
-			"%s: Invalid update strategy %s for %s",
-			e, method, DescObjectAsKey(desiredObj),
+			"Invalid update strategy %s for %s: %s",
+			method,
+			DescObjectAsKey(desiredObj),
+			e,
 		)
 	}
 	// this resulted in an actual update
@@ -480,7 +511,11 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 		ns = e.Watch.GetNamespace()
 	}
 
-	glog.V(4).Infof("%s: Creating %s", e, DescObjectAsKey(dObj))
+	glog.V(4).Infof(
+		"Creating %s: %s",
+		DescObjectAsKey(dObj),
+		e,
+	)
 
 	// The controller i.e. sync hook should return a partial attachment
 	// containing only the fields it cares about. We save this partial
@@ -525,7 +560,11 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 		return err
 	}
 
-	glog.Infof("%s: Created %s", e, DescObjectAsKey(dObj))
+	glog.Infof(
+		"Created %s: %s",
+		DescObjectAsKey(dObj),
+		e,
+	)
 	return nil
 }
 
@@ -573,12 +612,13 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 	for name, obj := range e.Observed {
 		if obj.GetDeletionTimestamp() != nil {
 			// Skip objects that are already pending deletion.
-			glog.V(4).Infof("%s: Can't delete %s: Pending deletion",
-				e, DescObjectAsKey(obj),
+			glog.V(6).Infof(
+				"Can't delete %s: Pending deletion: %s",
+				e,
+				DescObjectAsKey(obj),
 			)
 			continue
 		}
-
 		if e.Desired == nil || e.Desired[name] == nil {
 			// check which watch created this resource in the first place
 			ann := obj.GetAnnotations()
@@ -590,22 +630,25 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 
 			if gotWatch != wantWatch && !deleteAny {
 				// Skip objects that was not created due to this watch
-				glog.V(4).Infof(
-					"%s: Can't delete %s: Annotation %s has %q want %q: DeleteAny %t",
-					e,
+				glog.V(6).Infof(
+					"Won't delete %s: Annotation %s = %q want %q: DeleteAny = %t: %s",
 					DescObjectAsKey(obj),
 					attachmentCreateAnnotationKey,
 					gotWatch,
 					wantWatch,
 					deleteAny,
+					e,
 				)
 				continue
 			}
 
 			// This observed object wasn't listed as desired.
 			// Hence, this is the right candidate to be deleted.
-			glog.V(4).Infof("%s: Deleting %s", e, DescObjectAsKey(obj))
-
+			glog.V(4).Infof(
+				"Deleting %s: %s",
+				DescObjectAsKey(obj),
+				e,
+			)
 			uid := obj.GetUID()
 			// Explicitly request deletion propagation, which is what
 			// users expect, since some objects default to orphaning
@@ -621,21 +664,31 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					glog.V(4).Infof(
-						"%s: Can't delete %s: Is not found: %v",
-						e, DescObjectAsKey(obj), err)
+						"Can't delete %s: IsNotFound: %s: %v",
+						DescObjectAsKey(obj),
+						e,
+						err,
+					)
 					continue
 				}
 				errs = append(
 					errs,
-					errors.Wrapf(err, "%s: Failed to delete %s", e, DescObjectAsKey(obj)),
+					errors.Wrapf(
+						err,
+						"Failed to delete %s: %s",
+						DescObjectAsKey(obj),
+						e,
+					),
 				)
 				continue
 			}
-
-			glog.Infof("%s: Deleted %s", e, DescObjectAsKey(obj))
+			glog.Infof(
+				"Deleted %s: %s",
+				DescObjectAsKey(obj),
+				e,
+			)
 		}
 	}
-
 	return utilerrors.NewAggregate(errs)
 }
 

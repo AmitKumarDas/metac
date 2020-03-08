@@ -190,7 +190,7 @@ func startCRDBasedMetaControllers(testRunFn func() int) error {
 		DiscoveryInterval: 500 * time.Millisecond,
 		InformerRelist:    30 * time.Minute,
 	}
-	crdServer := &server.CRDBasedServer{Server: mserver}
+	crdServer := &server.CRDServer{Server: mserver}
 	stopServer, err := crdServer.Start(5)
 	if err != nil {
 		return errors.Wrapf(err, "Can't start crd based metacontroller server")

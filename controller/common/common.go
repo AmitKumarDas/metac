@@ -37,7 +37,7 @@ var (
 // AnyUnstructRegistry is the register that holds various
 // unstructured instances grouped by
 //
-// 1/ unstruct's apiVersion & kind, and then by
+// 1/ unstruct's **apiVersion** & **kind**, and then by
 // 2/ unstruct's namespace & name
 //
 // This registry is useful to store arbitary unstructured
@@ -47,20 +47,34 @@ type AnyUnstructRegistry map[string]map[string]*unstructured.Unstructured
 // String implements Stringer interface
 func (m AnyUnstructRegistry) String() string {
 	var message []string
-	title := "Resource Instances:-"
-	for vk, list := range m {
-		for nsname, obj := range list {
-			message = append(message, fmt.Sprintf("\t%s:%s %s", vk, nsname, obj.GetUID()))
+	title := "unstructs:-"
+	for vk, group := range m {
+		for nsname, obj := range group {
+			message = append(
+				message,
+				fmt.Sprintf(
+					"  %s: %s: %s",
+					vk,
+					nsname,
+					obj.GetUID(),
+				),
+			)
 		}
 	}
-	return fmt.Sprintf("%s\n%s\n", title, strings.Join(message, "\n"))
+	return fmt.Sprintf(
+		"%s\n%s",
+		title,
+		strings.Join(message, "\n"),
+	)
 }
 
 // IsEmpty returns true if this registry is empty
 func (m AnyUnstructRegistry) IsEmpty() bool {
-	for _, list := range m {
-		for _, obj := range list {
-			if obj != nil {
+	for _, group := range m {
+		for _, obj := range group {
+			if obj != nil && obj.Object != nil {
+				// if atleast one obj exists then
+				// registry is not empty
 				return false
 			}
 		}
@@ -71,9 +85,10 @@ func (m AnyUnstructRegistry) IsEmpty() bool {
 // Len returns count of not nil items in this registry
 func (m AnyUnstructRegistry) Len() int {
 	var count int
-	for _, list := range m {
-		for _, obj := range list {
-			if obj != nil {
+	for _, group := range m {
+		for _, obj := range group {
+			if obj != nil && obj.Object != nil {
+				// count if the obj is not nil
 				count++
 			}
 		}
@@ -81,29 +96,58 @@ func (m AnyUnstructRegistry) Len() int {
 	return count
 }
 
-// InitGroupByVK initialises (or re-initializes) a group within the
-// registry. Group is initialized based on the provided apiVersion & kind.
+// Init initialises (or re-initializes) a group within the
+// registry. Group is initialized based on the provided
+// apiVersion & kind.
 //
 // Caller can issue "InsertByReference" request if it is not sure about
 // initializing a group in this registry.
-func (m AnyUnstructRegistry) InitGroupByVK(apiVersion, kind string) {
+func (m AnyUnstructRegistry) Init(apiVersion, kind string) {
 	m[makeKeyFromAPIVersionKind(apiVersion, kind)] =
 		make(map[string]*unstructured.Unstructured)
 }
 
-// InsertByReference adds the resource to appropriate group. Inserting into
-// particular group is handled automatically.
+// InsertByReference adds the resource to appropriate group
 func (m AnyUnstructRegistry) InsertByReference(
-	ref metav1.Object, obj *unstructured.Unstructured,
+	reference metav1.Object,
+	obj *unstructured.Unstructured,
 ) {
-	key := makeKeyFromAPIVersionKind(obj.GetAPIVersion(), obj.GetKind())
+	key := makeKeyFromAPIVersionKind(
+		obj.GetAPIVersion(),
+		obj.GetKind(),
+	)
+	// get the group based on apiVersion & kind
 	group := m[key]
 	if group == nil {
+		// initialise group placeholder
 		group = make(map[string]*unstructured.Unstructured)
 		m[key] = group
 	}
-	name := relativeName(ref, obj)
+	// get the relative name of the object
+	// i.e. name based on the reference's namespace scope
+	name := relativeName(reference, obj)
+	// store the object in the group mapped against the
+	// relative name
 	group[name] = obj
+}
+
+// Insert adds the resource to appropriate group
+func (m AnyUnstructRegistry) Insert(obj *unstructured.Unstructured) {
+	key := makeKeyFromAPIVersionKind(
+		obj.GetAPIVersion(),
+		obj.GetKind(),
+	)
+	// get the group based on apiVersion & kind
+	group := m[key]
+	if group == nil {
+		// initialise group placeholder
+		group = make(map[string]*unstructured.Unstructured)
+		m[key] = group
+	}
+	// get the namespaced name of the object
+	nsName := namespaceNameOrName(obj)
+	// use namespaced name as the key
+	group[nsName] = obj
 }
 
 // ReplaceByReference replaces the unstruct instance having
@@ -112,30 +156,64 @@ func (m AnyUnstructRegistry) InsertByReference(
 // unstruct instance exists in the registry then no action
 // is taken.
 func (m AnyUnstructRegistry) ReplaceByReference(
-	ref metav1.Object, obj *unstructured.Unstructured,
+	reference metav1.Object,
+	obj *unstructured.Unstructured,
 ) {
-
-	key := makeKeyFromAPIVersionKind(obj.GetAPIVersion(), obj.GetKind())
+	key := makeKeyFromAPIVersionKind(
+		obj.GetAPIVersion(),
+		obj.GetKind(),
+	)
+	// get all children by apiVersion & kind
 	children := m[key]
 	if children == nil {
 		// Nothing to do since instance does not exist
 		return
 	}
-
-	name := relativeName(ref, obj)
+	// build object name in the format it is saved
+	// in the registry
+	name := relativeName(reference, obj)
 	if _, found := children[name]; found {
 		children[name] = obj
 	}
 }
 
+// Replace replaces the unstruct instance having the same
+// name & namespace as the given unstruct instance
+// with the contents of the new unstruct instance. If no
+// unstruct instance exists in the registry then no action
+// is taken.
+func (m AnyUnstructRegistry) Replace(obj *unstructured.Unstructured) {
+	key := makeKeyFromAPIVersionKind(
+		obj.GetAPIVersion(),
+		obj.GetKind(),
+	)
+	// get all children by apiVersion & kind
+	children := m[key]
+	if children == nil {
+		// Nothing to do since instance does not exist
+		return
+	}
+	// get namespaced name of the object
+	nsName := namespaceNameOrName(obj)
+	if _, found := children[nsName]; found {
+		children[nsName] = obj
+	}
+}
+
 // FindByGroupKindName finds the resource based on the given
-// apigroup, kind and name
+// apigroup, kind and name*
+//
+// NOTE:
+//	Provided name can either be based on:
+//
+// [1] Namespace & name of the object, **or**
+// [2] Relative name of the object i.e. depends on
+// whether the parent/reference is namespaced scope or not
 func (m AnyUnstructRegistry) FindByGroupKindName(
-	apiGroup, kind, name string,
+	apiGroup string,
+	kind string,
+	name string,
 ) *unstructured.Unstructured {
-	// The registry is keyed by apiVersion & kind, but we don't know
-	// the version. So, check inside any GVK that matches the group and
-	// kind, ignoring version.
 	for key, resources := range m {
 		if apiVer, k := ParseKeyToAPIVersionKind(key); k == kind {
 			if g, _ := ParseAPIVersionToGroupVersion(apiVer); g == apiGroup {
@@ -150,13 +228,22 @@ func (m AnyUnstructRegistry) FindByGroupKindName(
 	return nil
 }
 
-// relativeName returns the name of the attachment relative to the provided
-// reference.
-func relativeName(ref metav1.Object, obj *unstructured.Unstructured) string {
-	if ref.GetNamespace() == "" && obj.GetNamespace() != "" {
-		return fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName())
+// relativeName returns the name of the attachment relative to the
+// provided reference.
+func relativeName(
+	reference metav1.Object,
+	object *unstructured.Unstructured,
+) string {
+	if reference.GetNamespace() == "" && object.GetNamespace() != "" {
+		// with object namespace
+		return fmt.Sprintf(
+			"%s/%s",
+			object.GetNamespace(),
+			object.GetName(),
+		)
 	}
-	return obj.GetName()
+	// just object name
+	return object.GetName()
 }
 
 // namespaceNameOrName returns the name of the resource based on its
@@ -172,10 +259,14 @@ func namespaceNameOrName(obj *unstructured.Unstructured) string {
 
 func namespaceNameOrNameFromMeta(obj metav1.Object) string {
 	if obj.GetNamespace() != "" {
+		// with namespace
 		return fmt.Sprintf(
-			"%s/%s", obj.GetNamespace(), obj.GetName(),
+			"%s/%s",
+			obj.GetNamespace(),
+			obj.GetName(),
 		)
 	}
+	// without namespace
 	return obj.GetName()
 }
 
@@ -183,9 +274,20 @@ func namespaceNameOrNameFromMeta(obj metav1.Object) string {
 // given object.
 func describeObject(obj *unstructured.Unstructured) string {
 	if ns := obj.GetNamespace(); ns != "" {
-		return fmt.Sprintf("%s/%s of kind %s", ns, obj.GetName(), obj.GetKind())
+		// with namespace
+		return fmt.Sprintf(
+			"%s/%s of kind %s",
+			ns,
+			obj.GetName(),
+			obj.GetKind(),
+		)
 	}
-	return fmt.Sprintf("%s of kind %s", obj.GetName(), obj.GetKind())
+	// without namespace
+	return fmt.Sprintf(
+		"%s of kind %s",
+		obj.GetName(),
+		obj.GetKind(),
+	)
 }
 
 // sanitiseAPIVersion will make the apiVersion suitable to be used
@@ -211,13 +313,21 @@ func DescMetaAsSanitisedNSName(obj metav1.Object) string {
 func DescObjectAsKey(obj *unstructured.Unstructured) string {
 	ns := obj.GetNamespace()
 	if ns != "" {
-		return fmt.Sprintf("%s:%s:%s:%s",
-			obj.GetAPIVersion(), obj.GetKind(), ns, obj.GetName(),
+		// with namespace
+		return fmt.Sprintf(
+			"%s:%s:%s:%s",
+			obj.GetAPIVersion(),
+			obj.GetKind(),
+			ns,
+			obj.GetName(),
 		)
 	}
-
-	return fmt.Sprintf("%s:%s:%s",
-		obj.GetAPIVersion(), obj.GetKind(), obj.GetName(),
+	// without namespace
+	return fmt.Sprintf(
+		"%s:%s:%s",
+		obj.GetAPIVersion(),
+		obj.GetKind(),
+		obj.GetName(),
 	)
 }
 
@@ -227,13 +337,21 @@ func DescObjectAsSanitisedKey(obj *unstructured.Unstructured) string {
 	ver := sanitiseAPIVersion(obj.GetAPIVersion())
 	ns := obj.GetNamespace()
 	if ns != "" {
-		return fmt.Sprintf("%s-%s-%s-%s",
-			ver, obj.GetKind(), ns, obj.GetName(),
+		// with namespace
+		return fmt.Sprintf(
+			"%s-%s-%s-%s",
+			ver,
+			obj.GetKind(),
+			ns,
+			obj.GetName(),
 		)
 	}
-
-	return fmt.Sprintf("%s-%s-%s",
-		ver, obj.GetKind(), obj.GetName(),
+	// without namespace
+	return fmt.Sprintf(
+		"%s-%s-%s",
+		ver,
+		obj.GetKind(),
+		obj.GetName(),
 	)
 }
 
@@ -249,29 +367,44 @@ func (m AnyUnstructRegistry) List() []*unstructured.Unstructured {
 	return list
 }
 
-// MakeAnyUnstructRegistryByReference builds the registry of unstructured instances.
+// MakeAnyUnstructRegistryByReference builds the registry of provided
+// objects.
 //
-// This registry is suitable for use in the `children` field of a
-// CompositeController or `attachments` field of DecoratorController or
+// This registry is suitable for use in the **children** field of a
+// CompositeController or **attachments** field of DecoratorController or
 // GenericController.
 //
 // This function returns a registry which is a map of maps. The outer most
-// map is keyed using the unstruct's type and the inner map is keyed using the
-// unstruct's name. If the parent resource is clustered and the child resource
-// is namespaced the inner map's keys are prefixed by the namespace of the
-// child resource.
-//
-// This function requires parent resources has the meta.Namespace set. If the
-// namespace of the parent is empty it's considered a clustered resource.
+// map is keyed using the object i.e. child's api version & kind and then
+// the inner map is keyed using the object's name. However, if the parent
+// resource is clustered and the child resource is namespaced the inner
+// map's key is the namespace & name of the child resource.
 func MakeAnyUnstructRegistryByReference(
-	ref metav1.Object, objList []*unstructured.Unstructured,
+	reference metav1.Object,
+	objects []*unstructured.Unstructured,
 ) AnyUnstructRegistry {
-	children := make(AnyUnstructRegistry)
-
-	for _, child := range objList {
-		children.InsertByReference(ref, child)
+	registry := make(AnyUnstructRegistry)
+	for _, obj := range objects {
+		registry.InsertByReference(reference, obj)
 	}
-	return children
+	return registry
+}
+
+// MakeAnyUnstructRegistry builds the registry of provided objects.
+//
+// This registry is suitable for use in the **children** field of a
+// CompositeController or **attachments** field of DecoratorController or
+// GenericController.
+//
+// This function returns a registry which is a map of maps. The outer most
+// map is keyed using the object i.e. child's api version & kind and then
+// the inner map is keyed using the object's namespace & name.
+func MakeAnyUnstructRegistry(objects []*unstructured.Unstructured) AnyUnstructRegistry {
+	registry := make(AnyUnstructRegistry)
+	for _, obj := range objects {
+		registry.Insert(obj)
+	}
+	return registry
 }
 
 // makeKeyFromAPIVersionKind returns the string format for the
@@ -298,25 +431,26 @@ func ParseAPIVersionToGroupVersion(apiVersion string) (group, version string) {
 	return parts[0], parts[1]
 }
 
-// ResourceRegistryByGK is the registrar of server API resources
-// anchored by group and kind
-type ResourceRegistryByGK map[string]*dynamicdiscovery.APIResource
+// ResourceRegistrar is the registrar of server api resources
+// anchored by **group** and **kind**
+type ResourceRegistrar map[string]*dynamicdiscovery.APIResource
 
 // Set registers the given API resource against the registrar based
 // on the given group and kind
-func (m ResourceRegistryByGK) Set(
-	apiGroup, kind string, resource *dynamicdiscovery.APIResource,
+func (m ResourceRegistrar) Set(
+	apiGroup string,
+	kind string,
+	resource *dynamicdiscovery.APIResource,
 ) {
-
 	m[makeKeyFromAPIGroupKind(apiGroup, kind)] = resource
 }
 
-// Get returns the API resource from the registrar based on the given
-// group and kind
-func (m ResourceRegistryByGK) Get(
-	apiGroup, kind string,
+// Get returns the API resource from the registrar based on the
+// given group and kind
+func (m ResourceRegistrar) Get(
+	apiGroup string,
+	kind string,
 ) *dynamicdiscovery.APIResource {
-
 	return m[makeKeyFromAPIGroupKind(apiGroup, kind)]
 }
 
@@ -326,25 +460,26 @@ func makeKeyFromAPIGroupKind(apiGroup, kind string) string {
 	return fmt.Sprintf("%s.%s", kind, apiGroup)
 }
 
-// ResourceInformerRegistryByVR acts as the registrar of Informer instances
+// ResourceInformerRegistrar acts as the registrar of Informer instances
 // anchored by apiversion and resource name (i.e. plural format of kind)
-type ResourceInformerRegistryByVR map[string]*dynamicinformer.ResourceInformer
+type ResourceInformerRegistrar map[string]*dynamicinformer.ResourceInformer
 
 // Set registers the given informer object based on the given version
 // and resource
-func (m ResourceInformerRegistryByVR) Set(
-	apiVersion, resource string, informer *dynamicinformer.ResourceInformer,
+func (m ResourceInformerRegistrar) Set(
+	apiVersion string,
+	resource string,
+	informer *dynamicinformer.ResourceInformer,
 ) {
-
 	m[makeKeyFromAPIVersionResource(apiVersion, resource)] = informer
 }
 
 // Get returns the informer instance from the registrar based on the
 // given version and resource
-func (m ResourceInformerRegistryByVR) Get(
-	apiVersion, resource string,
+func (m ResourceInformerRegistrar) Get(
+	apiVersion string,
+	resource string,
 ) *dynamicinformer.ResourceInformer {
-
 	return m[makeKeyFromAPIVersionResource(apiVersion, resource)]
 }
 

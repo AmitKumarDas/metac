@@ -212,7 +212,7 @@ func (f *Fixture) CreateGenericControllerAsMetacConfig(
 }
 
 // StartMetacFromGenericControllerConfig starts Metac based
-// on the given config. It returns the stop function that 
+// on the given config. It returns the stop function that
 // should be invoked by the caller once caller's task is done.
 func (f *Fixture) StartMetacFromGenericControllerConfig(gctlAsConfigFn func() ([]*v1alpha1.GenericController, error)) (stop func()) {
 	var mserver = server.Server{
@@ -220,9 +220,9 @@ func (f *Fixture) StartMetacFromGenericControllerConfig(gctlAsConfigFn func() ([
 		DiscoveryInterval: 500 * time.Millisecond,
 		InformerRelist:    30 * time.Minute,
 	}
-	metacServer := &server.ConfigBasedServer{
-		Server:                      mserver,
-		GenericControllerAsConfigFn: gctlAsConfigFn,
+	metacServer := &server.ConfigServer{
+		Server:                        mserver,
+		GenericControllerConfigLoadFn: gctlAsConfigFn,
 	}
 	stopMetacServer, err := metacServer.Start(5)
 	if err != nil {

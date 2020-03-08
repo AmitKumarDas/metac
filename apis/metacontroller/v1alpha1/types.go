@@ -53,8 +53,13 @@ type CompositeControllerSpec struct {
 
 // ResourceRule helps in identifying the type of the API resource
 type ResourceRule struct {
+	// APIVersion is the combination of group & version
+	// of the resource
 	APIVersion string `json:"apiVersion"`
-	Resource   string `json:"resource"`
+
+	// Resource is the name of the resource. Its also
+	// the plural of Kind
+	Resource string `json:"resource"`
 }
 
 type CompositeControllerParentResourceRule struct {

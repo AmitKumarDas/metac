@@ -65,7 +65,7 @@ type parentController struct {
 	queue          workqueue.RateLimitingInterface
 
 	updateStrategy updateStrategyMap
-	childInformers common.ResourceInformerRegistryByVR
+	childInformers common.ResourceInformerRegistrar
 
 	finalizer *finalizer.Finalizer
 }
@@ -108,7 +108,7 @@ func newParentController(
 	}
 
 	// Create informers for all child resources.
-	childInformers := make(common.ResourceInformerRegistryByVR)
+	childInformers := make(common.ResourceInformerRegistrar)
 	defer func() {
 		if newErr != nil {
 			// If newParentController fails, Close() any informers we created
@@ -841,7 +841,7 @@ func (pc *parentController) claimChildren(
 		}
 
 		// Always include the requested groups, even if there are no entries.
-		childMap.InitGroupByVK(child.APIVersion, childClient.Kind)
+		childMap.Init(child.APIVersion, childClient.Kind)
 
 		// Handle orphan/adopt and filter by owner+selector.
 		crm := dynamiccontrollerref.NewUnstructClaimManager(
