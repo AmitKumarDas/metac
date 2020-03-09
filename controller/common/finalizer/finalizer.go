@@ -38,7 +38,8 @@ type Finalizer struct {
 // SyncObject reconciles i.e. adds or removes the finalizer on
 // the given object as necessary.
 func (m *Finalizer) SyncObject(
-	client *dynamicclientset.ResourceClient, obj *unstructured.Unstructured,
+	client *dynamicclientset.ResourceClient,
+	obj *unstructured.Unstructured,
 ) (*unstructured.Unstructured, error) {
 	// If the cached object passed in is already in the right state,
 	// we'll assume we don't need to check the live object.
@@ -51,7 +52,6 @@ func (m *Finalizer) SyncObject(
 	if dynamicobject.HasFinalizer(obj, m.Name) == m.Enabled {
 		return obj, nil
 	}
-
 	// Otherwise, we may need to update the object.
 	//
 	// NOTE:

@@ -36,11 +36,7 @@ import (
 // with additional info
 type APIResource struct {
 	metav1.APIResource
-
-	// TODO (@amitkumardas):
-	// Why is this required? is this not same as metav1.APIResource.Version
-	APIVersion string
-
+	APIVersion     string
 	hasSubresource map[string]bool
 }
 
@@ -105,6 +101,13 @@ type APIResourceManager struct {
 	// Client to discover API resource
 	Client discovery.DiscoveryInterface
 
+	// GetByResourceFn is a functional type to get API resource
+	// based out of apiVersion & resource name
+	//
+	// NOTE:
+	//	This can be used to mock GetByResource during unit test
+	GetByResourceFn func(apiVersion string, resource string) *APIResource
+
 	stopCh, doneCh chan struct{}
 }
 
@@ -115,12 +118,25 @@ func NewAPIResourceManager(c discovery.DiscoveryInterface) *APIResourceManager {
 }
 
 // GetByResource returns the API resource based on the provided
-// version and resource (this is typically the plural
-// notation of kind)
-func (mgr *APIResourceManager) GetByResource(
-	apiVersion, resource string,
-) *APIResource {
+// api version and resource
+//
+// NOTE:
+//	resource implies the name of resource which is also the plural
+// notation of kind
+func (mgr *APIResourceManager) GetByResource(apiVersion, resource string) *APIResource {
+	if mgr.GetByResourceFn != nil {
+		return mgr.GetByResourceFn(apiVersion, resource)
+	}
+	return mgr.getByResource(apiVersion, resource)
+}
 
+// getByResource returns the API resource based on the provided
+// api version and resource
+//
+// NOTE:
+//	resource implies the name of resource which is also the plural
+// notation of kind
+func (mgr *APIResourceManager) getByResource(apiVersion, resource string) *APIResource {
 	mgr.mutex.RLock()
 	defer mgr.mutex.RUnlock()
 
@@ -132,11 +148,8 @@ func (mgr *APIResourceManager) GetByResource(
 }
 
 // GetByKind returns the API resource based on the provided
-// version and kind
-func (mgr *APIResourceManager) GetByKind(
-	apiVersion, kind string,
-) *APIResource {
-
+// api version and kind
+func (mgr *APIResourceManager) GetByKind(apiVersion, kind string) *APIResource {
 	mgr.mutex.RLock()
 	defer mgr.mutex.RUnlock()
 

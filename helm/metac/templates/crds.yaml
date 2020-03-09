@@ -41,8 +41,12 @@ spec:
               items:
                 properties:
                   apiVersion:
+                    description: APIVersion is the combination of group & version
+                      of the resource
                     type: string
                   resource:
+                    description: Resource is the name of the resource. Its also the
+                      plural of Kind
                     type: string
                   updateStrategy:
                     properties:
@@ -224,8 +228,12 @@ spec:
             parentResource:
               properties:
                 apiVersion:
+                  description: APIVersion is the combination of group & version of
+                    the resource
                   type: string
                 resource:
+                  description: Resource is the name of the resource. Its also the
+                    plural of Kind
                   type: string
                 revisionHistory:
                   properties:
@@ -371,8 +379,12 @@ spec:
               items:
                 properties:
                   apiVersion:
+                    description: APIVersion is the combination of group & version
+                      of the resource
                     type: string
                   resource:
+                    description: Resource is the name of the resource. Its also the
+                      plural of Kind
                     type: string
                   updateStrategy:
                     properties:
@@ -501,6 +513,8 @@ spec:
                         type: array
                     type: object
                   apiVersion:
+                    description: APIVersion is the combination of group & version
+                      of the resource
                     type: string
                   labelSelector:
                     description: A label selector is a label query over a set of resources.
@@ -550,6 +564,8 @@ spec:
                         type: object
                     type: object
                   resource:
+                    description: Resource is the name of the resource. Its also the
+                      plural of Kind
                     type: string
                 required:
                 - apiVersion
@@ -632,102 +648,12 @@ spec:
                 description: GenericControllerAttachment represents a resources that
                   takes part in sync &/or finalize.
                 properties:
-                  annotationSelector:
-                    description: "Include the resource if annotation selector matches
-                      \n This is ANDed with other selectors if present"
-                    properties:
-                      matchAnnotations:
-                        additionalProperties:
-                          type: string
-                        type: object
-                      matchExpressions:
-                        items:
-                          description: A label selector requirement is a selector
-                            that contains values, a key, and an operator that relates
-                            the key and values.
-                          properties:
-                            key:
-                              description: key is the label key that the selector
-                                applies to.
-                              type: string
-                            operator:
-                              description: operator represents a key's relationship
-                                to a set of values. Valid operators are In, NotIn,
-                                Exists and DoesNotExist.
-                              type: string
-                            values:
-                              description: values is an array of string values. If
-                                the operator is In or NotIn, the values array must
-                                be non-empty. If the operator is Exists or DoesNotExist,
-                                the values array must be empty. This array is replaced
-                                during a strategic merge patch.
-                              items:
-                                type: string
-                              type: array
-                          required:
-                          - key
-                          - operator
-                          type: object
-                        type: array
-                    type: object
-                  apiVersion:
-                    type: string
-                  labelSelector:
-                    description: "Include the resource if label selector matches \n
-                      This is ANDed with other selectors if present"
-                    properties:
-                      matchExpressions:
-                        description: matchExpressions is a list of label selector
-                          requirements. The requirements are ANDed.
-                        items:
-                          description: A label selector requirement is a selector
-                            that contains values, a key, and an operator that relates
-                            the key and values.
-                          properties:
-                            key:
-                              description: key is the label key that the selector
-                                applies to.
-                              type: string
-                            operator:
-                              description: operator represents a key's relationship
-                                to a set of values. Valid operators are In, NotIn,
-                                Exists and DoesNotExist.
-                              type: string
-                            values:
-                              description: values is an array of string values. If
-                                the operator is In or NotIn, the values array must
-                                be non-empty. If the operator is Exists or DoesNotExist,
-                                the values array must be empty. This array is replaced
-                                during a strategic merge patch.
-                              items:
-                                type: string
-                              type: array
-                          required:
-                          - key
-                          - operator
-                          type: object
-                        type: array
-                      matchLabels:
-                        additionalProperties:
-                          type: string
-                        description: matchLabels is a map of {key,value} pairs. A
-                          single {key,value} in the matchLabels map is equivalent
-                          to an element of matchExpressions, whose key field is "key",
-                          the operator is "In", and the values array contains only
-                          "value". The requirements are ANDed.
-                        type: object
-                    type: object
-                  nameSelector:
-                    description: "Include the resource if name selector matches \n
-                      This is ANDed with other selectors if present"
-                    items:
-                      type: string
-                    type: array
-                  resource:
-                    type: string
-                  resourceSelector:
+                  advancedSelector:
                     description: "Include the resource if resource selector matches
-                      \n This is ANDed with other selectors if present"
+                      \n This is ANDed with other selectors if present \n NOTE: \tThis
+                      is an advanced selector & can be used to perform matches on
+                      complex selection criterias against combinations of labels,
+                      annotations, name, namespace, target object, path & slice values."
                     properties:
                       selectorTerms:
                         description: A list of selector terms. This list of terms
@@ -992,6 +918,103 @@ spec:
                     required:
                     - selectorTerms
                     type: object
+                  annotationSelector:
+                    description: "Include the resource if annotation selector matches
+                      \n This is ANDed with other selectors if present"
+                    properties:
+                      matchAnnotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      matchExpressions:
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                    type: object
+                  apiVersion:
+                    description: APIVersion is the combination of group & version
+                      of the resource
+                    type: string
+                  labelSelector:
+                    description: "Include the resource if label selector matches \n
+                      This is ANDed with other selectors if present"
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: A label selector requirement is a selector
+                            that contains values, a key, and an operator that relates
+                            the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: operator represents a key's relationship
+                                to a set of values. Valid operators are In, NotIn,
+                                Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: values is an array of string values. If
+                                the operator is In or NotIn, the values array must
+                                be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced
+                                during a strategic merge patch.
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: matchLabels is a map of {key,value} pairs. A
+                          single {key,value} in the matchLabels map is equivalent
+                          to an element of matchExpressions, whose key field is "key",
+                          the operator is "In", and the values array contains only
+                          "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                  nameSelector:
+                    description: "Include the resource if name selector matches \n
+                      This is ANDed with other selectors if present"
+                    items:
+                      type: string
+                    type: array
+                  resource:
+                    description: Resource is the name of the resource. Its also the
+                      plural of Kind
+                    type: string
                   updateStrategy:
                     description: UpdateStrategy to be used for the resource to take
                       into account the changes due to sync/finalize
@@ -1135,102 +1158,12 @@ spec:
                 actions i.e. 'create', 'update' or 'delete' of this resource will
                 trigger this GenericController's sync process.
               properties:
-                annotationSelector:
-                  description: "Include the resource if annotation selector matches
-                    \n This is ANDed with other selectors if present"
-                  properties:
-                    matchAnnotations:
-                      additionalProperties:
-                        type: string
-                      type: object
-                    matchExpressions:
-                      items:
-                        description: A label selector requirement is a selector that
-                          contains values, a key, and an operator that relates the
-                          key and values.
-                        properties:
-                          key:
-                            description: key is the label key that the selector applies
-                              to.
-                            type: string
-                          operator:
-                            description: operator represents a key's relationship
-                              to a set of values. Valid operators are In, NotIn, Exists
-                              and DoesNotExist.
-                            type: string
-                          values:
-                            description: values is an array of string values. If the
-                              operator is In or NotIn, the values array must be non-empty.
-                              If the operator is Exists or DoesNotExist, the values
-                              array must be empty. This array is replaced during a
-                              strategic merge patch.
-                            items:
-                              type: string
-                            type: array
-                        required:
-                        - key
-                        - operator
-                        type: object
-                      type: array
-                  type: object
-                apiVersion:
-                  type: string
-                labelSelector:
-                  description: "Include the resource if label selector matches \n
-                    This is ANDed with other selectors if present"
-                  properties:
-                    matchExpressions:
-                      description: matchExpressions is a list of label selector requirements.
-                        The requirements are ANDed.
-                      items:
-                        description: A label selector requirement is a selector that
-                          contains values, a key, and an operator that relates the
-                          key and values.
-                        properties:
-                          key:
-                            description: key is the label key that the selector applies
-                              to.
-                            type: string
-                          operator:
-                            description: operator represents a key's relationship
-                              to a set of values. Valid operators are In, NotIn, Exists
-                              and DoesNotExist.
-                            type: string
-                          values:
-                            description: values is an array of string values. If the
-                              operator is In or NotIn, the values array must be non-empty.
-                              If the operator is Exists or DoesNotExist, the values
-                              array must be empty. This array is replaced during a
-                              strategic merge patch.
-                            items:
-                              type: string
-                            type: array
-                        required:
-                        - key
-                        - operator
-                        type: object
-                      type: array
-                    matchLabels:
-                      additionalProperties:
-                        type: string
-                      description: matchLabels is a map of {key,value} pairs. A single
-                        {key,value} in the matchLabels map is equivalent to an element
-                        of matchExpressions, whose key field is "key", the operator
-                        is "In", and the values array contains only "value". The requirements
-                        are ANDed.
-                      type: object
-                  type: object
-                nameSelector:
-                  description: "Include the resource if name selector matches \n This
-                    is ANDed with other selectors if present"
-                  items:
-                    type: string
-                  type: array
-                resource:
-                  type: string
-                resourceSelector:
+                advancedSelector:
                   description: "Include the resource if resource selector matches
-                    \n This is ANDed with other selectors if present"
+                    \n This is ANDed with other selectors if present \n NOTE: \tThis
+                    is an advanced selector & can be used to perform matches on complex
+                    selection criterias against combinations of labels, annotations,
+                    name, namespace, target object, path & slice values."
                   properties:
                     selectorTerms:
                       description: A list of selector terms. This list of terms are
@@ -1492,6 +1425,103 @@ spec:
                   required:
                   - selectorTerms
                   type: object
+                annotationSelector:
+                  description: "Include the resource if annotation selector matches
+                    \n This is ANDed with other selectors if present"
+                  properties:
+                    matchAnnotations:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    matchExpressions:
+                      items:
+                        description: A label selector requirement is a selector that
+                          contains values, a key, and an operator that relates the
+                          key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies
+                              to.
+                            type: string
+                          operator:
+                            description: operator represents a key's relationship
+                              to a set of values. Valid operators are In, NotIn, Exists
+                              and DoesNotExist.
+                            type: string
+                          values:
+                            description: values is an array of string values. If the
+                              operator is In or NotIn, the values array must be non-empty.
+                              If the operator is Exists or DoesNotExist, the values
+                              array must be empty. This array is replaced during a
+                              strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                  type: object
+                apiVersion:
+                  description: APIVersion is the combination of group & version of
+                    the resource
+                  type: string
+                labelSelector:
+                  description: "Include the resource if label selector matches \n
+                    This is ANDed with other selectors if present"
+                  properties:
+                    matchExpressions:
+                      description: matchExpressions is a list of label selector requirements.
+                        The requirements are ANDed.
+                      items:
+                        description: A label selector requirement is a selector that
+                          contains values, a key, and an operator that relates the
+                          key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies
+                              to.
+                            type: string
+                          operator:
+                            description: operator represents a key's relationship
+                              to a set of values. Valid operators are In, NotIn, Exists
+                              and DoesNotExist.
+                            type: string
+                          values:
+                            description: values is an array of string values. If the
+                              operator is In or NotIn, the values array must be non-empty.
+                              If the operator is Exists or DoesNotExist, the values
+                              array must be empty. This array is replaced during a
+                              strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: matchLabels is a map of {key,value} pairs. A single
+                        {key,value} in the matchLabels map is equivalent to an element
+                        of matchExpressions, whose key field is "key", the operator
+                        is "In", and the values array contains only "value". The requirements
+                        are ANDed.
+                      type: object
+                  type: object
+                nameSelector:
+                  description: "Include the resource if name selector matches \n This
+                    is ANDed with other selectors if present"
+                  items:
+                    type: string
+                  type: array
+                resource:
+                  description: Resource is the name of the resource. Its also the
+                    plural of Kind
+                  type: string
               required:
               - apiVersion
               - resource

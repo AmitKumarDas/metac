@@ -167,7 +167,13 @@ type GenericControllerResource struct {
 	// Include the resource if resource selector matches
 	//
 	// This is ANDed with other selectors if present
-	ResourceSelector *ResourceSelector `json:"resourceSelector,omitempty"`
+	//
+	// NOTE:
+	//	This is an advanced selector & can be used to perform
+	// matches on complex selection criterias against combinations
+	// of labels, annotations, name, namespace, target object,
+	// path & slice values.
+	AdvancedSelector *ResourceSelector `json:"advancedSelector,omitempty"`
 }
 
 // GenericControllerAttachment represents a resources that takes
@@ -290,9 +296,9 @@ type GenericControllerList struct {
 	Items           []GenericController `json:"items"`
 }
 
-// Key formats the GenericController value into a
-// suitable key format
-func (gc GenericController) Key() string {
+// AsNamespaceNameKey formats the GenericController value into a
+// suitable key format that makes use of namespace & name
+func (gc GenericController) AsNamespaceNameKey() string {
 	return GenericControllerKey(gc.Namespace, gc.Name)
 }
 

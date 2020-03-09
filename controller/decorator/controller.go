@@ -60,7 +60,7 @@ type decoratorController struct {
 	resourceManager *dynamicdiscovery.APIResourceManager
 
 	// hold the parent kinds
-	parentKinds common.ResourceRegistryByGK
+	parentKinds common.ResourceRegistrar
 
 	// selector options to filter the parent
 	parentSelector *decoratorSelector
@@ -83,8 +83,8 @@ type decoratorController struct {
 	// the watched resource i.e. parent & to list the attachments
 	// i.e. children from the cache thereby reducing the pressure
 	// on kube api server
-	parentInformers common.ResourceInformerRegistryByVR
-	childInformers  common.ResourceInformerRegistryByVR
+	parentInformers common.ResourceInformerRegistrar
+	childInformers  common.ResourceInformerRegistrar
 
 	// instance that deals with this controller's finalizer
 	// if any
@@ -106,9 +106,9 @@ func newDecoratorController(
 		resourceManager: resourceMgr,
 		dynCliSet:       dynCliSet,
 
-		parentKinds:     make(common.ResourceRegistryByGK),
-		parentInformers: make(common.ResourceInformerRegistryByVR),
-		childInformers:  make(common.ResourceInformerRegistryByVR),
+		parentKinds:     make(common.ResourceRegistrar),
+		parentInformers: make(common.ResourceInformerRegistrar),
+		childInformers:  make(common.ResourceInformerRegistrar),
 
 		queue: workqueue.NewNamedRateLimitingQueue(
 			workqueue.DefaultControllerRateLimiter(),
@@ -774,7 +774,7 @@ func (c *decoratorController) getChildren(
 				child.APIVersion,
 			)
 		}
-		childMap.InitGroupByVK(child.APIVersion, resource.Kind)
+		childMap.Init(child.APIVersion, resource.Kind)
 
 		// Take only the objects that belong to this parent,
 		// and that were created by this decorator.

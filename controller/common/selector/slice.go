@@ -51,7 +51,7 @@ func (s KeyToSlice) Has(key string) bool {
 // words it returns if the match succeeded or failed for a slice
 // expression.
 //
-// This should be initialized via NewSliceSelectorMatcher
+// This should be initialized via NewSliceMatcher
 // constructor for creating a valid matcher instance.
 type SliceMatcher struct {
 	// key is the label key that the selector applies to.
@@ -84,7 +84,9 @@ func (r SliceMatcher) String() string {
 //
 // NOTE:
 // 	The empty string is a valid value in the input values set.
-func NewSliceMatcher(key string, op v1alpha1.SliceSelectorOperator, desiredValues []string) (*SliceMatcher, error) {
+func NewSliceMatcher(
+	key string, op v1alpha1.SliceSelectorOperator, desiredValues []string,
+) (*SliceMatcher, error) {
 	sm := &SliceMatcher{}
 	if key == "" {
 		return nil, errors.Errorf("%s: Key can't be empty", sm)
@@ -170,7 +172,7 @@ func (r *SliceMatcher) Match(observedKeySlice KeyToSlice) bool {
 // SliceSelector exposes match operation against string slices
 type SliceSelector struct {
 	// List of matchers that makes this slice selector instance.
-	// The results of these matchers are ANDed to form the final
+	// The results of these matchers are **ANDed** to form the final
 	// evaluation.
 	matchers []SliceMatcher
 

@@ -143,14 +143,22 @@ func (a *Apply) merge(
 	//
 	// See: https://github.com/GoogleCloudPlatform/metacontroller/issues/76
 	if err := revertObjectMetaSystemFields(merged, observed); err != nil {
-		return nil, errors.Wrapf(err, "Failed to revert ObjectMeta system fields")
+		return nil,
+			errors.Wrapf(
+				err,
+				"Failed to revert ObjectMeta system fields",
+			)
 	}
 
 	// Revert status because we don't currently support a parent changing
 	// status of its children, so we need to ensure no diffs on the children
 	// involve status.
 	if err := revertField(merged, observed, "status"); err != nil {
-		return nil, errors.Wrapf(err, "Failed to revert .status")
+		return nil,
+			errors.Wrapf(
+				err,
+				"Failed to revert .status",
+			)
 	}
 
 	// set flags to let consumers of this function take appropriate decisions
@@ -159,27 +167,30 @@ func (a *Apply) merge(
 	// for diff; since this function not only merges the states but also
 	// sets last applied info
 	a.isRun = true
-	a.isEqual =
-		reflect.DeepEqual(merged.UnstructuredContent(), observed.UnstructuredContent())
+	a.isEqual = reflect.DeepEqual(
+		merged.UnstructuredContent(),
+		observed.UnstructuredContent(),
+	)
 
-	// log the diff or no diff at verbose log level
+	// log the diff at verbose log level
 	if glog.V(5) {
-		oJSON, _ := json.Marshal(observed.UnstructuredContent())
-		dJSON, _ := json.Marshal(desired.UnstructuredContent())
-		lAJSON, _ := json.Marshal(lastApplied)
+		if !a.isEqual {
+			oJSON, _ := json.Marshal(observed.UnstructuredContent())
+			dJSON, _ := json.Marshal(desired.UnstructuredContent())
+			lAJSON, _ := json.Marshal(lastApplied)
 
-		glog.Infof(
-			"%s: IsEqual %t: \nObserved: %s\nLastApplied: %s\nDesired: %s\nDiff observed vs merged: %s",
-			DescObjectAsKey(desired),
-			a.isEqual,
-			oJSON,
-			lAJSON,
-			dJSON,
-			cmp.Diff(
-				observed.UnstructuredContent(),
-				merged.UnstructuredContent(),
-			),
-		)
+			glog.Infof(
+				"%s:\n---Observed:: %s\n---LastApplied:: %s\n---Desired:: %s\n---Diff:: %s",
+				DescObjectAsKey(desired),
+				oJSON,
+				lAJSON,
+				dJSON,
+				cmp.Diff(
+					observed.UnstructuredContent(),
+					merged.UnstructuredContent(),
+				),
+			)
+		}
 	}
 
 	// sanitize desired content before setting it as the
@@ -197,7 +208,10 @@ func (a *Apply) merge(
 // differences between observed & desired states
 func (a *Apply) HasMergeDiff() (bool, error) {
 	if !a.isRun {
-		return false, errors.Errorf("Invalid invocation: Merge has not been invoked")
+		return false,
+			errors.Errorf(
+				"Invalid invocation: Merge has not been invoked",
+			)
 	}
 	return !a.isEqual, nil
 }
@@ -230,21 +244,33 @@ func revertObjectMetaSystemFields(newObj, orig *unstructured.Unstructured) error
 // revertField reverts field in newObj to match what it was in orig.
 func revertField(newObj, orig *unstructured.Unstructured, fieldPath ...string) error {
 	// check the field in original
-	fieldVal, found, err :=
-		unstructured.NestedFieldNoCopy(orig.UnstructuredContent(), fieldPath...)
+	origVal, found, err :=
+		unstructured.NestedFieldNoCopy(
+			orig.UnstructuredContent(),
+			fieldPath...,
+		)
 	if err != nil {
 		return errors.Wrapf(
 			err,
-			"Can't traverse UnstructuredContent to look for field %v", fieldPath,
+			"Can't traverse UnstructuredContent to look for field %v",
+			fieldPath,
 		)
 	}
 	if found {
 		// The original had this field set, so make sure it remains the same.
 		// SetNestedField will recursively ensure the field and all its parent
 		// fields exist, and then set the value.
-		err := unstructured.SetNestedField(newObj.UnstructuredContent(), fieldVal, fieldPath...)
+		err := unstructured.SetNestedField(
+			newObj.UnstructuredContent(),
+			origVal,
+			fieldPath...,
+		)
 		if err != nil {
-			return errors.Wrapf(err, "Can't revert field %v", fieldPath)
+			return errors.Wrapf(
+				err,
+				"Can't revert field %v",
+				fieldPath,
+			)
 		}
 	} else {
 		// The original had this field unset, so make sure it remains unset.
@@ -276,9 +302,6 @@ type ChildUpdateStrategyGetter interface {
 
 // ManageChildren ensures the relevant children objects of the
 // given parent are in sync
-//
-// TODO (@amitkumardas) deprecate this in favour of
-// AttachmentOperationManager's Apply method
 func ManageChildren(
 	dynClient *dynamicclientset.Clientset,
 	updateStrategy ChildUpdateStrategyGetter,
@@ -326,8 +349,6 @@ func ManageChildren(
 	return utilerrors.NewAggregate(errs)
 }
 
-// TODO (@amitkumardas) deprecate this in favour of
-// ControllerManager's Delete method
 func deleteChildren(
 	client *dynamicclientset.ResourceClient,
 	parent *unstructured.Unstructured,
@@ -359,8 +380,6 @@ func deleteChildren(
 	return utilerrors.NewAggregate(errs)
 }
 
-// TODO (@amitkumardas) deprecate this in favour of
-// ControllerManager's Update method
 func updateChildren(
 	client *dynamicclientset.ResourceClient,
 	updateStrategy ChildUpdateStrategyGetter,

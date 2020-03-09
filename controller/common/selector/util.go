@@ -26,7 +26,9 @@ import (
 // validateLabelKey validates if the given key is valid
 func validateLabelKey(key string) error {
 	if errs := validation.IsQualifiedName(key); len(errs) != 0 {
-		return errors.Errorf("Invalid label key %q: %s", key, strings.Join(errs, "; "))
+		return errors.Errorf(
+			"Invalid label key %q: [%s]", key, strings.Join(errs, "; "),
+		)
 	}
 	return nil
 }
@@ -35,7 +37,7 @@ func validateLabelKey(key string) error {
 func validateLabelValue(key, value string) error {
 	if errs := validation.IsValidLabelValue(value); len(errs) != 0 {
 		return errors.Errorf(
-			"Invalid label value %q at key %q: %s", value, key, strings.Join(errs, "; "),
+			"Invalid label value %q at key %q: [%s]", value, key, strings.Join(errs, "; "),
 		)
 	}
 	return nil

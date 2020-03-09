@@ -76,7 +76,7 @@ var (
 	runAsLocal = flag.Bool(
 		"run-as-local",
 		false,
-		`When true enables metac to run by looking up its config file;
+		`When true it enables metac to run by looking up its config file;
 		 Metac will no longer be dependent on its CRDs and CRs`,
 	)
 	metacConfigPath = flag.String(
@@ -99,7 +99,7 @@ func Start() {
 	var config *rest.Config
 	var err error
 	if *clientConfigPath != "" {
-		glog.Infof("Using current context from kubeconfig file: %v", *clientConfigPath)
+		glog.Infof("Using kubeconfig %v", *clientConfigPath)
 		config, err = clientcmd.BuildConfigFromFlags("", *clientConfigPath)
 	} else {
 		glog.Info("No kubeconfig file specified: Trying in-cluster auto-config")
@@ -111,7 +111,9 @@ func Start() {
 	config.QPS = float32(*clientGoQPS)
 	config.Burst = *clientGoBurst
 
+	// declare the stop server function
 	var stopServer func()
+	// common server values
 	var mserver = server.Server{
 		Config:            config,
 		DiscoveryInterval: *discoveryInterval,
@@ -119,16 +121,18 @@ func Start() {
 	}
 	// start metac either as config based or CRD based
 	if *runAsLocal {
-		configServer := &server.ConfigBasedServer{
+		// run as local implies starting this binary by
+		// looking up various MetaController resources as
+		// config files
+		configServer := &server.ConfigServer{
 			Server:     mserver,
 			ConfigPath: *metacConfigPath,
 		}
 		stopServer, err = configServer.Start(*workerCount)
 	} else {
-		crdServer := &server.CRDBasedServer{Server: mserver}
+		crdServer := &server.CRDServer{Server: mserver}
 		stopServer, err = crdServer.Start(*workerCount)
 	}
-
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -141,12 +145,15 @@ func Start() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", exporter)
-	srv := &http.Server{
+	httpServer := &http.Server{
 		Addr:    *debugAddr,
 		Handler: mux,
 	}
 	go func() {
-		glog.Errorf("Error serving debug endpoint: %v", srv.ListenAndServe())
+		glog.Errorf(
+			"Error serving metrics endpoint: %v",
+			httpServer.ListenAndServe(),
+		)
 	}()
 
 	// On SIGTERM, stop all controllers gracefully.
@@ -156,5 +163,5 @@ func Start() {
 	glog.Infof("Received %q signal. Shutting down...", sig)
 
 	stopServer()
-	srv.Shutdown(context.Background())
+	httpServer.Shutdown(context.Background())
 }

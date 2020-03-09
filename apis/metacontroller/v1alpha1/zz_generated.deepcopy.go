@@ -787,8 +787,8 @@ func (in *GenericControllerResource) DeepCopyInto(out *GenericControllerResource
 		*out = new(AnnotationSelector)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ResourceSelector != nil {
-		in, out := &in.ResourceSelector, &out.ResourceSelector
+	if in.AdvancedSelector != nil {
+		in, out := &in.AdvancedSelector, &out.AdvancedSelector
 		*out = new(ResourceSelector)
 		(*in).DeepCopyInto(*out)
 	}
