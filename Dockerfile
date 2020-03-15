@@ -57,7 +57,7 @@ COPY start/ start/
 COPY third_party/ third_party/
 
 # build metacontroller binary
-RUN make
+RUN make bins
 
 # Use debian as minimal base image to package the final binary
 FROM debian:stretch-slim
