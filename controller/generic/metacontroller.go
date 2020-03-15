@@ -549,7 +549,7 @@ func (mc *CRDMetaController) enqueueGenericController(obj interface{}) {
 		utilruntime.HandleError(
 			errors.Wrapf(
 				err,
-				"Enqueue failed: %s: %+v",
+				"Enqueue failed for %+v: %s",
 				obj,
 				mc,
 			),
