@@ -1,10 +1,10 @@
 module openebs.io/metac
 
-go 1.13.5
+// This denotes the minimum supported language version and should not include the patch version.
+go 1.13
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
-	github.com/coreos/etcd v3.3.15+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/google/go-cmp v0.3.0

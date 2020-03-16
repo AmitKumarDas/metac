@@ -32,7 +32,7 @@ CONTROLLER_GEN := go run ./vendor/sigs.k8s.io/controller-tools/cmd/controller-ge
 
 export GO111MODULE=on
 
-all: bins
+all: manifests bins
 
 bins: generated_files $(IMG_NAME)
 
@@ -55,9 +55,8 @@ manifests: generated_files
 	@echo "+ Generating $(IMG_NAME) crds"
 	@$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./apis/..." output:crd:artifacts:config=manifests/crds
 	@cat manifests/crds/*.yaml > manifests/metacontroller.yaml
-	@echo '{{ if .Values.crds.cleanup }}' > helm/metac/templates/crds.yaml && \
-	  cat manifests/metacontroller.yaml >> helm/metac/templates/crds.yaml && \
-	  echo '{{- end }}' >> helm/metac/templates/crds.yaml
+	@cp manifests/crds/*.yaml helm/metac/crds/
+	@sed -i'' -e 's@annotations:@annotations:\n    "helm.sh/hook": crd-install@g' helm/metac/crds/*
 	@rm -rf manifests/crds
 
 # go mod download modules to local cache
