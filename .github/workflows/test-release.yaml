@@ -26,7 +26,7 @@ jobs:
     needs: ['tests']
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v1
       - name: Setup Node.js
         uses: actions/setup-node@v1
         with:
@@ -35,6 +35,5 @@ jobs:
         run: npm install ci
       - name: Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
         run: npx semantic-release
