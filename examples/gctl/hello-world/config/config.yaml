@@ -1,0 +1,28 @@
+apiVersion: metac.openebs.io/v1alpha1
+kind: GenericController
+metadata:
+  name: hello-world-controller
+spec:
+  watch:
+    apiVersion: example.com/v1
+    resource: helloworlds
+  attachments:
+  - apiVersion: v1
+    resource: pods
+    updateStrategy:
+      method: Recreate
+    advancedSelector:
+      selectorTerms:
+      - matchReferenceExpressions:
+        # select Pod if its annotation
+        #
+        # matches HelloWorld _(i.e. watch)_ UID
+        - key: metadata.annotations.helloworld/uid
+          operator: EqualsWatchUID
+  hooks:
+    sync:
+      inline:
+        funcName: sync/helloworld
+    finalize:
+      inline:
+        funcName: finalize/helloworld
