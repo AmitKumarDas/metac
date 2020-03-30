@@ -1,0 +1,7 @@
+apiVersion: example.com/v1
+kind: HelloWorld
+metadata:
+  name: hello-amitd
+  namespace: hello-world
+spec: 
+  who: amitd

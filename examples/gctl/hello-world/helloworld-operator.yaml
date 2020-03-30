@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.mayadata.io/name: hello-world
+  name: hello-world
+  namespace: hello-world
+spec:
+  replicas: 1
+  serviceName: ""
+  selector:
+    matchLabels:
+      app.mayadata.io/name: hello-world
+  template:
+    metadata:
+      labels:
+        app.mayadata.io/name: hello-world
+    spec:
+      serviceAccountName: hello-world
+      containers:
+      - name: hello-world
+        image: localhost:5000/hello-world:latest # local registry
+        command: ["/hello-world"]
+        args:
+        - --logtostderr
+        - --run-as-local
+        - --workers-count=1 # number of workers per controller
+        - --discovery-interval=40s
+        - --cache-flush-interval=240s # re-sync interval
+        - -v=5
+---
