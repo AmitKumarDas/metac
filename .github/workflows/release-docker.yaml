@@ -5,28 +5,9 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 jobs:
-  tests:
-    runs-on: ubuntu-18.04
-    strategy:
-      matrix:
-        test: ['unit-test', 'integration-test']
-    name: ${{ matrix.test }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: setup env
-        run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-      - name: Setup go
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.13.5
-      - run: make ${{ matrix.test }}
   release-docker:
     name: Release docker image
     runs-on: ubuntu-18.04
-    needs: ['tests']
     steps:
       - name: Checkout
         uses: actions/checkout@v2

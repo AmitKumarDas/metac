@@ -1,6 +1,6 @@
 ---
 name: Test and Release (if on master)
-on: [push]
+on: [push, pull_request]
 jobs:
   tests:
     runs-on: ubuntu-18.04
