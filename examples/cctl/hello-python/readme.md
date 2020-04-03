@@ -1,10 +1,16 @@
 ## Example python Controller
-This example is taken from [metacontroller](https://metacontroller.app/guide/create/) doc. There were some issue in this example if you are using `CompositeController` and status subresource is not enabled for parent resource then your controller will go into an infinite loop. For `CompositeController` it updates `status.observedGeneration` with `metadata.generation` for parent resource.
+This example is taken from [metacontroller](https://metacontroller.app/guide/create/) doc. There is an issue in this example that leads to continuous reconciliations. When _'CompositeController'_ is used with the parent resource's status **undefined** as a sub-resource, then the reconciliation gets into an infinite loop. This happens since _'CompositeController'_ updates _'status.observedGeneration'_ with _'metadata.generation'_ as part of its reconciliation.
 
-This will be done in 2 ways -
+Following sums up the reconciliation logic when status is defined as a sub resource & vice-versa:
 
-1. If status subresource is enabled for parent then it will patch the status with cr's status end point and  `metadata.generation` of parent will not change.
-2. If status subresource is not enabled for parent then it will update the full object. For that there will be a change in `metadata.generation` of parent. Which will invoke a reconciliation and that reconciliation will invoke `metadata.generation` update in parent. So it will be a contineous loop.
+1. If parent's status is defined as a sub resource then reconciliation logic patches this status using status api end point. This does not change resource's `metadata.generation` field.
+2. If parent's status is not defined as a sub resource then reconciliation logic updates the full parent object. This in turn leads to a update in parent's `metadata.generation` field. This leads to re-triggering of sync hook. In other words this forces the reconciliation to get into a never ending loop.
+
+**Solution**: Add below to watch's CRD
+```yaml
+  subresources:
+    status: {}
+```
 
 
 What changes you need to do? 
@@ -45,8 +51,6 @@ spec:
     plural: helloworlds
     singular: helloworld
   scope: Namespaced
-  subresources:
-    status: {}
 ```
 
 ### To try this example follow the below steps 
