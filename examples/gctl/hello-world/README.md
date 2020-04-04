@@ -1,19 +1,19 @@
-## Hello World K8s controller
+## Hello World kubernetes controller
 
-- This is a K8s controller that imports metac as library
-  - In other words, this uses inline hooks than webhooks
-- Controller's K8s dependencies is configured in a config file
+- This is a k8s controller that imports metac as library
+  - This enables use of inline hooks instead of webhooks
+- Controller's k8s resources are configured in a config file
   - Refer: config/config.yaml
 - Controller business logic is implemented in Go
   - Refer: cmd/main.go
-  - K8s is completely abstracted from this logic
+  - Kubernetes client libraries are completely abstracted from this logic
   - Logic is implemented in respective reconcile functions
     - A Pod gets created via sync inline hook
     - This Pod gets deleted via finalize inline hook
 - Docker image includes the binary as well as its config file
   - Refer: Dockerfile
 - Controller is deployed as a single StatefulSet
-  - No need of separate metac binary since metac is used as a library
+  - No need of separate metac binary since metac is imported as a library
   - Refer: helloworld-operator.yaml
 
 ### Steps
@@ -38,6 +38,15 @@ sudo kubectl cluster-info --context kind-kind
 #
 # To further debug and diagnose cluster problems, use
 #'kubectl cluster-info dump'.
+```
+
+```sh
+# NOTE:
+# - Docker daemon always runs as a root user
+#   - sudo may not be required depending on individual confgurations
+#   - sudo is needed if docker group is not configured
+# - KIND runs entirely as containers
+#   - Hence, all kubectl commands might need to used with sudo
 ```
 
 ```sh

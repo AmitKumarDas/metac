@@ -1,0 +1,26 @@
+apiVersion: metac.openebs.io/v1alpha1
+kind: GenericController
+metadata:
+  name: dontpanic-controller
+spec:
+  watch:
+    apiVersion: example.com/v1
+    resource: dontpanics
+  attachments:
+  - apiVersion: notsure.com/v1
+    resource: iamerrors
+    advancedSelector:
+      selectorTerms:
+      - matchReferenceExpressions:
+        # select IAmError if its annotation
+        #
+        # matches DontPanic _(i.e. watch)_ UID
+        - key: metadata.annotations.dontpanic/uid
+          operator: EqualsWatchUID
+  hooks:
+    sync:
+      inline:
+        funcName: sync/dontpanic
+    finalize:
+      inline:
+        funcName: finalize/dontpanic

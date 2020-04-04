@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.mayadata.io/name: dontpanic
+  name: dontpanic
+  namespace: dontpanic
+spec:
+  replicas: 1
+  serviceName: ""
+  selector:
+    matchLabels:
+      app.mayadata.io/name: dontpanic
+  template:
+    metadata:
+      labels:
+        app.mayadata.io/name: dontpanic
+    spec:
+      serviceAccountName: dontpanic
+      containers:
+      - name: dontpanic
+        image: localhost:5000/dontpanic:latest # local registry
+        command: ["/dontpanic"]
+        args:
+        - --logtostderr
+        - --run-as-local
+        - --workers-count=1 # number of workers per controller
+        - --discovery-interval=40s
+        - --cache-flush-interval=240s # re-sync interval
+        - -v=7 # this will give us startup errors if any
+---
