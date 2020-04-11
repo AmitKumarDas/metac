@@ -71,10 +71,12 @@ vendor: go.mod go.sum
 .PHONY: image
 image:
 	docker build -t $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION) .
+	docker build -t $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION)_debug -f Dockerfile.debug .
 
 .PHONY: push
 push: image
 	docker push $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION)
+	docker push $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION)_debug
 
 .PHONY: unit-test
 unit-test: generated_files
