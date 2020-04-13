@@ -24,7 +24,7 @@ trap cleanup EXIT
 # Uncomment below if debug / verbose execution is needed
 #set -ex
 
-my_crd="foos.samplecontroller.k8s.io"
+my_crd="foos.samplecontroller.example.io"
 my_deploy="my-deploy"
 
 echo -e "\n Install SampleController..."
