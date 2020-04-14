@@ -78,7 +78,7 @@ func SetLastAppliedByAnnKey(
 	ann[annKey] = string(lastAppliedJSON)
 	obj.SetAnnotations(ann)
 
-	glog.V(4).Infof(
+	glog.V(5).Infof(
 		"%s:%s:%s:%s: Annotation %q will be set with last applied state:\n%s",
 		obj.GetAPIVersion(),
 		obj.GetKind(),
