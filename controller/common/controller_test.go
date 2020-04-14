@@ -64,8 +64,8 @@ func (n NoopResourceOperation) Patch(name string, pt types.PatchType, data []byt
 func TestAttachmentResourcesExecutorUpdate(t *testing.T) {
 	lastAppliedKey := "test-watch-uid/gctl-last-applied"
 
-	mockAttachmentExecutor := &AttachmentResourcesExecutor{
-		AttachmentExecuteBase: AttachmentExecuteBase{
+	mockAttachmentExecutor := &ResourceStatesController{
+		ClusterStatesControllerBase: ClusterStatesControllerBase{
 			GetChildUpdateStrategyByGK: func(group, kind string) v1alpha1.ChildUpdateMethod {
 				return v1alpha1.ChildUpdateInPlace
 			},
@@ -78,7 +78,7 @@ func TestAttachmentResourcesExecutorUpdate(t *testing.T) {
 			},
 			UpdateAny: kubernetes.BoolPtr(true),
 		},
-		DynamicResourceClient: &dynamicclientset.ResourceClient{
+		DynamicClient: &dynamicclientset.ResourceClient{
 			ResourceInterface: &NoopResourceOperation{},
 			APIResource:       &dynamicdiscovery.APIResource{},
 		},
@@ -834,7 +834,7 @@ func TestAttachmentResourcesExecutorUpdate(t *testing.T) {
 			}
 
 			// this is the **function under test**
-			isUpdate, err := mockAttachmentExecutor.Update(observedUnstruct, desiredUnstruct)
+			isUpdate, err := mockAttachmentExecutor.update(observedUnstruct, desiredUnstruct)
 			if err != nil {
 				t.Fatalf("Test %s error: %v", name, err)
 			}

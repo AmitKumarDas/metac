@@ -39,7 +39,7 @@ import (
 )
 
 type Metacontroller struct {
-	resourceManager *dynamicdiscovery.APIResourceManager
+	resourceManager *dynamicdiscovery.APIResourceDiscovery
 	clientset       *dynamicclientset.Clientset
 	informerFactory *dynamicinformer.SharedInformerFactory
 
@@ -55,7 +55,7 @@ type Metacontroller struct {
 
 // NewMetacontroller returns a new instance of Metacontroller
 func NewMetacontroller(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	clientset *dynamicclientset.Clientset,
 	dynInformers *dynamicinformer.SharedInformerFactory,
 	mcInformerFactory mcinformers.SharedInformerFactory,

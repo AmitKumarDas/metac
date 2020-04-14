@@ -52,7 +52,7 @@ type WatchController struct {
 	GCtlConfig *v1alpha1.GenericController
 
 	// ResourceManager is used to fetch server API resources
-	DiscoveryManager *dynamicdiscovery.APIResourceManager
+	DiscoveryManager *dynamicdiscovery.APIResourceDiscovery
 
 	// dynamic clientset to operate against resources managed
 	// by this controller instance
@@ -104,7 +104,7 @@ func (mgr *WatchController) String() string {
 // with required watch & child informers, selectors, update
 // strategy & so on.
 func NewWatchController(
-	discoveryMgr *dynamicdiscovery.APIResourceManager,
+	discoveryMgr *dynamicdiscovery.APIResourceDiscovery,
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
 	config *v1alpha1.GenericController,
@@ -145,7 +145,7 @@ func NewWatchController(
 	if err != nil {
 		return nil, err
 	}
-	watchAPI := discoveryMgr.GetByResource(
+	watchAPI := discoveryMgr.GetAPIForAPIVersionAndResource(
 		config.Spec.Watch.APIVersion,
 		config.Spec.Watch.Resource,
 	)
@@ -484,7 +484,7 @@ func (mgr *WatchController) syncWatch(key string) error {
 	if err != nil {
 		return err
 	}
-	watchResource := mgr.DiscoveryManager.GetByKind(apiVersion, kind)
+	watchResource := mgr.DiscoveryManager.GetAPIForAPIVersionAndKind(apiVersion, kind)
 	if watchResource == nil {
 		return errors.Errorf(
 			"Can't discover %q with version %q: %s",
@@ -565,7 +565,7 @@ func (mgr *WatchController) syncWatchObj(watch *unstructured.Unstructured) error
 		mgr,
 	)
 
-	watchClient, err := mgr.DynamicClientSet.GetClientByKind(
+	watchClient, err := mgr.DynamicClientSet.GetClientForAPIVersionKind(
 		watch.GetAPIVersion(),
 		watch.GetKind(),
 	)
@@ -849,8 +849,8 @@ func (mgr *WatchController) syncWatchObj(watch *unstructured.Unstructured) error
 			mgr,
 		)
 		// Reconcile attachments via attachment manager
-		attMgr := &common.AttachmentManager{
-			AttachmentExecuteBase: common.AttachmentExecuteBase{
+		attMgr := &common.ClusterStatesController{
+			ClusterStatesControllerBase: common.ClusterStatesControllerBase{
 				GetChildUpdateStrategyByGK: updateStrategyMgr.GetStrategyByGKOrDefault,
 				IsPatchByGK:                updateStrategyMgr.IsPatchByGK,
 				Watch:                      watch,
@@ -924,11 +924,11 @@ func (mgr *WatchController) getObservedAttachments(
 			mgr,
 		)
 		// steps to initialize the attachment registry
-		attachmentResourceAPI := mgr.DiscoveryManager.GetByResource(
+		attachmentAPI := mgr.DiscoveryManager.GetAPIForAPIVersionAndResource(
 			attachmentKind.APIVersion,
 			attachmentKind.Resource,
 		)
-		if attachmentResourceAPI == nil {
+		if attachmentAPI == nil {
 			if glog.V(5) {
 				glog.Warningf(
 					"Can't find %s attachment resource api with version %s: Watch %s: %s",
@@ -943,7 +943,7 @@ func (mgr *WatchController) getObservedAttachments(
 		// initialise this registry with this particular attachment resource
 		attachmentRegistry.Init(
 			attachmentKind.APIVersion,
-			attachmentResourceAPI.Kind,
+			attachmentAPI.Kind,
 		)
 		for _, attObj := range attachmentObjs {
 			isMatch, err :=
@@ -1103,7 +1103,7 @@ func makeAttachmentUpdateStrategyKey(apiGroup, kind string) string {
 // makeAllSelectors builds selector for watch as well as for all
 // attachments declared in GenericController
 func makeAllSelectors(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	schema *v1alpha1.GenericController,
 ) (watchSelector, attachmentSelector *Selection, err error) {
 	// selector for watch
@@ -1128,7 +1128,7 @@ func makeAllSelectors(
 // makeUpdateStrategyForAttachments returns the update strategies
 // for the attachments declared in the GenericController
 func makeUpdateStrategyForAttachments(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	attachments []v1alpha1.GenericControllerAttachment,
 ) (attachmentUpdateStrategies, error) {
 	m := make(attachmentUpdateStrategies)
@@ -1138,7 +1138,7 @@ func makeUpdateStrategyForAttachments(
 		if attachment.UpdateStrategy != nil &&
 			attachment.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
 			// get the resource
-			resource := resourceMgr.GetByResource(
+			resource := resourceMgr.GetAPIForAPIVersionAndResource(
 				attachment.APIVersion,
 				attachment.Resource,
 			)

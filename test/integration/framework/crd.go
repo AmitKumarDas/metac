@@ -109,14 +109,14 @@ func (f *Fixture) SetupCRD(
 
 	f.t.Logf("Discovering %s CRD server API", kind)
 	err = f.Wait(func() (bool, error) {
-		return resourceManager.GetByResource(APIVersion, plural) != nil, nil
+		return resourceManager.GetAPIForAPIVersionAndResource(APIVersion, plural) != nil, nil
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	f.t.Logf("Discovered %s CRD server API", kind)
 
-	crdClient, err := f.dynamicClientset.GetClientByResource(APIVersion, plural)
+	crdClient, err := f.dynamicClientset.GetClientForAPIVersionResource(APIVersion, plural)
 	if err != nil {
 		f.t.Fatal(err)
 	}

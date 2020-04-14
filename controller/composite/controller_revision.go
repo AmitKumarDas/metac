@@ -49,7 +49,7 @@ const (
 func (pc *parentController) claimRevisions(
 	parent *unstructured.Unstructured,
 ) ([]*v1alpha1.ControllerRevision, error) {
-	parentGVK := pc.parentResource.GroupVersionKind()
+	parentGVK := pc.parentResource.GetGroupVersionKind()
 
 	// Add labels to prevent accidental overlap between different parent types.
 	extraMatchLabels := map[string]string{

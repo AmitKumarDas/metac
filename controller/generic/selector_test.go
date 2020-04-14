@@ -855,8 +855,8 @@ func TestSelectorMatchesLAN(t *testing.T) {
 		name := name
 		mock := mock
 		t.Run(name, func(t *testing.T) {
-			mgr := &dynamicdiscovery.APIResourceManager{
-				GetByResourceFn: func(apiVer, resource string) *dynamicdiscovery.APIResource {
+			mgr := &dynamicdiscovery.APIResourceDiscovery{
+				GetAPIForAPIVersionAndResourceFn: func(apiVer, resource string) *dynamicdiscovery.APIResource {
 					return mock.apiResource
 				},
 			}

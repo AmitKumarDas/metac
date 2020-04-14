@@ -51,7 +51,7 @@ func makeUpdateStrategyKeyFromGK(apiGroup, kind string) string {
 // newAttachmentUpdateStrategyManager returns a new instance of
 // attachmentUpdateStrategyManager.
 func newAttachmentUpdateStrategyManager(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	attachments []v1alpha1.GenericControllerAttachment,
 ) (*attachmentUpdateStrategyManager, error) {
 	// create a new instance of attachmentUpdateStrategyManager
@@ -70,7 +70,7 @@ func newAttachmentUpdateStrategyManager(
 		if attachment.UpdateStrategy != nil &&
 			attachment.UpdateStrategy.Method != mgr.defaultMethod {
 			// this is done to map resource name to kind name
-			resource := resourceMgr.GetByResource(attachment.APIVersion, attachment.Resource)
+			resource := resourceMgr.GetAPIForAPIVersionAndResource(attachment.APIVersion, attachment.Resource)
 			if resource == nil {
 				if glog.V(2) {
 					glog.Warningf("%s: Can't find resource %s/%s",

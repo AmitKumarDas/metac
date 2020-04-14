@@ -32,78 +32,96 @@ import (
 	dynamicobject "openebs.io/metac/dynamic/object"
 )
 
-// Clientset manages various k8s client related operations against one
-// or more discovered API resource(s). Clientset has the ability to
-// provide dynamic client for specific resource.
+// Clientset provides dynamic client(s) corresponding
+// to discovered API resource(s)
 type Clientset struct {
-	config          rest.Config
-	resourceManager *dynamicdiscovery.APIResourceManager
-	dynamicClient   dynamic.Interface
+	config           rest.Config
+	discoveryManager *dynamicdiscovery.APIResourceDiscovery
+	dynamicClient    dynamic.Interface
 }
 
 // New returns a new instance of Clientset
 func New(
-	config *rest.Config, resourceMgr *dynamicdiscovery.APIResourceManager,
+	config *rest.Config,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 ) (*Clientset, error) {
-
 	dc, err := dynamic.NewForConfig(config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "New clientset failed")
+		return nil, errors.Wrapf(
+			err,
+			"Failed to create dynamic clientset",
+		)
 	}
-
 	return &Clientset{
-		config:          *config,
-		resourceManager: resourceMgr,
-		dynamicClient:   dc,
+		config:           *config,
+		discoveryManager: resourceMgr,
+		dynamicClient:    dc,
 	}, nil
 }
 
-// HasSynced flags if resources managed by this clientset have
-// synced i.e. refreshed from the API server
+// HasSynced returns true if all the discovered resources
+// are synced _i.e. are refreshed from the API server_
 func (cs *Clientset) HasSynced() bool {
-	return cs.resourceManager.HasSynced()
+	return cs.discoveryManager.HasSynced()
 }
 
-// GetClientByResource returns the resource client corresponding to
-// the given version & resource name (i.e. plural of kind)
-func (cs *Clientset) GetClientByResource(apiVersion, resource string) (*ResourceClient, error) {
-	// Look up the requested resource in discovery.
-	apiResource := cs.resourceManager.GetByResource(apiVersion, resource)
+// GetClientForAPIVersionResource returns the dynamic client for
+// the given apiversion & resource name _(i.e. plural of kind)_
+func (cs *Clientset) GetClientForAPIVersionResource(
+	apiVersion string,
+	resource string,
+) (*ResourceClient, error) {
+	// look up the requested resource from discovered resources
+	apiResource := cs.discoveryManager.GetAPIForAPIVersionAndResource(
+		apiVersion,
+		resource,
+	)
 	if apiResource == nil {
 		return nil, errors.Errorf(
-			"Failed to initialise dynamic client for resource %q in apiVersion %q",
+			"Failed to get client for %q with api version %q: Resource is not discovered",
 			resource,
 			apiVersion,
 		)
 	}
-	return cs.resource(apiResource), nil
+	return cs.getClientForAPIResource(apiResource), nil
 }
 
-// GetClientByKind returns the specific dynamic client of the given
-// resource by its version & kind
-func (cs *Clientset) GetClientByKind(apiVersion, kind string) (*ResourceClient, error) {
+// GetClientForAPIVersionKind returns the dynamic client for the given
+// apiversion & kind
+func (cs *Clientset) GetClientForAPIVersionKind(
+	apiVersion string,
+	kind string,
+) (*ResourceClient, error) {
 	// Look up the requested resource in discovery.
-	apiResource := cs.resourceManager.GetByKind(apiVersion, kind)
+	apiResource := cs.discoveryManager.GetAPIForAPIVersionAndKind(
+		apiVersion,
+		kind,
+	)
 	if apiResource == nil {
 		return nil, fmt.Errorf(
-			"Failed to initialise dynamic client for kind %q in apiVersion %q",
+			"Failed to initialise dynamic client for kind %q with apiVersion %q",
 			kind,
 			apiVersion,
 		)
 	}
-	return cs.resource(apiResource), nil
+	return cs.getClientForAPIResource(apiResource), nil
 }
 
-// resource returns a new dynamic client instance of the given resource
+// getClientForAPIResource returns a new dynamic client instance
+// for the given api resource
 //
 // NOTE:
-//	The returned client instance is specific to the given resource
-func (cs *Clientset) resource(apiResource *dynamicdiscovery.APIResource) *ResourceClient {
-	client := cs.dynamicClient.Resource(apiResource.GroupVersionResource())
+//	The returned client instance is specific to the given getClientForAPIResource
+func (cs *Clientset) getClientForAPIResource(
+	apiResource *dynamicdiscovery.APIResource,
+) *ResourceClient {
+	client := cs.dynamicClient.Resource(
+		apiResource.GetGroupVersionResource(),
+	)
 	return &ResourceClient{
 		ResourceInterface: client,
 		APIResource:       apiResource,
-		rootClient:        client,
+		namespaceClient:   client,
 	}
 }
 
@@ -117,15 +135,17 @@ func (cs *Clientset) resource(apiResource *dynamicdiscovery.APIResource) *Resour
 // useful for any client.
 //
 // It can be used on either namespaced or cluster-scoped resources.
-// Call Namespace() to return a client that's scoped down to a given namespace.
+// Call Namespace() to return a client that's scoped down to a given
+// namespace.
 type ResourceClient struct {
 	dynamic.ResourceInterface
 	*dynamicdiscovery.APIResource
 
-	rootClient dynamic.NamespaceableResourceInterface
+	namespaceClient dynamic.NamespaceableResourceInterface
 }
 
-// Namespace returns a copy of the ResourceClient with the client namespace set.
+// Namespace returns a copy of the ResourceClient with the client
+// namespace set.
 //
 // This can be chained to set the namespace to something else.
 // Pass "" to return a client with the namespace cleared.
@@ -136,14 +156,14 @@ func (rc *ResourceClient) Namespace(namespace string) *ResourceClient {
 		return rc
 	}
 	// Reset to cluster-scoped if provided namespace is empty.
-	ri := dynamic.ResourceInterface(rc.rootClient)
+	ri := dynamic.ResourceInterface(rc.namespaceClient)
 	if namespace != "" {
-		ri = rc.rootClient.Namespace(namespace)
+		ri = rc.namespaceClient.Namespace(namespace)
 	}
 	return &ResourceClient{
 		ResourceInterface: ri,
 		APIResource:       rc.APIResource,
-		rootClient:        rc.rootClient,
+		namespaceClient:   rc.namespaceClient,
 	}
 }
 
@@ -173,7 +193,7 @@ func (rc *ResourceClient) AtomicUpdate(
 		}
 		if current.GetUID() != orig.GetUID() {
 			// The original object was deleted and replaced with a new one.
-			return apierrors.NewNotFound(rc.GroupResource(), name)
+			return apierrors.NewNotFound(rc.GetGroupResource(), name)
 		}
 		if changed := updateFunc(current); !changed {
 			// There's nothing to do.
@@ -232,7 +252,7 @@ func (rc *ResourceClient) AtomicStatusUpdate(
 		}
 		if current.GetUID() != orig.GetUID() {
 			// The original object was deleted and replaced with a new one.
-			return apierrors.NewNotFound(rc.GroupResource(), name)
+			return apierrors.NewNotFound(rc.GetGroupResource(), name)
 		}
 		if changed := update(current); !changed {
 			// There's nothing to do.

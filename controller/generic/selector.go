@@ -225,7 +225,7 @@ func (s *Selection) setAdvancedSelectorOrEverything(
 // register registers the Selection instance with various
 // selectors based on the provided GenericControllerResource
 func (s *Selection) register(
-	discoveryMgr *dynamicdiscovery.APIResourceManager,
+	discoveryMgr *dynamicdiscovery.APIResourceDiscovery,
 	gctlResource v1alpha1.GenericControllerResource,
 ) error {
 	var err error
@@ -245,7 +245,7 @@ func (s *Selection) register(
 		)
 	}
 	// fetch the resource from the discovered set
-	apiResource := discoveryMgr.GetByResource(
+	apiResource := discoveryMgr.GetAPIForAPIVersionAndResource(
 		gctlResource.APIVersion,
 		gctlResource.Resource,
 	)
@@ -293,7 +293,7 @@ func (s *Selection) init() {
 // NewSelectorForWatch returns a new instance of Selection
 // based on watch
 func NewSelectorForWatch(
-	discoveryMgr *dynamicdiscovery.APIResourceManager,
+	discoveryMgr *dynamicdiscovery.APIResourceDiscovery,
 	watch v1alpha1.GenericControllerResource,
 ) (*Selection, error) {
 	s := &Selection{}
@@ -308,7 +308,7 @@ func NewSelectorForWatch(
 // NewSelectorForAttachments returns a new instance of Selection
 // based on the attachments
 func NewSelectorForAttachments(
-	discoveryMgr *dynamicdiscovery.APIResourceManager,
+	discoveryMgr *dynamicdiscovery.APIResourceDiscovery,
 	attachments []v1alpha1.GenericControllerAttachment,
 ) (*Selection, error) {
 	s := &Selection{}
