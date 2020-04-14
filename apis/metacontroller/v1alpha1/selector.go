@@ -23,7 +23,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // **OR** of the selector terms.
 type ResourceSelector struct {
 	// A list of selector terms. This list of terms are ORed.
-	SelectorTerms []*SelectorTerm `json:"selectorTerms"`
+	SelectorTerms []*SelectorTerm `json:"selectorTerms,omitempty"`
 }
 
 // A SelectorTerm is a query over various match representations.
@@ -60,14 +60,14 @@ type SelectorTerm struct {
 	// or not.
 	//
 	// This is optional
-	MatchSlice map[string][]string `json:"matchSlice"`
+	MatchSlice map[string][]string `json:"matchSlice,omitempty"`
 
 	// MatchSliceExpressions is a list of slice selector requirements.
 	// These requirements are AND-ed to determine if the selector matches
 	// its target or not.
 	//
 	// This is optional
-	MatchSliceExpressions []SliceSelectorRequirement `json:"matchSliceExpressions"`
+	MatchSliceExpressions []SliceSelectorRequirement `json:"matchSliceExpressions,omitempty"`
 
 	// MatchFields is a map i.e. key value pairs based field selector.
 	//
@@ -102,13 +102,13 @@ type SelectorTerm struct {
 	// not.
 	//
 	// This is optional
-	MatchFields map[string]string `json:"matchFields"`
+	MatchFields map[string]string `json:"matchFields,omitempty"`
 
 	// MatchFieldExpressions is a list of field selector requirements.
 	// The requirements are AND-ed.
 	//
 	// This is optional
-	MatchFieldExpressions []metav1.LabelSelectorRequirement `json:"matchFieldExpressions"`
+	MatchFieldExpressions []metav1.LabelSelectorRequirement `json:"matchFieldExpressions,omitempty"`
 
 	// MatchReference is a list of keys where each key holds the
 	// path to a nested field present in both target resource as
@@ -152,13 +152,13 @@ type SelectorTerm struct {
 	// extracted from these objects match.
 	//
 	// This is optional
-	MatchReference []string `json:"matchReference"`
+	MatchReference []string `json:"matchReference,omitempty"`
 
 	// MatchReferenceExpressions is a list of field selector requirements.
 	// The requirements are AND-ed.
 	//
 	// This is optional
-	MatchReferenceExpressions []ReferenceSelectorRequirement `json:"matchReferenceExpressions"`
+	MatchReferenceExpressions []ReferenceSelectorRequirement `json:"matchReferenceExpressions,omitempty"`
 
 	// MatchLabels is a map of {key,value} pairs that is matched against
 	// the target's labels.
@@ -188,13 +188,13 @@ type SelectorTerm struct {
 	// considered as a successful match.
 	//
 	// This is optional
-	MatchLabels map[string]string `json:"matchLabels"`
+	MatchLabels map[string]string `json:"matchLabels,omitempty"`
 
 	// MatchLabelExpressions is a list of label selector requirements.
 	// The requirements are ANDed.
 	//
 	// This is optional
-	MatchLabelExpressions []metav1.LabelSelectorRequirement `json:"matchLabelExpressions"`
+	MatchLabelExpressions []metav1.LabelSelectorRequirement `json:"matchLabelExpressions,omitempty"`
 
 	// MatchAnnotations is a map of {key,value} pairs that is matched against
 	// the target's annotations.
@@ -224,7 +224,7 @@ type SelectorTerm struct {
 	// considered as a successful match.
 	//
 	// This is optional
-	MatchAnnotations map[string]string `json:"matchAnnotations"`
+	MatchAnnotations map[string]string `json:"matchAnnotations,omitempty"`
 
 	// MatchAnnotationExpressions is a list of label selector requirements.
 	// The requirements are ANDed.
@@ -232,7 +232,7 @@ type SelectorTerm struct {
 	// The key as well value is matched against the target's annotations.
 	//
 	// This is optional
-	MatchAnnotationExpressions []metav1.LabelSelectorRequirement `json:"matchAnnotationExpressions"`
+	MatchAnnotationExpressions []metav1.LabelSelectorRequirement `json:"matchAnnotationExpressions,omitempty"`
 }
 
 // SliceSelectorRequirement contains values, a key, and an operator that
@@ -303,7 +303,7 @@ type ReferenceSelectorRequirement struct {
 	// NOTE:
 	//	When set, the Operator field becomes optional since Operator
 	// is set to Equals.
-	RefKey string `json:"refKey"`
+	RefKey string `json:"refKey,omitempty"`
 
 	// Operator represents the operation that will be undertaken
 	// between the values extracted from target & reference. Both

@@ -289,7 +289,6 @@ spec:
                                 required:
                                 - key
                                 - operator
-                                - refKey
                                 type: object
                               type: array
                             matchSlice:
@@ -348,21 +347,8 @@ spec:
                                 - values
                                 type: object
                               type: array
-                          required:
-                          - matchAnnotationExpressions
-                          - matchAnnotations
-                          - matchFieldExpressions
-                          - matchFields
-                          - matchLabelExpressions
-                          - matchLabels
-                          - matchReference
-                          - matchReferenceExpressions
-                          - matchSlice
-                          - matchSliceExpressions
                           type: object
                         type: array
-                    required:
-                    - selectorTerms
                     type: object
                   annotationSelector:
                     description: "Include the resource if annotation selector matches
@@ -839,7 +825,6 @@ spec:
                               required:
                               - key
                               - operator
-                              - refKey
                               type: object
                             type: array
                           matchSlice:
@@ -897,21 +882,8 @@ spec:
                               - values
                               type: object
                             type: array
-                        required:
-                        - matchAnnotationExpressions
-                        - matchAnnotations
-                        - matchFieldExpressions
-                        - matchFields
-                        - matchLabelExpressions
-                        - matchLabels
-                        - matchReference
-                        - matchReferenceExpressions
-                        - matchSlice
-                        - matchSliceExpressions
                         type: object
                       type: array
-                  required:
-                  - selectorTerms
                   type: object
                 annotationSelector:
                   description: "Include the resource if annotation selector matches
