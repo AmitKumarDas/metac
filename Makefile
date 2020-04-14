@@ -80,8 +80,8 @@ push: image
 
 .PHONY: unit-test
 unit-test: generated_files
-	@go test -mod=vendor -i ${PKGS}
-	@go test -mod=vendor ${PKGS}
+	@go test -cover -mod=vendor -i ${PKGS}
+	@go test -cover -mod=vendor ${PKGS}
 
 .PHONY: integration-dependencies
 integration-dependencies: manifests
@@ -92,15 +92,18 @@ integration-dependencies: manifests
 # This can be run on one's laptop or Travis like CI environments.
 .PHONY: integration-test
 integration-test: integration-dependencies
-	@go test -mod=vendor ./test/integration/... -v -short -timeout 5m \
-	-args --logtostderr -v=1
+	@go test -mod=vendor \
+	./test/integration/... \
+	-v -short -timeout 5m -args --logtostderr -v=1
 
 .PHONY: integration-test-gctl
 integration-test-gctl: integration-dependencies
-	@go test -mod=vendor ./test/integration/generic/... -v -timeout 5m \
-	-args --logtostderr -v=1
+	@go test -mod=vendor \
+	./test/integration/generic/... \
+	-v -timeout 5m -args --logtostderr -v=1
 
 .PHONY: integration-test-local-gctl
 integration-test-local-gctl: integration-dependencies
-	@go test -mod=vendor ./test/integration/genericlocal/... -v -timeout 5m \
-	-args --logtostderr -v=1
+	@go test -mod=vendor \
+	./test/integration/genericlocal/... \
+	-v -timeout 5m -args --logtostderr -v=1

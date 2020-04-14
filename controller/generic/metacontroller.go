@@ -48,7 +48,7 @@ import (
 //	This structure acts as a base struct to specific ones e.g.
 // ConfigMetaController & CRDMetaController
 type BaseMetaController struct {
-	ResourceManager    *dynamicdiscovery.APIResourceManager
+	ResourceManager    *dynamicdiscovery.APIResourceDiscovery
 	DynClientset       *dynamicclientset.Clientset
 	DynInformerFactory *dynamicinformer.SharedInformerFactory
 
@@ -126,7 +126,7 @@ func SetMetaControllerConfigPath(path string) ConfigMetaControllerOption {
 
 // NewConfigMetaController returns a new instance of ConfigMetaController
 func NewConfigMetaController(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
 	workerCount int,
@@ -367,7 +367,7 @@ type CRDMetaController struct {
 
 // NewCRDMetaController returns a new instance of CRDMetaController
 func NewCRDMetaController(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	dynClientset *dynamicclientset.Clientset,
 	dynInformerFactory *dynamicinformer.SharedInformerFactory,
 	metaInformerFactory metainformers.SharedInformerFactory,

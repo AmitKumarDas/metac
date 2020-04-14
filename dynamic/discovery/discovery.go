@@ -32,128 +32,150 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
-// APIResource wraps the original server API resource
-// with additional info
+// APIResource represents the discovered resources at kubernetes
+// cluster
 type APIResource struct {
 	metav1.APIResource
-	APIVersion     string
-	hasSubresource map[string]bool
+	APIVersion            string
+	supportedSubResources map[string]bool
 }
 
-// GroupVersion returns the GroupVersion of this resource
-func (r *APIResource) GroupVersion() schema.GroupVersion {
+// GetGroupVersion returns the GroupVersion of this resource
+func (r *APIResource) GetGroupVersion() schema.GroupVersion {
 	gv, err := schema.ParseGroupVersion(r.APIVersion)
 	if err != nil {
-		// This shouldn't happen because we get this value from discovery.
-		panic(fmt.Sprintf(
-			"Parse GroupVersion %q failed: %v", r.APIVersion, err,
-		))
+		// this shouldn't happen since this is a discovered resource
+		panic(
+			fmt.Sprintf(
+				"Failed to parse GroupVersion from %q: %+v",
+				r.APIVersion,
+				err,
+			),
+		)
 	}
 	return gv
 }
 
-// GroupVersionKind returns the GroupVersionKind of this resource
-func (r *APIResource) GroupVersionKind() schema.GroupVersionKind {
-	return r.GroupVersion().WithKind(r.Kind)
+// GetGroupVersionKind returns the GroupVersionKind of this resource
+func (r *APIResource) GetGroupVersionKind() schema.GroupVersionKind {
+	return r.GetGroupVersion().WithKind(r.Kind)
 }
 
-// GroupVersionResource returns the GroupVersionResource of this
+// GetGroupVersionResource returns the GroupVersionResource of this
 // resource
-func (r *APIResource) GroupVersionResource() schema.GroupVersionResource {
-	return r.GroupVersion().WithResource(r.Name)
+func (r *APIResource) GetGroupVersionResource() schema.GroupVersionResource {
+	return r.GetGroupVersion().WithResource(r.Name)
 }
 
-// GroupResource returns the GroupResource of this resource
-func (r *APIResource) GroupResource() schema.GroupResource {
-	return schema.GroupResource{Group: r.Group, Resource: r.Name}
+// GetGroupResource returns the GroupResource of this resource
+func (r *APIResource) GetGroupResource() schema.GroupResource {
+	return schema.GroupResource{
+		Group:    r.Group,
+		Resource: r.Name,
+	}
 }
 
-// HasSubresource flags if the provided subresource is
+// HasSubresource returns true if the provided subresource is
 // available in this resource
-func (r *APIResource) HasSubresource(subresourceKey string) bool {
-	return r.hasSubresource[subresourceKey]
+func (r *APIResource) HasSubresource(subResourceName string) bool {
+	return r.supportedSubResources[subResourceName]
 }
 
-// apiResourceRegistry is a registry of Kubernetes server
-// supported API groups, versions & resources.
+// apiResourceRegistry is the registry of resources, kinds &
+// sub resources discovered at kubernetes server
 //
-// Resources are anchored by appropriate keys for easy
-// lookup. A resource can be looked up based on kind or
-// resource name or sub-resource name
+// Resources are anchored by appropriate keys for easy lookup.
+// A resource can be looked up either by its kind, resource name
+// or sub-resource name.
 type apiResourceRegistry struct {
-	resources, kinds, subresources map[string]*APIResource
+	resources    map[string]*APIResource
+	kinds        map[string]*APIResource
+	subresources map[string]*APIResource
 }
 
-// APIResourceManager helps discovering Kubernetes server
-// supported API groups, versions & resources.
-type APIResourceManager struct {
+// APIResourceDiscovery discovers kubernetes server supported
+// API groups, versions & resources
+type APIResourceDiscovery struct {
+	// DiscoveryClient to discover API resource
+	DiscoveryClient discovery.DiscoveryInterface
+
+	// GetForAPIVersionResourceFn is a functional type to get
+	// discovered API resource from provided apiVersion & resource
+	// name
+	//
+	// NOTE:
+	//	This can be used to mock GetForAPIVersionResource during
+	// unit test
+	GetAPIForAPIVersionAndResourceFn func(apiVersion, resource string) *APIResource
+
 	mutex sync.RWMutex
 
-	// discovered resources that are anchored by apiVersion
+	// discovered resources anchored by **apiVersion**
 	//
 	// NOTE:
 	//	This map of registry works well, since the registry
-	// itself is a map of resources anchored by resource name.
-	// Hence, this combination of apiVersion and resource name
-	// is sufficient to find a particular API resource.
-	resources map[string]apiResourceRegistry
-
-	// Client to discover API resource
-	Client discovery.DiscoveryInterface
-
-	// GetByResourceFn is a functional type to get API resource
-	// based out of apiVersion & resource name
-	//
-	// NOTE:
-	//	This can be used to mock GetByResource during unit test
-	GetByResourceFn func(apiVersion string, resource string) *APIResource
+	// itself is a map of discovered resources anchored by
+	// resource name. Hence, this combination of apiVersion
+	// and resource name is sufficient to find a particular
+	// API resource.
+	discoveredResources map[string]apiResourceRegistry
 
 	stopCh, doneCh chan struct{}
 }
 
-// NewAPIResourceManager returns a new instance of
-// APIResourceManager
-func NewAPIResourceManager(c discovery.DiscoveryInterface) *APIResourceManager {
-	return &APIResourceManager{Client: c}
-}
-
-// GetByResource returns the API resource based on the provided
-// api version and resource
-//
-// NOTE:
-//	resource implies the name of resource which is also the plural
-// notation of kind
-func (mgr *APIResourceManager) GetByResource(apiVersion, resource string) *APIResource {
-	if mgr.GetByResourceFn != nil {
-		return mgr.GetByResourceFn(apiVersion, resource)
+// NewAPIResourceDiscoverer returns a new instance of APIResourceDiscoverer
+func NewAPIResourceDiscoverer(client discovery.DiscoveryInterface) *APIResourceDiscovery {
+	return &APIResourceDiscovery{
+		DiscoveryClient: client,
 	}
-	return mgr.getByResource(apiVersion, resource)
 }
 
-// getByResource returns the API resource based on the provided
+// GetAPIForAPIVersionAndResource returns the API resource based on the provided
 // api version and resource
 //
 // NOTE:
 //	resource implies the name of resource which is also the plural
 // notation of kind
-func (mgr *APIResourceManager) getByResource(apiVersion, resource string) *APIResource {
-	mgr.mutex.RLock()
-	defer mgr.mutex.RUnlock()
+func (d *APIResourceDiscovery) GetAPIForAPIVersionAndResource(
+	apiVersion string,
+	resource string,
+) *APIResource {
+	if d.GetAPIForAPIVersionAndResourceFn != nil {
+		return d.GetAPIForAPIVersionAndResourceFn(apiVersion, resource)
+	}
+	return d.getAPIForAPIVersionAndResource(apiVersion, resource)
+}
 
-	registry, ok := mgr.resources[apiVersion]
+// getForAPIVersionResource returns the discovered API resource
+// corresponding to the provided api version and resource
+//
+// NOTE:
+//	resource implies the name of resource which is also the plural
+// notation of kind
+func (d *APIResourceDiscovery) getAPIForAPIVersionAndResource(
+	apiVersion string,
+	resource string,
+) *APIResource {
+	d.mutex.RLock()
+	defer d.mutex.RUnlock()
+
+	registry, ok := d.discoveredResources[apiVersion]
 	if !ok {
 		return nil
 	}
 	return registry.resources[resource]
 }
 
-// GetByKind returns the API resource based on the provided
-// api version and kind
-func (mgr *APIResourceManager) GetByKind(apiVersion, kind string) *APIResource {
-	mgr.mutex.RLock()
-	defer mgr.mutex.RUnlock()
+// GetAPIForAPIVersionAndKind returns the discovered resource
+// corresponding to the provided api version and kind
+func (d *APIResourceDiscovery) GetAPIForAPIVersionAndKind(
+	apiVersion string,
+	kind string,
+) *APIResource {
+	d.mutex.RLock()
+	defer d.mutex.RUnlock()
 
-	registry, ok := mgr.resources[apiVersion]
+	registry, ok := d.discoveredResources[apiVersion]
 	if !ok {
 		return nil
 	}
@@ -164,50 +186,48 @@ func (mgr *APIResourceManager) GetByKind(apiVersion, kind string) *APIResource {
 //
 // NOTE:
 // 	We do this before acquiring the lock so we don't block readers.
-func (mgr *APIResourceManager) refresh() {
-
+func (d *APIResourceDiscovery) refresh() {
 	var err error
-
 	glog.V(7).Info("Discovering API resources")
 	defer func() {
 		if err == nil {
 			glog.V(7).Info("API resources discovery completed")
 		}
 	}()
-
-	apiResourceSetList, err := mgr.Client.ServerResources()
+	// fetch resources for all groups & versions
+	allGVResourceList, err := d.DiscoveryClient.ServerResources()
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			glog.Warningf("Can't discover api resource: %v", err)
+			glog.Warningf("Can't discover API resources: %+v", err)
 			return
 		}
-		glog.Errorf("API resource discovery failed: %v", err)
+		glog.Errorf("Failed to discover API resources: %+v", err)
 		return
 	}
 
-	// Denormalize resourceset list into map for convenient lookup
+	// Denormalize resources into map for convenient lookup
 	// by either Group-Version-Kind or Group-Version-Resource
-	groupVersions := make(map[string]apiResourceRegistry, len(apiResourceSetList))
-	for _, apiResourceSet := range apiResourceSetList {
-		gv, err := schema.ParseGroupVersion(apiResourceSet.GroupVersion)
+	groupVersions :=
+		make(map[string]apiResourceRegistry, len(allGVResourceList))
+	for _, resourceList := range allGVResourceList {
+		gv, err := schema.ParseGroupVersion(resourceList.GroupVersion)
 		if err != nil {
-			// This shouldn't happen because we get these values
-			// from the server.
+			// this shouldn't happen for discovered resources
 			panic(errors.Errorf(
-				"API resource discovery failed: Invalid group version %q: %v",
-				apiResourceSet.GroupVersion, err,
+				"API resource discovery failed for group version %q: %+v",
+				resourceList.GroupVersion,
+				err,
 			))
 		}
 		registrySet := apiResourceRegistry{
-			resources:    make(map[string]*APIResource, len(apiResourceSet.APIResources)),
-			kinds:        make(map[string]*APIResource, len(apiResourceSet.APIResources)),
-			subresources: make(map[string]*APIResource, len(apiResourceSet.APIResources)),
+			resources:    make(map[string]*APIResource, len(resourceList.APIResources)),
+			kinds:        make(map[string]*APIResource, len(resourceList.APIResources)),
+			subresources: make(map[string]*APIResource, len(resourceList.APIResources)),
 		}
-
-		for i := range apiResourceSet.APIResources {
+		for i := range resourceList.APIResources {
 			apiResource := &APIResource{
-				APIResource: apiResourceSet.APIResources[i],
-				APIVersion:  apiResourceSet.GroupVersion,
+				APIResource: resourceList.APIResources[i],
+				APIVersion:  resourceList.GroupVersion,
 			}
 			// Materialize default values from the list into each entry
 			if apiResource.Group == "" {
@@ -217,7 +237,6 @@ func (mgr *APIResourceManager) refresh() {
 				apiResource.Version = gv.Version
 			}
 			registrySet.resources[apiResource.Name] = apiResource
-
 			// Remember which resources are subresources, and map the kind
 			// to the main resource. This is different from what RESTMapper
 			// provides because we already know the full GroupVersionKind
@@ -228,7 +247,6 @@ func (mgr *APIResourceManager) refresh() {
 				registrySet.kinds[apiResource.Kind] = apiResource
 			}
 		}
-
 		// Flag each resource with all its supported sub resources
 		for subResourceNamedPath := range registrySet.subresources {
 			arr := strings.Split(subResourceNamedPath, "/")
@@ -238,37 +256,34 @@ func (mgr *APIResourceManager) refresh() {
 			if apiResource == nil {
 				continue
 			}
-			if apiResource.hasSubresource == nil {
-				apiResource.hasSubresource = make(map[string]bool)
+			if apiResource.supportedSubResources == nil {
+				apiResource.supportedSubResources = make(map[string]bool)
 			}
-			apiResource.hasSubresource[subResName] = true
+			apiResource.supportedSubResources[subResName] = true
 		}
-
-		groupVersions[apiResourceSet.GroupVersion] = registrySet
+		groupVersions[resourceList.GroupVersion] = registrySet
 	}
-
 	// Replace the local cache.
-	mgr.mutex.Lock()
-	mgr.resources = groupVersions
-	mgr.mutex.Unlock()
+	d.mutex.Lock()
+	d.discoveredResources = groupVersions
+	d.mutex.Unlock()
 }
 
 // Start executes resource discovery in the given interval
-func (mgr *APIResourceManager) Start(refreshInterval time.Duration) {
-	mgr.stopCh = make(chan struct{})
-	mgr.doneCh = make(chan struct{})
+func (d *APIResourceDiscovery) Start(refreshInterval time.Duration) {
+	d.stopCh = make(chan struct{})
+	d.doneCh = make(chan struct{})
 
 	go func() {
-		defer close(mgr.doneCh)
+		defer close(d.doneCh)
 
 		ticker := time.NewTicker(refreshInterval)
 		defer ticker.Stop()
 
 		for {
-			mgr.refresh()
-
+			d.refresh()
 			select {
-			case <-mgr.stopCh:
+			case <-d.stopCh: // blocks till stop channel is closed
 				// return / exit from this anonymous func
 				return
 			case <-ticker.C:
@@ -278,15 +293,14 @@ func (mgr *APIResourceManager) Start(refreshInterval time.Duration) {
 }
 
 // Stop stops resource discovery ticker
-func (mgr *APIResourceManager) Stop() {
-	close(mgr.stopCh)
-	<-mgr.doneCh
+func (d *APIResourceDiscovery) Stop() {
+	close(d.stopCh)
+	<-d.doneCh // blocks till done channel is closed
 }
 
 // HasSynced flags if any resources were discovered
-func (mgr *APIResourceManager) HasSynced() bool {
-	mgr.mutex.RLock()
-	defer mgr.mutex.RUnlock()
-
-	return mgr.resources != nil
+func (d *APIResourceDiscovery) HasSynced() bool {
+	d.mutex.RLock()
+	defer d.mutex.RUnlock()
+	return d.discoveredResources != nil
 }

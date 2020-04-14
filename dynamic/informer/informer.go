@@ -133,7 +133,7 @@ func newSharedResourceInformer(
 		informer:            informer,
 		defaultResyncPeriod: defaultResyncPeriod,
 
-		lister: dynamiclister.New(client.GroupResource(), informer.GetIndexer()),
+		lister: dynamiclister.New(client.GetGroupResource(), informer.GetIndexer()),
 	}
 	sri.eventHandlers = newSharedEventHandler(sri.lister, defaultResyncPeriod)
 	informer.AddEventHandler(sri.eventHandlers)

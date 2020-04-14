@@ -34,94 +34,81 @@ import (
 )
 
 const (
-	attachmentCreateAnnotationKey string = "metac.openebs.io/created-due-to-watch"
+	// AttachmentCreateAnnotationKey is the annotation key used to
+	// hold the watch uid that is responsible for creating the
+	// attachment
+	AttachmentCreateAnnotationKey string = "metac.openebs.io/created-due-to-watch"
 
-	attachmentUpdateAnnotationKeySuffix string = "/updated-due-to-watch"
+	// AttachmentUpdateAnnotationKeySuffix is the annotation suffix
+	// used to hold the watch uid that is responsible for updating the
+	// attachment
+	AttachmentUpdateAnnotationKeySuffix string = "/updated-due-to-watch"
 
-	lastAppliedAnnotationKeySuffix string = "/gctl-last-applied"
+	// GCTLLastAppliedAnnotationKeySuffix is the annotation suffix
+	// used to hold the last applied state of the attachment
+	GCTLLastAppliedAnnotationKeySuffix string = "/gctl-last-applied"
 )
 
-// AttachmentExecuteBase holds the common properties required to
-// operate against an attachment.
-type AttachmentExecuteBase struct {
+// ClusterStatesControllerBase holds common properties required to manage
+// cluster resource states
+type ClusterStatesControllerBase struct {
 	// GetChildUpdateStrategyByGK fetches the update strategy to be
-	// followed while executing update operation against an
-	// attachment
+	// followed while executing update operation against a
+	// resource _also referred to as a child or attachment when used
+	// in context of watch_.
 	GetChildUpdateStrategyByGK func(group, kind string) v1alpha1.ChildUpdateMethod
 
-	// IsPatchByGK returns true if attachment based on the
-	// given api group & kind need to be patched versus the
-	// default 3-way merge during update operations.
+	// IsPatchByGK returns true if resource need to be patched
+	// versus the default 3-way merge during the update operations
 	IsPatchByGK func(group, kind string) bool
 
-	// Resource that is under watch. A watch might be related
-	// to the attachments. For example, a watch object might
-	// be owner of the attachments, etc.
+	// Another resource that is being watched to arrive at some
+	// desired state. A watch might be related to this resource
+	// under operation. For example, a watch might be owner of
+	// this resource.
 	Watch *unstructured.Unstructured
 
-	// IsWatchOwner indicates if the watch resource should be
-	// the owner of the attachment resources
+	// IsWatchOwner indicates if the watch should be the owner
+	// of the resource under operation
 	//
 	// NOTE:
-	//	This declaration is required if attachments are created
-	// during the process of reconciliation and if these attachments
-	// should be claimed by the watch.
+	//	This declaration is required if resources are created
+	// during the process of reconciliation and if these should
+	// should be owned by the watch.
 	IsWatchOwner *bool
 
-	// UpdateAny follows the GenericController's spec.UpdateAny. When set
-	// to true it grants this executor to update any attachments even if
-	// these attachments were not created due to the watch set in this
-	// executor.
+	// UpdateAny follows GenericController's spec.UpdateAny
+	// policy. When set to true it grants this operator the
+	// permission to update any resources even if these were
+	// not created due to the watch set here.
 	UpdateAny *bool
 
-	// DeleteAny follows the GenericController's spec.DeleteAny. When set
-	// to true it grants this executor to delete any attachments even if
-	// these attachments were not created due to the watch set in this
-	// executor.
+	// DeleteAny follows GenericController's spec.DeleteAny
+	// policy. When set to true it grants this operator to
+	// delete any resources even if these were not created
+	// due to the watch set here.
 	DeleteAny *bool
 
-	// If UpdateDuringPendingDelete is set to true it will proceed with
-	// updating the resource even if this resource is pending deletion
+	// If UpdateDuringPendingDelete is set to true it will
+	// update the resource even if this resource is pending
+	// deletion
 	UpdateDuringPendingDelete *bool
 }
 
-// String implements Stringer interface
-func (m AttachmentExecuteBase) String() string {
-	var strs []string
-	strs = append(strs, "AttachmentExecutor:")
-	if m.Watch != nil {
-		strs = append(
-			strs,
-			fmt.Sprintf("Watch %s", DescObjectAsKey(m.Watch)),
-		)
-	}
-	if m.IsWatchOwner != nil {
-		strs = append(strs, fmt.Sprintf("IsWatchOwner=%t", *m.IsWatchOwner))
-	}
-	return strings.Join(strs, " ")
-}
+// ClusterStatesController **applies** resources in Kubernetes cluster.
+// Apply implies either Create, Update or Delete of resources against
+// the Kubernetes cluster.
+type ClusterStatesController struct {
+	ClusterStatesControllerBase
 
-// AttachmentManager manages applying the attachment resources
-// in Kubernetes cluster. Here apply implies either Create or
-// Update or Delete attachment resources against the Kubernetes
-// cluster.
-//
-// NOTE:
-//	Caller code is expected to instantiate up this structure with
-// appropriate values. Hence, this structure exposes all of its fields
-// as public properties.
-type AttachmentManager struct {
-	AttachmentExecuteBase
-
-	// DynamicClientSet is responsible to provide a dynamic client
-	// for a specific resource
+	// DynamicClientSet provides dynamic client(s) corresponding
+	// to resource(s)
 	DynamicClientSet *dynamicclientset.Clientset
 
-	// Observed state (i.e. current state in kubernetes) of
-	// attachment resources
+	// Observed states _(i.e. resource states found in kubernetes cluster)_
 	Observed AnyUnstructRegistry
 
-	// Desired kubernetes state of attachment resources
+	// Desired states _(i.e. to be applied against the kubernetes cluster)_
 	Desired AnyUnstructRegistry
 
 	// Various executioners required to execute apply
@@ -132,105 +119,117 @@ type AttachmentManager struct {
 	errs []error
 }
 
-// AttachmentManagerOption is a typed function used to
-// build AttachmentManager
+// String implements Stringer interface
+func (m ClusterStatesController) String() string {
+	var strs []string
+	strs = append(strs, "ClusterStatesController")
+	if m.Watch != nil {
+		strs = append(
+			strs,
+			fmt.Sprintf("Watch %s", DescObjectAsKey(m.Watch)),
+		)
+	}
+	if m.IsWatchOwner != nil {
+		strs = append(
+			strs,
+			fmt.Sprintf("IsWatchOwner=%t", *m.IsWatchOwner),
+		)
+	}
+	return strings.Join(strs, ": ")
+}
+
+// ControllerOption is a typed function used to
+// build Controller
 //
 // This follows "functional options" pattern
-type AttachmentManagerOption func(*AttachmentManager) error
+type ControllerOption func(*ClusterStatesController) error
 
-// anyAttachmentsDefaultDeleter sets the provided AttachmentManager with a
-// Deleter instance that can be used during apply operation
-func anyAttachmentsDefaultDeleter() AttachmentManagerOption {
-	return func(m *AttachmentManager) error {
-		var errs []error
-		var executors AnyAttachmentsDeleter
-
-		// delete will be based on observed
-		// delete observed & owned objects that are no more desired
-		// iterate to group resources of same kind & apiVersion
-		for verkind, objects := range m.Observed {
-			apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
-			client, err := m.DynamicClientSet.GetClientByKind(apiVersion, kind)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			cd := &AttachmentResourcesExecutor{
-				AttachmentExecuteBase: m.AttachmentExecuteBase,
-				DynamicResourceClient: client,
-				Observed:              objects,
-				Desired:               m.Desired[verkind],
-			}
-			executors = append(executors, cd)
-		}
-
-		if len(errs) == 0 {
-			m.DeleteFn = executors.Delete
-		}
-		return utilerrors.NewAggregate(errs)
-	}
-}
-
-// anyAttachmentsDefaultCreateUpdater sets the provided AttachmentManager with a
-// Updater instance that can be used during apply operation
-func anyAttachmentsDefaultCreateUpdater() AttachmentManagerOption {
-	return func(m *AttachmentManager) error {
-		var errs []error
-		var executors AnyAttachmentsCreateUpdater
-
-		// create or update is based on desired objects
-		// iterate to group resources of same kind & apiVersion
-		for verkind, objects := range m.Desired {
-			apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
-			// get the specific resource client
-			client, err := m.DynamicClientSet.GetClientByKind(apiVersion, kind)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			cu := &AttachmentResourcesExecutor{
-				AttachmentExecuteBase: m.AttachmentExecuteBase,
-				DynamicResourceClient: client,
-				Observed:              m.Observed[verkind],
-				Desired:               objects,
-			}
-			executors = append(executors, cu)
-		}
-
-		if len(errs) == 0 {
-			m.CreateOrUpdateFn = executors.CreateOrUpdate
-		}
-		return utilerrors.NewAggregate(errs)
-	}
-}
-
-func appendErrIfNotNil(holder []error, given error) []error {
-	if given == nil {
-		return holder
-	}
-	return append(holder, given)
-}
-
-// String implements Stringer interface
-func (m AttachmentManager) String() string {
-	return m.AttachmentExecuteBase.String()
-}
-
-// setDefaults prepares the attachment manager before invoking the
-// Apply
-//
-// NOTE:
-// 	This method sets various **default** options if applicable
-func (m *AttachmentManager) setDefaults() {
-	if m.DeleteFn == nil {
-		m.errs = appendErrIfNotNil(
-			m.errs, anyAttachmentsDefaultDeleter()(m),
+// initDeleter sets this Controller with deleter logic that handles
+// deletion of resources across different api versions
+func (m *ClusterStatesController) initDeleter() {
+	var errs []error
+	var clusterStatesDeleter ClusterStatesDeleter
+	// delete is based on **observed states**
+	//
+	// iterate to group resources by kind & apiVersion
+	for verkind, objects := range m.Observed {
+		apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
+		// get dynamic client corresponding to kind & apiversion
+		client, err := m.DynamicClientSet.GetClientForAPIVersionKind(
+			apiVersion,
+			kind,
 		)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		// create a resource controller for all the instances
+		// belonging to current api version
+		resCtrl := &ResourceStatesController{
+			ClusterStatesControllerBase: m.ClusterStatesControllerBase,
+			DynamicClient:               client,
+			Observed:                    objects,
+			Desired:                     m.Desired[verkind],
+		}
+		clusterStatesDeleter = append(
+			clusterStatesDeleter,
+			resCtrl,
+		)
+	}
+	// set deleter instance only if there were no errors
+	if len(errs) == 0 {
+		m.DeleteFn = clusterStatesDeleter.Delete
+	} else {
+		m.errs = append(m.errs, errs...)
+	}
+}
+
+// initCreateUpdater sets this Controller instance with a
+// create or updater logic that handles creation or updation
+// of resources across multiple api versions
+func (m *ClusterStatesController) initCreateUpdater() {
+	var errs []error
+	var clusterStatesCreateUpdater ClusterStatesCreateUpdater
+	// create or update is based on **desired states**
+	//
+	// iterate to group resources by kind & apiVersion
+	for verkind, objects := range m.Desired {
+		apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
+		// get dynamic client corresponding to resource kind & apiversion
+		client, err := m.DynamicClientSet.GetClientForAPIVersionKind(
+			apiVersion,
+			kind,
+		)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		cu := &ResourceStatesController{
+			ClusterStatesControllerBase: m.ClusterStatesControllerBase,
+			DynamicClient:               client,
+			Observed:                    m.Observed[verkind],
+			Desired:                     objects,
+		}
+		clusterStatesCreateUpdater = append(
+			clusterStatesCreateUpdater,
+			cu,
+		)
+	}
+	// set create / updater instance only if there are no errors
+	if len(errs) == 0 {
+		m.CreateOrUpdateFn = clusterStatesCreateUpdater.CreateOrUpdate
+	} else {
+		m.errs = append(m.errs, errs...)
+	}
+}
+
+// initialise this Controller
+func (m *ClusterStatesController) initIfNil() {
+	if m.DeleteFn == nil {
+		m.initDeleter()
 	}
 	if m.CreateOrUpdateFn == nil {
-		m.errs = appendErrIfNotNil(
-			m.errs, anyAttachmentsDefaultCreateUpdater()(m),
-		)
+		m.initCreateUpdater()
 	}
 	if m.IsWatchOwner == nil {
 		// defaults to set this watch as the owner of the
@@ -243,75 +242,89 @@ func (m *AttachmentManager) setDefaults() {
 
 // Apply executes create, delete or update operations against
 // the child resources set against this manager instance
-func (m *AttachmentManager) Apply() error {
-	m.setDefaults()
+func (m *ClusterStatesController) Apply() error {
+	m.initIfNil()
 	if len(m.errs) != 0 {
 		return utilerrors.NewAggregate(m.errs)
 	}
-
-	m.errs = appendErrIfNotNil(m.errs, m.DeleteFn())
-	m.errs = appendErrIfNotNil(m.errs, m.CreateOrUpdateFn())
-
+	// execute deletes as part of apply
+	m.errs = append(m.errs, m.DeleteFn())
+	// execute creates & updates as part of apply
+	m.errs = append(m.errs, m.CreateOrUpdateFn())
 	return utilerrors.NewAggregate(m.errs)
 }
 
-// AttachmentResourcesExecutor holds fields required to execute
-// operations against the attachment resources
-type AttachmentResourcesExecutor struct {
-	AttachmentExecuteBase
+// ResourceStatesController manages create, update or deletion of
+// resources belonging to a **single** apiversion & kind
+type ResourceStatesController struct {
+	ClusterStatesControllerBase
 
-	// Dynamic client that can execute client related operations
-	// against a particular resource i.e. apiVersion & kind
-	DynamicResourceClient *dynamicclientset.ResourceClient
+	// Dynamic client to invoke kubernetes CRUD operations corresponding
+	// to a resource i.e. apiVersion & kind
+	DynamicClient *dynamicclientset.ResourceClient
 
 	// Group of observed & desired resources anchored by
 	// resource name.
 	//
-	// It is important to have all resources in these maps
-	// belong to a **same** apiVersion & kind.
-	//
-	// This apiVersion and kind corresponds to
-	// DynamicResourceClient property of this instance.
+	// NOTE:
+	// 	Resources in these maps must have the **same**
+	// apiVersion & kind as that of the DynamicResourceClient
 	Observed map[string]*unstructured.Unstructured
 	Desired  map[string]*unstructured.Unstructured
 }
 
 // String implements Stringer interface
-func (e AttachmentResourcesExecutor) String() string {
-	return e.AttachmentExecuteBase.String()
+func (e ResourceStatesController) String() string {
+	var strs []string
+	strs = append(strs, "ResourceStatesController")
+	if e.Watch != nil {
+		strs = append(
+			strs,
+			fmt.Sprintf("Watch %s", DescObjectAsKey(e.Watch)),
+		)
+	}
+	if e.IsWatchOwner != nil {
+		strs = append(
+			strs,
+			fmt.Sprintf("IsWatchOwner=%t", *e.IsWatchOwner),
+		)
+	}
+	return strings.Join(strs, " ")
 }
 
 // IsUpdateDuringPendingDelete returns true if update is allowed
 // even if the targeted resource is pending deletion
-func (e AttachmentResourcesExecutor) IsUpdateDuringPendingDelete() bool {
+func (e ResourceStatesController) IsUpdateDuringPendingDelete() bool {
 	if e.UpdateDuringPendingDelete == nil {
 		return false
 	}
 	return *e.UpdateDuringPendingDelete
 }
 
-// Update updates the observed attachment to its desired attachment
+// Update updates the observed state to its desired state
 //
 // NOTE:
-//	Return value with bool datatype indicates a update or no update.
-func (e *AttachmentResourcesExecutor) Update(
-	observedObj, desiredObj *unstructured.Unstructured) (bool, error) {
+//	A return value of true indicates a successful update
+func (e *ResourceStatesController) update(
+	observed *unstructured.Unstructured,
+	desired *unstructured.Unstructured,
+) (bool, error) {
 	// TODO (@amitkumardas):
 	//
 	// Should this be desired object's namespace or
 	// current object's namespace. Updating the namespace
 	// may not work just by taking up the desired object's namespace.
-	ns := desiredObj.GetNamespace()
+	ns := desired.GetNamespace()
 	if ns == "" {
 		ns = e.Watch.GetNamespace()
 	}
 
 	// Leave it alone if it's pending deletion && updating during
 	// pending deletion is not enabled
-	if observedObj.GetDeletionTimestamp() != nil && !e.IsUpdateDuringPendingDelete() {
+	if observed.GetDeletionTimestamp() != nil && !e.IsUpdateDuringPendingDelete() {
 		glog.V(5).Infof(
 			"Can't update %s: Pending deletion: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
 		return false, nil
@@ -324,11 +337,11 @@ func (e *AttachmentResourcesExecutor) Update(
 	}
 
 	// Check if this object was created due to a GenericController watch
-	observedAnns := observedObj.GetAnnotations()
+	observedAnns := observed.GetAnnotations()
 	currentWatchUID := string(e.Watch.GetUID())
 	createdByWatchUID := ""
 	if observedAnns != nil {
-		createdByWatchUID = observedAnns[attachmentCreateAnnotationKey]
+		createdByWatchUID = observedAnns[AttachmentCreateAnnotationKey]
 	}
 
 	// If watches don't match && this controller is not granted
@@ -336,8 +349,8 @@ func (e *AttachmentResourcesExecutor) Update(
 	if createdByWatchUID != currentWatchUID && !updateAny {
 		glog.V(6).Infof(
 			"Won't update %s: Annotation %s = %q want %q: UpdateAny = %t: %s",
-			DescObjectAsKey(desiredObj),
-			attachmentCreateAnnotationKey,
+			DescObjectAsKey(desired),
+			AttachmentCreateAnnotationKey,
 			createdByWatchUID,
 			currentWatchUID,
 			updateAny,
@@ -348,8 +361,8 @@ func (e *AttachmentResourcesExecutor) Update(
 
 	// Check the update strategy for this child kind
 	method := e.GetChildUpdateStrategyByGK(
-		e.DynamicResourceClient.Group,
-		e.DynamicResourceClient.Kind,
+		e.DynamicClient.Group,
+		e.DynamicClient.Kind,
 	)
 
 	// Skip update if update strategy does not allow
@@ -359,7 +372,7 @@ func (e *AttachmentResourcesExecutor) Update(
 		// ourselves
 		glog.V(6).Infof(
 			"Won't update %s: UpdateStrategy=%q: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			method,
 			e,
 		)
@@ -375,10 +388,11 @@ func (e *AttachmentResourcesExecutor) Update(
 	// 	This lets an attachment to be updated independently even
 	// with multiple updates (read 3-way merges) triggered due to
 	// different watches.
-	lastAppliedKey := string(e.Watch.GetUID()) + lastAppliedAnnotationKeySuffix
+	lastAppliedKey :=
+		string(e.Watch.GetUID()) + GCTLLastAppliedAnnotationKeySuffix
 
 	// Check if its a patch based update vs. 3-way merge based update
-	if e.IsPatchByGK(e.DynamicResourceClient.Group, e.DynamicResourceClient.Kind) {
+	if e.IsPatchByGK(e.DynamicClient.Group, e.DynamicClient.Kind) {
 		// Since patch is enabled; resource based on this api group
 		// & kind will be patched versus the standard 3-way merge based
 		// update.
@@ -397,8 +411,8 @@ func (e *AttachmentResourcesExecutor) Update(
 		// 	However, the final merged instance is saved in the cluster
 		// with desired instance's content as the last applied state.
 		err := dynamicapply.SetLastAppliedByAnnKey(
-			observedObj,
-			observedObj.UnstructuredContent(),
+			observed,
+			observed.UnstructuredContent(),
 			lastAppliedKey,
 		)
 		if err != nil {
@@ -409,7 +423,7 @@ func (e *AttachmentResourcesExecutor) Update(
 	// create a new instance of Apply
 	a := NewApplyFromAnnKey(lastAppliedKey)
 	// invoke 3-way merge
-	mergedObj, err := a.Merge(observedObj, desiredObj)
+	mergedObj, err := a.Merge(observed, desired)
 	if err != nil {
 		return false, err
 	}
@@ -423,14 +437,14 @@ func (e *AttachmentResourcesExecutor) Update(
 	if !isDiff {
 		glog.V(7).Infof(
 			"Won't update %s: Nothing changed: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
 		return false, nil
 	}
 	glog.V(6).Infof(
 		"Will update %s since observed != desired: %s",
-		DescObjectAsKey(desiredObj),
+		DescObjectAsKey(desired),
 		e,
 	)
 
@@ -440,15 +454,16 @@ func (e *AttachmentResourcesExecutor) Update(
 		// Delete the object (now) and recreate it (on the next sync).
 		glog.V(4).Infof(
 			"Deleting %s for update: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
-		uid := observedObj.GetUID()
+
+		uid := observed.GetUID()
 		// Explicitly request deletion propagation, which is what users expect,
 		// since some objects default to orphaning for backwards compatibility.
 		propagation := metav1.DeletePropagationBackground
-		err := e.DynamicResourceClient.Namespace(ns).Delete(
-			desiredObj.GetName(),
+		err := e.DynamicClient.Namespace(ns).Delete(
+			desired.GetName(),
 			&metav1.DeleteOptions{
 				Preconditions:     &metav1.Preconditions{UID: &uid},
 				PropagationPolicy: &propagation,
@@ -457,44 +472,49 @@ func (e *AttachmentResourcesExecutor) Update(
 		if err != nil {
 			return false, err
 		}
+
 		glog.Infof(
 			"Deleted %s for update: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
 	case v1alpha1.ChildUpdateInPlace, v1alpha1.ChildUpdateRollingInPlace:
 		// Update the object in-place.
 		glog.V(6).Infof(
 			"Updating %s: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
+
 		// Set who is responsible for this update.
 		// In other words set the watch details in the annotations
 		updatedAnns := mergedObj.GetAnnotations()
 		if updatedAnns == nil {
 			updatedAnns = make(map[string]string)
 		}
-		updatedAnns[string(e.Watch.GetUID())+attachmentUpdateAnnotationKeySuffix] =
+		updatedAnns[string(e.Watch.GetUID())+AttachmentUpdateAnnotationKeySuffix] =
 			DescObjectAsSanitisedKey(e.Watch)
 		mergedObj.SetAnnotations(updatedAnns)
+
 		// update the merged state at the cluster
-		_, err := e.DynamicResourceClient.Namespace(ns).Update(
-			mergedObj, metav1.UpdateOptions{},
+		_, err := e.DynamicClient.Namespace(ns).Update(
+			mergedObj,
+			metav1.UpdateOptions{},
 		)
 		if err != nil {
 			return false, err
 		}
+
 		glog.V(6).Infof(
 			"Updated %s: %s",
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
 	default:
 		return false, errors.Errorf(
-			"Invalid update strategy %s for %s: %s",
+			"Invalid update strategy %s: %s: %s",
 			method,
-			DescObjectAsKey(desiredObj),
+			DescObjectAsKey(desired),
 			e,
 		)
 	}
@@ -502,9 +522,9 @@ func (e *AttachmentResourcesExecutor) Update(
 	return true, nil
 }
 
-// Create creates the desired attachment
-func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) error {
-	ns := dObj.GetNamespace()
+// Create creates the provided resource in the kubernetes cluster
+func (e *ResourceStatesController) create(desired *unstructured.Unstructured) error {
+	ns := desired.GetNamespace()
 	if ns == "" {
 		// if desired object has not been given a namespace
 		// then it is set to watch's namespace
@@ -513,7 +533,7 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 
 	glog.V(4).Infof(
 		"Creating %s: %s",
-		DescObjectAsKey(dObj),
+		DescObjectAsKey(desired),
 		e,
 	)
 
@@ -524,9 +544,9 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 	//
 	// Make sure this happens before we add anything else to the object.
 	err := dynamicapply.SetLastAppliedByAnnKey(
-		dObj,
-		dObj.UnstructuredContent(),
-		string(e.Watch.GetUID())+lastAppliedAnnotationKeySuffix,
+		desired,
+		desired.UnstructuredContent(),
+		string(e.Watch.GetUID())+GCTLLastAppliedAnnotationKeySuffix,
 	)
 	if err != nil {
 		return err
@@ -535,12 +555,12 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 	// add create specific annotation
 	// this annotation will be set irrespective of whether a watch
 	// is a owner of an attachment or not
-	ann := dObj.GetAnnotations()
+	ann := desired.GetAnnotations()
 	if ann == nil {
 		ann = make(map[string]string)
 	}
-	ann[attachmentCreateAnnotationKey] = string(e.Watch.GetUID())
-	dObj.SetAnnotations(ann)
+	ann[AttachmentCreateAnnotationKey] = string(e.Watch.GetUID())
+	desired.SetAnnotations(ann)
 
 	// Attachments are set with current watch as
 	// the owner reference if watch is flagged to be the owner
@@ -549,58 +569,59 @@ func (e *AttachmentResourcesExecutor) Create(dObj *unstructured.Unstructured) er
 
 		// fetch existing owner references of this attachment
 		// and add this watch as an additional owner reference
-		ownerRefs := dObj.GetOwnerReferences()
+		ownerRefs := desired.GetOwnerReferences()
 		ownerRefs = append(ownerRefs, *watchAsOwnerRef)
-		dObj.SetOwnerReferences(ownerRefs)
+		desired.SetOwnerReferences(ownerRefs)
 	}
 
-	_, err =
-		e.DynamicResourceClient.Namespace(ns).Create(dObj, metav1.CreateOptions{})
+	_, err = e.DynamicClient.
+		Namespace(ns).
+		Create(
+			desired,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		return err
 	}
 
 	glog.Infof(
 		"Created %s: %s",
-		DescObjectAsKey(dObj),
+		DescObjectAsKey(desired),
 		e,
 	)
 	return nil
 }
 
-// CreateOrUpdate will create or update the attachments
-func (e *AttachmentResourcesExecutor) CreateOrUpdate() error {
+// CreateOrUpdate will create or update the resources
+func (e *ResourceStatesController) CreateOrUpdate() error {
 	var errs []error
-
-	// map the "desired" with its exact "observed"
-	// instance before carrying out create / update
-	// operation
+	// map **desired** with its exact **observed**
+	// state to execute either an update or create operation
 	for name, dObj := range e.Desired {
 		if oObj := e.Observed[name]; oObj != nil {
 			// -------------------------------------------
 			// try update since object already exists
 			// -------------------------------------------
-			_, err := e.Update(oObj, dObj)
+			_, err := e.update(oObj, dObj)
 			if err != nil {
-				errs = appendErrIfNotNil(errs, err)
+				errs = append(errs, err)
 			}
 		} else {
 			// ----------------------------------------------------
-			// try create since this object is not observed in cluster
+			// try create since object is not observed in cluster
 			// ----------------------------------------------------
-			err := e.Create(dObj)
+			err := e.create(dObj)
 			if err != nil {
-				errs = appendErrIfNotNil(errs, err)
+				errs = append(errs, err)
 			}
 		}
 	}
-
 	return utilerrors.NewAggregate(errs)
 }
 
 // Delete will delete the child resources based on observed
 // & owned child resources that are no longer desired
-func (e *AttachmentResourcesExecutor) Delete() error {
+func (e *ResourceStatesController) Delete() error {
 	var errs []error
 
 	// check if controller has rights to delete any attachments
@@ -625,7 +646,7 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 			wantWatch := string(e.Watch.GetUID())
 			gotWatch := ""
 			if ann != nil {
-				gotWatch = ann[attachmentCreateAnnotationKey]
+				gotWatch = ann[AttachmentCreateAnnotationKey]
 			}
 
 			if gotWatch != wantWatch && !deleteAny {
@@ -633,7 +654,7 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 				glog.V(6).Infof(
 					"Won't delete %s: Annotation %s = %q want %q: DeleteAny = %t: %s",
 					DescObjectAsKey(obj),
-					attachmentCreateAnnotationKey,
+					AttachmentCreateAnnotationKey,
 					gotWatch,
 					wantWatch,
 					deleteAny,
@@ -654,7 +675,7 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 			// users expect, since some objects default to orphaning
 			// for backwards compatibility.
 			propagation := metav1.DeletePropagationBackground
-			err := e.DynamicResourceClient.Namespace(obj.GetNamespace()).Delete(
+			err := e.DynamicClient.Namespace(obj.GetNamespace()).Delete(
 				obj.GetName(),
 				&metav1.DeleteOptions{
 					Preconditions:     &metav1.Preconditions{UID: &uid},
@@ -692,30 +713,30 @@ func (e *AttachmentResourcesExecutor) Delete() error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// AnyAttachmentsDeleter holds a list of delete based attachment
-// executors.
-type AnyAttachmentsDeleter []*AttachmentResourcesExecutor
+// ClusterStatesDeleter manages deletion of cluster resources
+type ClusterStatesDeleter []*ResourceStatesController
 
 // Delete will delete all the attachment resources available in
 // this instance
-func (list AnyAttachmentsDeleter) Delete() error {
+func (list ClusterStatesDeleter) Delete() error {
 	var errs []error
-	for _, exec := range list {
-		errs = appendErrIfNotNil(errs, exec.Delete())
+	for _, deleter := range list {
+		err := deleter.Delete()
+		errs = append(errs, err)
 	}
 	return utilerrors.NewAggregate(errs)
 }
 
-// AnyAttachmentsCreateUpdater holds a list of executors
-// that either create or update the attachments
-type AnyAttachmentsCreateUpdater []*AttachmentResourcesExecutor
+// ClusterStatesCreateUpdater manages create or update of cluster
+// resources
+type ClusterStatesCreateUpdater []*ResourceStatesController
 
 // CreateOrUpdate will create or update the attachment resources
-func (list AnyAttachmentsCreateUpdater) CreateOrUpdate() error {
+func (list ClusterStatesCreateUpdater) CreateOrUpdate() error {
 	var errs []error
-
 	for _, createUpdater := range list {
-		errs = appendErrIfNotNil(errs, createUpdater.CreateOrUpdate())
+		err := createUpdater.CreateOrUpdate()
+		errs = append(errs, err)
 	}
 	return utilerrors.NewAggregate(errs)
 }

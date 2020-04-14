@@ -50,7 +50,7 @@ import (
 type parentController struct {
 	api *v1alpha1.CompositeController
 
-	resources      *dynamicdiscovery.APIResourceManager
+	resources      *dynamicdiscovery.APIResourceDiscovery
 	parentResource *dynamicdiscovery.APIResource
 
 	mcClientSet  mcclientset.Interface
@@ -71,7 +71,7 @@ type parentController struct {
 }
 
 func newParentController(
-	resources *dynamicdiscovery.APIResourceManager,
+	resources *dynamicdiscovery.APIResourceDiscovery,
 	dynClientSet *dynamicclientset.Clientset,
 	informerFactory *dynamicinformer.SharedInformerFactory,
 	mcClient mcclientset.Interface,
@@ -79,7 +79,7 @@ func newParentController(
 	api *v1alpha1.CompositeController,
 ) (pc *parentController, newErr error) {
 	// Make a dynamic client for the parent resource.
-	parentClient, err := dynClientSet.GetClientByResource(
+	parentClient, err := dynClientSet.GetClientForAPIVersionResource(
 		api.Spec.ParentResource.APIVersion,
 		api.Spec.ParentResource.Resource,
 	)
@@ -799,7 +799,7 @@ func (pc *parentController) claimChildren(
 ) (common.AnyUnstructRegistry, error) {
 	// Set up values common to all child types.
 	parentNamespace := parent.GetNamespace()
-	parentGVK := pc.parentResource.GroupVersionKind()
+	parentGVK := pc.parentResource.GetGroupVersionKind()
 	selector, err := pc.makeSelector(parent, nil)
 	if err != nil {
 		return nil, err
@@ -812,7 +812,7 @@ func (pc *parentController) claimChildren(
 		// List all objects of the child kind in the parent object's namespace,
 		// or in all namespaces if the parent is cluster-scoped.
 		childClient, err :=
-			pc.dynClientSet.GetClientByResource(child.APIVersion, child.Resource)
+			pc.dynClientSet.GetClientForAPIVersionResource(child.APIVersion, child.Resource)
 		if err != nil {
 			return nil, err
 		}
@@ -849,7 +849,7 @@ func (pc *parentController) claimChildren(
 			parent,
 			selector,
 			parentGVK,
-			childClient.GroupVersionKind(),
+			childClient.GetGroupVersionKind(),
 			canAdoptFunc,
 		)
 		children, err := crm.BulkClaim(all)

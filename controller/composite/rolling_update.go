@@ -351,7 +351,7 @@ func isRollingStrategy(strategy *v1alpha1.CompositeControllerChildUpdateStrategy
 // as declared by composite controller spec. These strategies are
 // achored by group & kind
 func makeUpdateStrategyMap(
-	resources *dynamicdiscovery.APIResourceManager,
+	resources *dynamicdiscovery.APIResourceDiscovery,
 	api *v1alpha1.CompositeController,
 ) (updateStrategyMap, error) {
 
@@ -360,7 +360,7 @@ func makeUpdateStrategyMap(
 		if child.UpdateStrategy != nil &&
 			child.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
 			// Map resource name to kind name.
-			resource := resources.GetByResource(child.APIVersion, child.Resource)
+			resource := resources.GetAPIForAPIVersionAndResource(child.APIVersion, child.Resource)
 			if resource == nil {
 				return nil, fmt.Errorf(
 					"can't find child resource %q in %v", child.Resource, child.APIVersion,

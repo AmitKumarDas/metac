@@ -31,7 +31,7 @@ import (
 	"openebs.io/metac/server"
 )
 
-var resourceManager *dynamicdiscovery.APIResourceManager
+var resourceManager *dynamicdiscovery.APIResourceDiscovery
 
 const installKubectlMsg = `
 Cannot find kubectl, cannot run integration tests
@@ -200,7 +200,7 @@ func startCRDBasedMetaControllers(testRunFn func() int) error {
 	// Periodically refresh discovery to pick up newly-installed
 	// resources.
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(ApiserverConfig())
-	resourceManager = dynamicdiscovery.NewAPIResourceManager(discoveryClient)
+	resourceManager = dynamicdiscovery.NewAPIResourceDiscoverer(discoveryClient)
 
 	// We don't care about stopping this cleanly since it has no
 	// external effects.
@@ -247,7 +247,7 @@ func startConfigBasedMetaControllers(testRunFn func() int) error {
 	// Periodically refresh discovery to pick up newly-installed
 	// resources.
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(ApiserverConfig())
-	resourceManager = dynamicdiscovery.NewAPIResourceManager(discoveryClient)
+	resourceManager = dynamicdiscovery.NewAPIResourceDiscoverer(discoveryClient)
 
 	// We don't care about stopping this cleanly since it has no
 	// external effects.

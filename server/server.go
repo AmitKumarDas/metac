@@ -82,7 +82,7 @@ func (s *CRDServer) Start(workerCount int) (stop func(), err error) {
 	discoveryClient :=
 		discovery.NewDiscoveryClientForConfigOrDie(s.Config)
 	resourceMgr :=
-		dynamicdiscovery.NewAPIResourceManager(discoveryClient)
+		dynamicdiscovery.NewAPIResourceDiscoverer(discoveryClient)
 	// We don't care about stopping this cleanly since it has no
 	// external effects.
 	resourceMgr.Start(s.DiscoveryInterval)
@@ -209,8 +209,9 @@ func (s *ConfigServer) Start(workerCount int) (stop func(), err error) {
 	discoveryClient :=
 		discovery.NewDiscoveryClientForConfigOrDie(s.Config)
 	resourceMgr :=
-		dynamicdiscovery.NewAPIResourceManager(discoveryClient)
-	// We don't care about stopping this cleanly since it has no external effects.
+		dynamicdiscovery.NewAPIResourceDiscoverer(discoveryClient)
+	// We don't care about stopping this cleanly since it
+	// has no external effects
 	resourceMgr.Start(s.DiscoveryInterval)
 
 	// Create dynamic clientset (factory for dynamic clients).

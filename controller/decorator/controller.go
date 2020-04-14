@@ -57,7 +57,7 @@ type decoratorController struct {
 	schema *v1alpha1.DecoratorController
 
 	// discovered resourceManager
-	resourceManager *dynamicdiscovery.APIResourceManager
+	resourceManager *dynamicdiscovery.APIResourceDiscovery
 
 	// hold the parent kinds
 	parentKinds common.ResourceRegistrar
@@ -95,7 +95,7 @@ type decoratorController struct {
 // controller with required parent & child informers, selectors,
 // update strategy & so on.
 func newDecoratorController(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	dynCliSet *dynamicclientset.Clientset,
 	informerFactory *dynamicinformer.SharedInformerFactory,
 	schema *v1alpha1.DecoratorController,
@@ -132,7 +132,7 @@ func newDecoratorController(
 
 	// Keep a list of parent resource info from discovery.
 	for _, parent := range schema.Spec.Resources {
-		resource := resourceMgr.GetByResource(parent.APIVersion, parent.Resource)
+		resource := resourceMgr.GetAPIForAPIVersionAndResource(parent.APIVersion, parent.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
 				"can't find parent resource %q in apiVersion %q",
@@ -536,7 +536,7 @@ func (c *decoratorController) sync(key string) error {
 		return err
 	}
 
-	resource := c.resourceManager.GetByKind(apiVersion, kind)
+	resource := c.resourceManager.GetAPIForAPIVersionAndKind(apiVersion, kind)
 	if resource == nil {
 		return errors.Errorf("can't find kind %q in apiVersion %q", kind, apiVersion)
 	}
@@ -574,7 +574,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 	)
 
 	parentClient, err :=
-		c.dynCliSet.GetClientByKind(parent.GetAPIVersion(), parent.GetKind())
+		c.dynCliSet.GetClientForAPIVersionKind(parent.GetAPIVersion(), parent.GetKind())
 	if err != nil {
 		return errors.Wrapf(
 			err,
@@ -766,7 +766,7 @@ func (c *decoratorController) getChildren(
 		}
 
 		// Always include the requested groups, even if there are no entries.
-		resource := c.resourceManager.GetByResource(child.APIVersion, child.Resource)
+		resource := c.resourceManager.GetAPIForAPIVersionAndResource(child.APIVersion, child.Resource)
 		if resource == nil {
 			return nil, errors.Errorf(
 				"can't find resource %q in apiVersion %q",
@@ -817,7 +817,7 @@ func updateStrategyMapKey(apiGroup, kind string) string {
 }
 
 func makeUpdateStrategyMap(
-	resourceMgr *dynamicdiscovery.APIResourceManager,
+	resourceMgr *dynamicdiscovery.APIResourceDiscovery,
 	dc *v1alpha1.DecoratorController,
 ) (updateStrategyMap, error) {
 	m := make(updateStrategyMap)
@@ -827,7 +827,7 @@ func makeUpdateStrategyMap(
 		if child.UpdateStrategy != nil &&
 			child.UpdateStrategy.Method != v1alpha1.ChildUpdateOnDelete {
 			// this is done to map resource name to kind name
-			resource := resourceMgr.GetByResource(child.APIVersion, child.Resource)
+			resource := resourceMgr.GetAPIForAPIVersionAndResource(child.APIVersion, child.Resource)
 			if resource == nil {
 				return nil, errors.Errorf(
 					"can't find child resource %q in %v",
