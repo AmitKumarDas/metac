@@ -1,5 +1,5 @@
 ## Example python Controller
-This example is taken from [metacontroller](https://metacontroller.app/guide/create/) doc. There is an issue in this example that leads to continuous reconciliations. When _'CompositeController'_ is used with the parent resource's status **undefined** as a sub-resource, then the reconciliation gets into an infinite loop. This happens since _'CompositeController'_ updates _'status.observedGeneration'_ with _'metadata.generation'_ as part of its reconciliation.
+If you are using _'CompositeController'_ one basic misconfiguration can lead the controller to continuous reconciliations. When _'CompositeController'_ is used with the parent resource's status **undefined** as a sub-resource, then the reconciliation gets into an infinite loop. This happens since _'CompositeController'_ updates _'status.observedGeneration'_ with _'metadata.generation'_ as part of its reconciliation.
 
 Following sums up the reconciliation logic when status is defined as a sub resource & vice-versa:
 
@@ -12,14 +12,6 @@ Following sums up the reconciliation logic when status is defined as a sub resou
     status: {}
 ```
 
-
-What changes you need to do? 
-
-You need to add below in your crd
-```yaml
-  subresources:
-    status: {}
-```
 ### Use
 ```yaml
 apiVersion: apiextensions.k8s.io/v1beta1
@@ -93,7 +85,7 @@ Check the log of the pod and try to create other helloworld cr or update any hel
 ### Cleanup
 ```bash
 kubectl delete helloworld -A --all
-kubectl ns hello
+kubectl delete ns hello
 kubectl delete -f controller.yaml
 kubectl delete -f crd.yaml
 ```
