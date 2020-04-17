@@ -1,0 +1,18 @@
+apiVersion: metac.openebs.io/v1alpha1
+kind: CompositeController
+metadata:
+  name: hello-controller
+spec:
+  generateSelector: true
+  parentResource:
+    apiVersion: example.com/v1
+    resource: helloworlds
+  childResources:
+  - apiVersion: v1
+    resource: pods
+    updateStrategy:
+      method: Recreate
+  hooks:
+    sync:
+      webhook:
+        url: http://hello-controller.hello/sync

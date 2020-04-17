@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-controller
+  template:
+    metadata:
+      labels:
+        app: hello-controller
+    spec:
+      containers:
+        - name: controller
+          image: python:3.7
+          command: ["python", "/hooks/sync.py"]
+          volumeMounts:
+            - name: hooks
+              mountPath: /hooks
+      volumes:
+        - name: hooks
+          configMap:
+            name: hello-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-controller
+spec:
+  selector:
+    app: hello-controller
+  ports:
+    - port: 80
