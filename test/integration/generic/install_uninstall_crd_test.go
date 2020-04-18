@@ -24,6 +24,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
@@ -171,7 +172,7 @@ func TestInstallUninstallCRD(t *testing.T) {
 		// of this finalize block
 		isFinalized = resp.Finalized
 
-		t.Logf("Finalize: Req.Attachments.Len=%d", req.Attachments.Len())
+		klog.V(2).Infof("Finalize: Req.Attachments.Len=%d", req.Attachments.Len())
 		return json.Marshal(resp)
 	})
 
@@ -231,33 +232,43 @@ func TestInstallUninstallCRD(t *testing.T) {
 	//
 	// NOTE:
 	// 	This triggers reconciliation
-	_, err = f.GetTypedClientset().CoreV1().Namespaces().Create(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: targetNSName,
+	_, err = f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Create(
+			&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: targetNSName,
+				},
 			},
-		},
-	)
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Need to wait & see if our controller works as expected
 	// Make sure the specified attachments i.e. CRD is created
-	t.Logf("Wait for creation of CRD %s", targetCRDName)
+	klog.Infof("Wait for creation of CRD %s", targetCRDName)
 
 	crdCreateErr := f.Wait(func() (bool, error) {
 		// ------------------------------------------------
 		// verify if target CRD is created i.e. reconciled
 		// ------------------------------------------------
-		crdCreateObj, createErr :=
-			f.GetCRDClient().CustomResourceDefinitions().Get(targetCRDName, metav1.GetOptions{})
+		crdCreateObj, createErr := f.GetCRDClient().
+			CustomResourceDefinitions().
+			Get(
+				targetCRDName,
+				metav1.GetOptions{},
+			)
 		if createErr != nil {
 			return false, createErr
 		}
 
 		if crdCreateObj == nil {
-			return false, errors.Errorf("CRD %s is not created", targetCRDName)
+			return false, errors.Errorf(
+				"CRD %s is not created",
+				targetCRDName,
+			)
 		}
 
 		// condition passed
@@ -275,8 +286,13 @@ func TestInstallUninstallCRD(t *testing.T) {
 	// its own finalizer if it finds a finalize hook in its
 	// specifications.
 	nsWithFErr := f.Wait(func() (bool, error) {
-		nsWithF, err :=
-			f.GetTypedClientset().CoreV1().Namespaces().Get(targetNSName, metav1.GetOptions{})
+		nsWithF, err := f.GetTypedClientset().
+			CoreV1().
+			Namespaces().
+			Get(
+				targetNSName,
+				metav1.GetOptions{},
+			)
 		if err != nil {
 			return false, err
 		}
@@ -285,7 +301,10 @@ func TestInstallUninstallCRD(t *testing.T) {
 				return true, nil
 			}
 		}
-		return false, errors.Errorf("Namespace %s is not set with gctl finalizer", targetNSName)
+		return false, errors.Errorf(
+			"Namespace %s is not set with gctl finalizer",
+			targetNSName,
+		)
 	})
 	if nsWithFErr != nil {
 		// we wait till timeout & panic if condition is not met
@@ -296,15 +315,20 @@ func TestInstallUninstallCRD(t *testing.T) {
 	// Trigger finalize by deleting the target namespace
 	// ------------------------------------------------------
 
-	err =
-		f.GetTypedClientset().CoreV1().Namespaces().Delete(targetNSName, &metav1.DeleteOptions{})
+	err = f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Delete(
+			targetNSName,
+			&metav1.DeleteOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Need to wait & see if our controller works as expected
 	// Make sure the specified attachments i.e. CRD is deleted
-	t.Logf("Wait for deletion of CRD %s", targetCRDName)
+	klog.Infof("Wait for deletion of CRD %s", targetCRDName)
 
 	crdDelErr := f.Wait(func() (bool, error) {
 		var getErr error
@@ -314,20 +338,25 @@ func TestInstallUninstallCRD(t *testing.T) {
 		// ------------------------------------------------
 
 		if isFinalized {
-			t.Logf("CRD %s should have been deleted: IsFinalized %t", targetCRDName, isFinalized)
 			return true, nil
 		}
 
-		crdObj, getErr :=
-			f.GetCRDClient().CustomResourceDefinitions().Get(targetCRDName, metav1.GetOptions{})
+		crdObj, getErr := f.GetCRDClient().
+			CustomResourceDefinitions().
+			Get(
+				targetCRDName,
+				metav1.GetOptions{},
+			)
 
 		if getErr != nil && !apierrors.IsNotFound(getErr) {
 			return false, getErr
 		}
 
 		if crdObj != nil && crdObj.GetDeletionTimestamp() == nil {
-			return false,
-				errors.Errorf("CRD %s is not marked for deletion", targetCRDName)
+			return false, errors.Errorf(
+				"CRD %s is not marked for deletion",
+				targetCRDName,
+			)
 		}
 
 		// condition passed
@@ -338,5 +367,5 @@ func TestInstallUninstallCRD(t *testing.T) {
 		t.Fatalf("CRD %s wasn't deleted: %v", targetCRDName, crdDelErr)
 	}
 
-	t.Logf("Test Install Uninstall CRD %s passed", targetCRDName)
+	klog.Infof("Test Install Uninstall CRD %s passed", targetCRDName)
 }

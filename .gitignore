@@ -2,6 +2,7 @@
 /vendor/
 /metac
 /hack/bin/
+/test/integration/framework/assets/bin/
 /manifests/crds/
 .*.swp
 .history

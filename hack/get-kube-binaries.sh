@@ -5,12 +5,11 @@ set -u
 
 echo ""
 echo "+++ Will install binaries required to run integration test(s)"
-echo "+++ NOTE: Remove binaries from hack/bin if new versions are needed"
 echo ""
 
 # This script downloads kubectl, kube-apiserver & etcd binaries
 # that are used as part of the integration test environment,
-# and places them in hack/bin/.
+# and places them in 'test/integration/framework/assets/bin'
 #
 # The integration test framework expects these binaries to be 
 # found in the PATH.
@@ -23,8 +22,7 @@ KUBERNETES_RELEASE_URL="${KUBERNETES_RELEASE_URL:-https://dl.k8s.io}"
 # kubernetes/hack/lib/etcd.sh as of the above Kubernetes version.
 ETCD_VERSION="${ETCD_VERSION:-v3.4.3}"
 
-mkdir -p hack/bin
-cd hack/bin
+cd test/integration/framework/assets/bin
 
 # Download kubectl.
 # uncomment below for mandatory download

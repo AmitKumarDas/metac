@@ -21,6 +21,7 @@ RUN make vendor
 # copy build manifests
 COPY . .
 
+RUN make unit-test
 RUN make integration-test
 
 # Build metac binary

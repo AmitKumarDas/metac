@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
@@ -49,9 +50,9 @@ import (
 // of this workload namespace.
 func TestStuckToUnStuckDelete(t *testing.T) {
 	// skipping this in short mode as this is a flaky test
-	if testing.Short() {
-		t.Skip("Skipping TestStuckToUnStuckDelete in short mode")
-	}
+	// if testing.Short() {
+	// 	t.Skip("Skipping TestStuckToUnStuckDelete in short mode")
+	// }
 
 	// namespace to setup GenericController
 	ctlNSNamePrefix := "gctl-test"
@@ -82,13 +83,16 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 	//
 	// NOTE:
 	// 	Targeted CustomResources will be set in this namespace
-	targetNamespace, err := f.GetTypedClientset().CoreV1().Namespaces().Create(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: targetNamespaceName,
+	targetNamespace, err := f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Create(
+			&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: targetNamespaceName,
+				},
 			},
-		},
-	)
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +104,12 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 		"CStorPoolClub",
 		targetNamespace.GetName(),
 		targetResName,
-		framework.SetFinalizers([]string{"protect.abc.io", "protect.def.io"}),
+		framework.SetFinalizers(
+			[]string{
+				"protect.abc.io",
+				"protect.def.io",
+			},
+		),
 	)
 
 	// define a namespace scoped CStorVolumeRest CRD & CR with finalizers
@@ -108,7 +117,12 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 		"CStorVolumeRest",
 		targetNamespace.GetName(),
 		targetResName,
-		framework.SetFinalizers([]string{"protect.xyz.io", "protect.ced.io"}),
+		framework.SetFinalizers(
+			[]string{
+				"protect.xyz.io",
+				"protect.ced.io",
+			},
+		),
 	)
 
 	// ------------------------------------------------------
@@ -117,7 +131,13 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 	//
 	// Above makes the namespace deletion being stuck due to
 	// this namespace scoped custom resources' finalizers.
-	err = f.GetTypedClientset().CoreV1().Namespaces().Delete(targetNamespace.GetName(), &metav1.DeleteOptions{})
+	err = f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Delete(
+			targetNamespace.GetName(),
+			&metav1.DeleteOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,11 +178,8 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 						// ignore this attachment
 						continue
 					}
-
-					// copy the attachment from req to a new instance
-					//respAtt := att
+					// build the desired attachment
 					respAtt := &unstructured.Unstructured{}
-
 					if att.GetKind() == "CustomResourceDefinition" {
 						// keep the CRD attachment till all its corresponding
 						// CRs get deleted
@@ -172,25 +189,17 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 					} else {
 						hasAtleastOneCustomResource = true
 					}
-
 					if len(att.GetFinalizers()) == 0 {
 						// this is a custom resource & does not have any finalizers
 						// then let this be deleted i.e. don't add to response
 						continue
 					}
-
 					// This is a custom resource with finalizers
 					// Hence, re-build the attachment with empty finalizers
 					respAtt.SetUnstructuredContent(att.UnstructuredContent())
-					//respAtt.SetAPIVersion(att.GetAPIVersion())
-					//respAtt.SetKind(att.GetKind())
-					//respAtt.SetName(att.GetName())
-					//respAtt.SetNamespace(att.GetNamespace())
-
 					// Setting finalizers to empty is a must to
 					// let this custom resource get deleted
 					respAtt.SetFinalizers([]string{})
-
 					resp.Attachments = append(resp.Attachments, respAtt)
 				}
 			}
@@ -212,15 +221,15 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 			} else {
 				// if there are still attachments seen in the request
 				// keep resyncing the watch
-				resp.ResyncAfterSeconds = 2
+				resp.ResyncAfterSeconds = 1
 			}
 		}
 
-		t.Logf(
+		klog.V(2).Infof(
 			"Finalize attachments count: Req %d: Resp %d",
-			req.Attachments.Len(), len(resp.Attachments),
+			req.Attachments.Len(),
+			len(resp.Attachments),
 		)
-		t.Logf("Req attachments: \n%v", req.Attachments)
 
 		return json.Marshal(resp)
 	})
@@ -319,8 +328,12 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 	// its own finalizer if it finds a finalize hook in its
 	// specifications.
 	readyErr := f.Wait(func() (bool, error) {
-		cpcCRDWithF, err :=
-			f.GetCRDClient().CustomResourceDefinitions().Get(cpcCRD.GetName(), metav1.GetOptions{})
+		cpcCRDWithF, err := f.GetCRDClient().
+			CustomResourceDefinitions().
+			Get(
+				cpcCRD.GetName(),
+				metav1.GetOptions{},
+			)
 		if err != nil {
 			return false, err
 		}
@@ -329,7 +342,10 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 				return true, nil
 			}
 		}
-		return false, errors.Errorf("CRD %s is not set with gctl finalizer", cpcCRD.GetName())
+		return false, errors.Errorf(
+			"CRD %s is not set with gctl finalizer",
+			cpcCRD.GetName(),
+		)
 
 	})
 	if readyErr != nil {
@@ -343,14 +359,19 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 	//
 	// In other words, deleting the generic controller's
 	// watch will trigger this controller's finalizer
-	delErr := f.GetCRDClient().CustomResourceDefinitions().Delete(cpcCRD.GetName(), &metav1.DeleteOptions{})
+	delErr := f.GetCRDClient().
+		CustomResourceDefinitions().
+		Delete(
+			cpcCRD.GetName(),
+			&metav1.DeleteOptions{},
+		)
 	if delErr != nil {
 		t.Fatal(delErr)
 	}
 
 	// Need to wait & see if our controller works as expected
 	// Make sure the specified attachments are deleted
-	t.Logf("Waiting for deletion of CRs, CRDs & Namespace")
+	klog.Infof("Waiting for deletion of CRs, CRDs & Namespace")
 
 	err = f.Wait(func() (bool, error) {
 		var errs []error
@@ -358,25 +379,54 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 		// -------------------------------------------
 		// verify if our custom resources are deleted
 		// -------------------------------------------
-		cpc, cpcGetErr := cpcClient.Namespace(targetNamespaceName).Get(targetResName, metav1.GetOptions{})
+		cpc, cpcGetErr := cpcClient.
+			Namespace(targetNamespaceName).
+			Get(
+				targetResName,
+				metav1.GetOptions{},
+			)
 		if cpcGetErr != nil && !apierrors.IsNotFound(cpcGetErr) {
 			errs = append(
-				errs, errors.Wrapf(cpcGetErr, "Get CPC %s failed", targetResName),
+				errs,
+				errors.Wrapf(
+					cpcGetErr,
+					"Get CPC %s failed",
+					targetResName,
+				),
 			)
 		}
 		if cpc != nil {
-			errs = append(errs, errors.Errorf("CPC %s is not deleted", targetResName))
+			errs = append(
+				errs,
+				errors.Errorf(
+					"CPC %s is not deleted",
+					targetResName,
+				))
 		}
 
-		cvr, cvrGetErr := cvrClient.Namespace(targetNamespaceName).Get(targetResName, metav1.GetOptions{})
+		cvr, cvrGetErr := cvrClient.
+			Namespace(targetNamespaceName).
+			Get(
+				targetResName,
+				metav1.GetOptions{},
+			)
 		if cvrGetErr != nil && !apierrors.IsNotFound(cvrGetErr) {
 			errs = append(
 				errs,
-				errors.Wrapf(cvrGetErr, "Get CVR %s failed", targetResName),
+				errors.Wrapf(
+					cvrGetErr,
+					"Get CVR %s failed",
+					targetResName,
+				),
 			)
 		}
 		if cvr != nil {
-			errs = append(errs, errors.Errorf("CVR %s is not deleted", targetResName))
+			errs = append(
+				errs,
+				errors.Errorf(
+					"CVR %s is not deleted",
+					targetResName,
+				))
 		}
 
 		// condition did not pass in case of any errors
@@ -391,5 +441,5 @@ func TestStuckToUnStuckDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CRs, CRDs & Namespace deletion failed: %v", err)
 	}
-	t.Logf("CRDs, CRs & namespace were deleted successfully")
+	klog.Infof("CRDs, CRs & namespace were deleted successfully")
 }

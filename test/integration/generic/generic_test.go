@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
@@ -61,10 +62,12 @@ func TestGCtlSyncWebhook(t *testing.T) {
 	// 1. a CRD for watch
 	// 2. a CRD for attachment
 	watchCRD, watchClient := f.SetupCRD(
-		"GTSWPrimary", apiextensions.NamespaceScoped,
+		"GTSWPrimary",
+		apiextensions.NamespaceScoped,
 	)
 	attachmentCRD, attachmentClient := f.SetupCRD(
-		"GTSWSecondary", apiextensions.NamespaceScoped,
+		"GTSWSecondary",
+		apiextensions.NamespaceScoped,
 	)
 
 	// define the "reconcile logic" i.e. sync hook logic here
@@ -80,7 +83,10 @@ func TestGCtlSyncWebhook(t *testing.T) {
 		// Note that this does not create the child in kubernetes.
 		// Creation of child in kubernetes is done by generic
 		// controller on creation of parent resource.
-		child := framework.BuildUnstructObjFromCRD(attachmentCRD, req.Watch.GetName())
+		child := framework.BuildUnstructObjFromCRD(
+			attachmentCRD,
+			req.Watch.GetName(),
+		)
 		child.SetLabels(labels)
 
 		resp := generic.SyncHookResponse{
@@ -105,36 +111,49 @@ func TestGCtlSyncWebhook(t *testing.T) {
 
 	watchResource := framework.BuildUnstructObjFromCRD(watchCRD, testName)
 	unstructured.SetNestedStringMap(
-		watchResource.Object, labels, "spec", "selector", "matchLabels",
+		watchResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s/%s of kind:%s",
 		watchResource.GetNamespace(),
 		watchResource.GetName(),
 		watchResource.GetKind(),
 	)
-	_, err :=
-		watchClient.Namespace(ns.Name).Create(watchResource, metav1.CreateOptions{})
+	_, err := watchClient.
+		Namespace(ns.Name).
+		Create(
+			watchResource,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s/%s of kind:%s",
 		watchResource.GetNamespace(),
 		watchResource.GetName(),
 		watchResource.GetKind(),
 	)
 
-	t.Logf("Waiting for attachment sync")
+	klog.Infof("Waiting for attachment sync")
 	err = f.Wait(func() (bool, error) {
-		_, err := attachmentClient.Namespace(ns.Name).Get(testName, metav1.GetOptions{})
+		_, err := attachmentClient.
+			Namespace(ns.Name).
+			Get(
+				testName,
+				metav1.GetOptions{},
+			)
 		return err == nil, err
 	})
 	if err != nil {
 		t.Errorf("Attachment sync failed: %v", err)
 	}
-	t.Logf("Attachment sync was successful")
+	klog.Infof("Attachment sync was successful")
 }
 
 // TestGCtlCascadingDelete tests that we request cascading deletion of children,
@@ -157,7 +176,10 @@ func TestGCtlCascadingDelete(t *testing.T) {
 	ns := f.CreateNamespaceGen(nsNamePrefix)
 
 	// get required clients
-	watchCRD, watchClient := f.SetupCRD("GTCDPrimary", apiextensions.NamespaceScoped)
+	watchCRD, watchClient := f.SetupCRD(
+		"GTCDPrimary",
+		apiextensions.NamespaceScoped,
+	)
 	jobChildClient := f.GetTypedClientset().BatchV1().Jobs(ns.Name)
 
 	// define the "reconcile logic" i.e. sync hook logic here
@@ -168,8 +190,11 @@ func TestGCtlCascadingDelete(t *testing.T) {
 		}
 
 		resp := generic.SyncHookResponse{}
-		replicas, _, _ :=
-			unstructured.NestedInt64(req.Watch.Object, "spec", "replicas")
+		replicas, _, _ := unstructured.NestedInt64(
+			req.Watch.Object,
+			"spec",
+			"replicas",
+		)
 		if replicas > 0 {
 			// Create one attachment of type batch/v1 Job if replicas > 0.
 			attachment := framework.BuildUnstructuredObjFromJSON(
@@ -215,68 +240,99 @@ func TestGCtlCascadingDelete(t *testing.T) {
 		),
 	)
 
-	watchResource := framework.BuildUnstructObjFromCRD(watchCRD, resourceName)
+	watchResource := framework.BuildUnstructObjFromCRD(
+		watchCRD,
+		resourceName,
+	)
 	unstructured.SetNestedStringMap(
-		watchResource.Object, labels, "spec", "selector", "matchLabels",
+		watchResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
 	// set watch spec with "replicas" property and
 	// assign it with value=1
-	unstructured.SetNestedField(watchResource.Object, int64(1), "spec", "replicas")
+	unstructured.SetNestedField(
+		watchResource.Object,
+		int64(1),
+		"spec",
+		"replicas",
+	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		watchResource.GetKind(),
 		watchResource.GetNamespace(),
 		watchResource.GetName(),
 	)
 	var err error
-	watchResource, err =
-		watchClient.Namespace(ns.Name).Create(watchResource, metav1.CreateOptions{})
+	watchResource, err = watchClient.
+		Namespace(ns.Name).
+		Create(
+			watchResource,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		watchResource.GetKind(),
 		watchResource.GetNamespace(),
 		watchResource.GetName(),
 	)
 
-	t.Logf("Waiting for attachment job creation")
+	klog.Infof("Waiting for attachment job creation")
 	err = f.Wait(func() (bool, error) {
-		_, err := jobChildClient.Get(resourceName, metav1.GetOptions{})
+		_, err := jobChildClient.Get(
+			resourceName,
+			metav1.GetOptions{},
+		)
 		return err == nil, err
 	})
 	if err != nil {
 		t.Fatalf("Attachment job create failed: %v", err)
 	}
-	t.Logf("Attachment job was created successfully")
+	klog.Infof("Attachment job was created successfully")
 
 	// Now that child exists, tell parent to delete it.
-	t.Logf("Updating watch with replicas=0")
-	_, err =
-		watchClient.Namespace(ns.Name).AtomicUpdate(watchResource, func(obj *unstructured.Unstructured) bool {
-			unstructured.SetNestedField(obj.Object, int64(0), "spec", "replicas")
-			return true
-		})
+	klog.Infof("Updating watch with replicas=0")
+	_, err = watchClient.
+		Namespace(ns.Name).
+		AtomicUpdate(
+			watchResource,
+			func(obj *unstructured.Unstructured) bool {
+				unstructured.SetNestedField(
+					obj.Object,
+					int64(0),
+					"spec",
+					"replicas",
+				)
+				return true
+			},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("Updated watch with replicas=0")
+	klog.Infof("Updated watch with replicas=0")
 
 	// Make sure the attachment gets actually deleted
-	t.Logf("Waiting for attachment job to be synced i.e. delete")
+	klog.Infof("Waiting for attachment job to be synced i.e. delete")
 	var child *batchv1.Job
 	err = f.Wait(func() (bool, error) {
 		var getErr error
-		child, getErr = jobChildClient.Get(resourceName, metav1.GetOptions{})
+		child, getErr = jobChildClient.Get(
+			resourceName,
+			metav1.GetOptions{},
+		)
 		return apierrors.IsNotFound(getErr), nil
 	})
 	if err != nil {
 		out, _ := json.Marshal(child)
 		t.Errorf("Attachment job delete failed: %v; object: %s", err, out)
 	}
-	t.Logf("Attachment job synced / deleted successfully")
+	klog.Infof("Attachment job synced / deleted successfully")
 }
 
 // TestGCtlResyncAfter tests that the resyncAfterSeconds field works.
@@ -296,7 +352,8 @@ func TestGCtlResyncAfter(t *testing.T) {
 	// create namespace
 	ns := f.CreateNamespaceGen(nsNamePrefix)
 	watchCRD, watchClient := f.SetupCRD(
-		"GTRAPrimary", apiextensions.NamespaceScoped,
+		"GTRAPrimary",
+		apiextensions.NamespaceScoped,
 	)
 
 	var lastSync time.Time
@@ -351,38 +408,52 @@ func TestGCtlResyncAfter(t *testing.T) {
 
 	watchResource := framework.BuildUnstructObjFromCRD(watchCRD, testName)
 	unstructured.SetNestedStringMap(
-		watchResource.Object, labels, "spec", "selector", "matchLabels",
+		watchResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		watchResource.GetKind(),
 		watchResource.GetNamespace(),
 		watchResource.GetName(),
 	)
-	_, err :=
-		watchClient.Namespace(ns.Name).Create(watchResource, metav1.CreateOptions{})
+	_, err := watchClient.
+		Namespace(ns.Name).
+		Create(
+			watchResource,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		watchResource.GetKind(),
 		watchResource.GetNamespace(),
 		watchResource.GetName(),
 	)
 
-	t.Logf("Waiting for status.elaspedSeconds to be reported")
+	klog.Infof("Waiting for status.elaspedSeconds to be reported")
 	var elapsedSeconds float64
 	err = f.Wait(func() (bool, error) {
-		parentResource, err :=
-			watchClient.Namespace(ns.Name).Get(testName, metav1.GetOptions{})
+		parentResource, err := watchClient.
+			Namespace(ns.Name).
+			Get(
+				testName,
+				metav1.GetOptions{},
+			)
 		if err != nil {
 			return false, err
 		}
 
 		val, found, err := unstructured.NestedFloat64(
-			parentResource.Object, "status", "elapsedSeconds",
+			parentResource.Object,
+			"status",
+			"elapsedSeconds",
 		)
 		if err != nil || !found {
 			// The value hasn't been populated. Keep waiting.
@@ -395,7 +466,7 @@ func TestGCtlResyncAfter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Didn't find status.elapsedSeconds: %v", err)
 	}
-	t.Logf("status.elapsedSeconds was reported as %v", elapsedSeconds)
+	klog.Infof("status.elapsedSeconds was reported as %v", elapsedSeconds)
 
 	if elapsedSeconds > 1.0 {
 		t.Errorf(

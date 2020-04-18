@@ -1,123 +1,194 @@
-/*
-Copyright 2019 Google Inc.
-Copyright 2019 The MayaData Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    https://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package framework
 
-/*
-This file replaces the mechanism for starting kube-apiserver used in
-k8s.io/kubernetes integration tests. In k8s.io/kubernetes, the apiserver is
-one of the components being tested, so it makes sense that there we build it
-from scratch and link it into the test binary. However, here we treat the
-apiserver as an external component just like etcd. This avoids having to vendor
-and build all of Kubernetes into our test binary.
-*/
-
 import (
-	"context"
-	"fmt"
+	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
-	"os/exec"
-	"strconv"
+	"path/filepath"
+	"time"
 
 	"github.com/pkg/errors"
-	"k8s.io/client-go/rest"
-	"k8s.io/klog"
+	"openebs.io/metac/test/integration/framework/addr"
+	"openebs.io/metac/test/integration/framework/internal"
 )
 
-var apiserverURL = ""
+// APIServer knows how to run a kubernetes apiserver.
+type APIServer struct {
+	// URL is the address the ApiServer should listen on
+	// for client connections.
+	//
+	// If this is not specified, we default to a random
+	// free port on localhost.
+	URL *url.URL
 
-const installApiserver = `
-Cannot find kube-apiserver, cannot run integration tests
+	// SecurePort is the additional secure port that the
+	// APIServer should listen on.
+	SecurePort int
 
-Please download kube-apiserver and ensure it is somewhere in the PATH.
-See hack/get-kube-binaries.sh
+	// Path is the path to the apiserver binary.
+	//
+	// If this is left as the empty string, we will attempt
+	// to locate a binary, by checking for the TEST_ASSET_KUBE_APISERVER
+	// environment variable, and the default test assets directory.
+	// See the "Binaries" section above (in doc.go) for details.
+	Path string
 
-`
+	// Args is a list of arguments which will passed to the
+	//  APIServer binary. Before they are passed on, they will
+	// be evaluated as go-template strings. This means you can
+	// use fields which are defined and exported on this
+	// APIServer struct (e.g. "--cert-dir={{ .Dir }}").
+	// Those templates will be evaluated after the defaulting of
+	// the APIServer's fields has already happened and just before
+	// the binary actually gets started. Thus you have access to
+	// calculated fields like `URL` and others.
+	//
+	// If not specified, the minimal set of arguments to run the
+	// APIServer will be used.
+	Args []string
 
-// getApiserverPath returns a path to a kube-apiserver executable.
-func getApiserverPath() (string, error) {
-	return exec.LookPath("kube-apiserver")
+	// CertDir is a path to a directory containing whatever
+	// certificates the APIServer will need.
+	//
+	// If left unspecified, then the Start() method will create
+	// a fresh temporary directory, and the Stop() method will
+	// clean it up.
+	CertDir string
+
+	// EtcdURL is the URL of the Etcd the APIServer should use.
+	//
+	// If this is not specified, the Start() method will return
+	// an error.
+	EtcdURL *url.URL
+
+	// StartTimeout, StopTimeout specify the time the APIServer
+	// is allowed to take when starting and stoppping before an
+	// error is emitted.
+	//
+	// If not specified, these default to 20 seconds.
+	StartTimeout time.Duration
+	StopTimeout  time.Duration
+
+	// Out, Err specify where APIServer should write its StdOut,
+	// StdErr to.
+	//
+	// If not specified, the output will be discarded.
+	Out io.Writer
+	Err io.Writer
+
+	processState *internal.ProcessState
 }
 
-// startApiserver executes a kube-apiserver instance.
-// The returned function will signal the process and wait for it to exit.
-func startApiserver() (func(), error) {
-	apiserverPath, err := getApiserverPath()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, installApiserver)
-		return nil, errors.Wrapf(err, "Can't find kube-apiserver in PATH")
+// Start starts the apiserver, waits for it to come up, and returns
+// an error, if occurred.
+func (s *APIServer) Start() error {
+	if s.processState == nil {
+		if err := s.setProcessState(); err != nil {
+			return err
+		}
 	}
-	apiserverPort, err := getAvailablePort()
-	if err != nil {
-		return nil, err
-	}
-	apiserverURL = fmt.Sprintf("http://127.0.0.1:%d", apiserverPort)
-	klog.Infof("Starting kube-apiserver on %s", apiserverURL)
+	return s.processState.Start(s.Out, s.Err)
+}
 
-	apiserverDataDir, err :=
-		ioutil.TempDir(os.TempDir(), "integration_test_apiserver_data")
-	if err != nil {
-		return nil,
-			errors.Wrapf(err, "Can't make temp kube-apiserver data dir")
+func (s *APIServer) setProcessState() error {
+	if s.EtcdURL == nil {
+		return errors.Errorf("Expected EtcdURL to be configured")
 	}
-	klog.Infof("Storing kube-apiserver data in: %v", apiserverDataDir)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(
-		ctx,
-		apiserverPath,
-		"--cert-dir", apiserverDataDir,
-		// Disable secure port since we don't use it, so we don't conflict with other apiservers.
-		"--secure-port", "0",
-		"--insecure-port", strconv.Itoa(apiserverPort),
-		"--etcd-servers", etcdURL,
+	var err error
+
+	s.processState = &internal.ProcessState{}
+
+	s.processState.DefaultedProcessInput, err = internal.DoDefaulting(
+		"kube-apiserver",
+		s.URL,
+		s.CertDir,
+		s.Path,
+		s.StartTimeout,
+		s.StopTimeout,
 	)
+	if err != nil {
+		return err
+	}
 
-	// Uncomment these to see kube-apiserver output in test logs.
-	// For Metacontroller tests, we generally don't expect problems at this level.
-	//cmd.Stdout = os.Stdout
-	//cmd.Stderr = os.Stderr
-
-	stop := func() {
-		klog.Infof("Stopping kube-apiserver")
-		cancel()
-		err := cmd.Wait()
-		klog.Infof("kube-apiserver exit status: %v", err)
-		err = os.RemoveAll(apiserverDataDir)
+	// Defaulting the secure port
+	if s.SecurePort == 0 {
+		s.SecurePort, _, err = addr.Suggest()
 		if err != nil {
-			klog.Warningf("Cleanup of kube-apiserver failed: %v", err)
+			return err
 		}
 	}
 
-	if err := cmd.Start(); err != nil {
-		return nil, errors.Wrapf(err, "Failed to run kube-apiserver")
+	s.processState.HealthCheckEndpoint = "/healthz"
+
+	s.URL = &s.processState.URL
+	s.CertDir = s.processState.Dir
+	s.Path = s.processState.Path
+	s.StartTimeout = s.processState.StartTimeout
+	s.StopTimeout = s.processState.StopTimeout
+
+	if err := s.populateAPIServerCerts(); err != nil {
+		return err
 	}
-	return stop, nil
+
+	s.processState.Args, err = internal.RenderTemplates(
+		internal.DoAPIServerArgDefaulting(s.Args), s,
+	)
+	return err
 }
 
-// ApiserverURL returns the URL of the kube-apiserver instance started by TestMain.
-func ApiserverURL() string {
-	return apiserverURL
+func (s *APIServer) populateAPIServerCerts() error {
+	_, statErr := os.Stat(filepath.Join(s.CertDir, "apiserver.crt"))
+	if !os.IsNotExist(statErr) {
+		return statErr
+	}
+
+	ca, err := internal.NewTinyCA()
+	if err != nil {
+		return err
+	}
+
+	certs, err := ca.NewServingCert()
+	if err != nil {
+		return err
+	}
+
+	certData, keyData, err := certs.AsBytes()
+	if err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(
+		filepath.Join(s.CertDir, "apiserver.crt"),
+		certData,
+		0640,
+	); err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(
+		filepath.Join(s.CertDir, "apiserver.key"),
+		keyData,
+		0640,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-// ApiserverConfig returns a rest.Config to connect to the test instance.
-func ApiserverConfig() *rest.Config {
-	return &rest.Config{
-		Host: ApiserverURL(),
+// Stop stops this process gracefully, waits for its termination,
+// and cleans up the CertDir if necessary.
+func (s *APIServer) Stop() error {
+	if s.processState != nil {
+		return s.processState.Stop()
 	}
+	return nil
 }
+
+// APIServerDefaultArgs exposes the default args for the APIServer
+// so that you can use those to append your own additional arguments.
+//
+// The internal default arguments are explicitly copied here, we
+// don't want to allow users to change the internal ones.
+var APIServerDefaultArgs = append([]string{}, internal.APIServerDefaultArgs...)
