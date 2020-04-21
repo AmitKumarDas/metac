@@ -4,7 +4,9 @@ PATH := $(PWD)/hack/bin:$(PATH)
 PACKAGE_NAME := openebs.io/metac
 API_GROUPS := metacontroller/v1alpha1
 
+GIT_TAGS = $(shell git fetch --all --tags)
 PACKAGE_VERSION ?= $(shell git describe --always --tags)
+
 OS = $(shell uname)
 
 PKGS = $(shell go list ./... | grep -v '/test/integration/\|/examples/')
@@ -29,8 +31,6 @@ export GO111MODULE=on
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 CONTROLLER_GEN := go run ./vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go
-
-export GO111MODULE=on
 
 all: manifests bins
 
@@ -80,8 +80,8 @@ push: image
 
 .PHONY: unit-test
 unit-test: generated_files
-	@go test -cover -mod=vendor -i ${PKGS}
-	@go test -cover -mod=vendor ${PKGS}
+	@go test -cover -i ${PKGS}
+	@go test -cover ${PKGS}
 
 .PHONY: integration-dependencies
 integration-dependencies: manifests
@@ -92,18 +92,15 @@ integration-dependencies: manifests
 # This can be run on one's laptop or Travis like CI environments.
 .PHONY: integration-test
 integration-test: integration-dependencies
-	@go test -mod=vendor \
-	./test/integration/... \
-	-v -short -timeout 5m -args --logtostderr -v=1
+	@go test ./test/integration/... \
+		-v -timeout 5m -args --logtostderr --alsologtostderr -v=1
 
 .PHONY: integration-test-gctl
 integration-test-gctl: integration-dependencies
-	@go test -mod=vendor \
-	./test/integration/generic/... \
-	-v -timeout 5m -args --logtostderr -v=1
+	@go test ./test/integration/generic/... \
+		-v -timeout=5m -args --logtostderr --alsologtostderr -v=1
 
 .PHONY: integration-test-local-gctl
 integration-test-local-gctl: integration-dependencies
-	@go test -mod=vendor \
-	./test/integration/genericlocal/... \
-	-v -timeout 5m -args --logtostderr -v=1
+	@go test ./test/integration/genericlocal/... \
+		-v -timeout 5m -args --logtostderr --alsologtostderr -v=1

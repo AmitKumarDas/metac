@@ -1,5 +1,4 @@
 /*
-Copyright 2019 Google Inc.
 Copyright 2019 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +25,7 @@ import (
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaclientset "openebs.io/metac/client/generated/clientset/versioned"
@@ -66,27 +66,31 @@ type Fixture struct {
 
 // NewFixture returns a new instance of Fixture
 func NewFixture(t *testing.T) *Fixture {
-	// get the config that is created just for the purposes
-	// of integration testing of this project
-	config := ApiserverConfig()
-
-	crdClient, err := apiextensionsclientset.NewForConfig(config)
+	crdClient, err := apiextensionsclientset.NewForConfig(
+		apiServerConfig,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dynamicClientset, err := dynamicclientset.New(config, resourceManager)
+	dynamicClientset, err := dynamicclientset.New(
+		apiServerConfig,
+		apiResourceDiscovery,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	metaClientset, err := metaclientset.NewForConfig(config)
+	metaClientset, err := metaclientset.NewForConfig(
+		apiServerConfig,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	typedClientset, err := kubernetes.NewForConfig(config)
+	typedClientset, err := kubernetes.NewForConfig(
+		apiServerConfig,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	return &Fixture{
 		t:                t,
 		dynamicClientset: dynamicClientset,
@@ -190,19 +194,24 @@ func (f *Fixture) Wait(condition func() (bool, error)) error {
 	for {
 		done, err := condition()
 		if err == nil && done {
-			f.t.Logf("Wait condition succeeded")
+			//f.t.Logf("Wait condition succeeded")
+			klog.V(3).Infof("Wait condition succeeded")
 			return nil
 		}
 		if time.Since(start) > defaultWaitTimeout {
 			return fmt.Errorf(
-				"Wait condition timed out %s: %v", defaultWaitTimeout, err,
+				"Wait condition timed out after %s: %v",
+				defaultWaitTimeout,
+				err,
 			)
 		}
 		if err != nil {
 			// Log error, but keep trying until timeout.
-			f.t.Logf("Wait condition failed: Will retry: %v", err)
+			//f.t.Logf("Wait condition failed: Will retry: %v", err)
+			klog.V(3).Infof("Wait condition failed: Will retry: %v", err)
 		} else {
-			f.t.Logf("Waiting for condition to succeed: Will retry")
+			//f.t.Logf("Waiting for condition to succeed: Will retry")
+			klog.V(3).Infof("Waiting for condition to succeed: Will retry")
 		}
 		time.Sleep(defaultWaitInterval)
 	}

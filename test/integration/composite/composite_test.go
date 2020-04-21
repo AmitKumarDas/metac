@@ -27,20 +27,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/composite"
 	"openebs.io/metac/test/integration/framework"
 )
-
-// This will be run only once when go test is invoked against this package.
-// All the other TestXYZ functions will be invoked via m.Run call only.
-//
-// framework.TestMain provides setup & teardown features required for
-// all the individual testcases to run.
-func TestMain(m *testing.M) {
-	framework.TestWithCRDMetac(m.Run)
-}
 
 // TestSyncWebhook tests that the sync webhook triggers and passes the
 // request/response properly.
@@ -96,36 +88,49 @@ func TestSyncWebhook(t *testing.T) {
 
 	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
 	unstructured.SetNestedStringMap(
-		parentResource.Object, labels, "spec", "selector", "matchLabels",
+		parentResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
-	_, err :=
-		parentClient.Namespace(testName).Create(parentResource, metav1.CreateOptions{})
+	_, err := parentClient.
+		Namespace(testName).
+		Create(
+			parentResource,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
 
-	t.Logf("Waiting for child sync")
+	klog.Infof("Waiting for child sync")
 	err = f.Wait(func() (bool, error) {
-		_, err := childClient.Namespace(testName).Get(testName, metav1.GetOptions{})
+		_, err := childClient.
+			Namespace(testName).
+			Get(
+				testName,
+				metav1.GetOptions{},
+			)
 		return err == nil, err
 	})
 	if err != nil {
 		t.Errorf("Child sync failed: %v", err)
 	}
-	t.Logf("Child sync was successful")
+	klog.Infof("Child sync was successful")
 }
 
 // TestCascadingDelete tests that we request cascading deletion of children,
@@ -144,7 +149,8 @@ func TestCacadingDelete(t *testing.T) {
 
 	f.CreateNamespace(testName)
 	parentCRD, parentClient := f.SetupCRD(
-		"CCtlCascadingDeleteParent", apiextensions.NamespaceScoped,
+		"CCtlCascadingDeleteParent",
+		apiextensions.NamespaceScoped,
 	)
 	jobChildClient := f.GetTypedClientset().BatchV1().Jobs(testName)
 
@@ -156,8 +162,11 @@ func TestCacadingDelete(t *testing.T) {
 		}
 
 		resp := composite.SyncHookResponse{}
-		replicas, _, _ :=
-			unstructured.NestedInt64(req.Parent.Object, "spec", "replicas")
+		replicas, _, _ := unstructured.NestedInt64(
+			req.Parent.Object,
+			"spec",
+			"replicas",
+		)
 		if replicas > 0 {
 			// Create a child batch/v1 Job if requested.
 			// For backward compatibility, the server-side default on that API is
@@ -194,35 +203,51 @@ func TestCacadingDelete(t *testing.T) {
 		testName,
 		hook.URL,
 		framework.BuildResourceRuleFromCRD(parentCRD),
-		&v1alpha1.ResourceRule{APIVersion: "batch/v1", Resource: "jobs"},
+		&v1alpha1.ResourceRule{
+			APIVersion: "batch/v1",
+			Resource:   "jobs",
+		},
 	)
 
 	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
 	unstructured.SetNestedStringMap(
-		parentResource.Object, labels, "spec", "selector", "matchLabels",
+		parentResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
-	unstructured.SetNestedField(parentResource.Object, int64(1), "spec", "replicas")
+	unstructured.SetNestedField(
+		parentResource.Object,
+		int64(1),
+		"spec",
+		"replicas",
+	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
 	var err error
-	parentResource, err =
-		parentClient.Namespace(testName).Create(parentResource, metav1.CreateOptions{})
+	parentResource, err = parentClient.
+		Namespace(testName).
+		Create(
+			parentResource,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
 
-	t.Logf("Waiting for child job creation")
+	klog.Infof("Waiting for child job creation")
 	err = f.Wait(func() (bool, error) {
 		_, err := jobChildClient.Get(testName, metav1.GetOptions{})
 		return err == nil, err
@@ -230,10 +255,10 @@ func TestCacadingDelete(t *testing.T) {
 	if err != nil {
 		t.Errorf("Child job create failed: %v", err)
 	}
-	t.Logf("Child job was created successfully")
+	klog.Infof("Child job was created successfully")
 
 	// Now that child exists, tell parent to delete it.
-	t.Logf("Updating parent with replicas=0")
+	klog.Infof("Updating parent with replicas=0")
 	_, err =
 		parentClient.Namespace(testName).AtomicUpdate(parentResource, func(obj *unstructured.Unstructured) bool {
 			unstructured.SetNestedField(obj.Object, int64(0), "spec", "replicas")
@@ -242,13 +267,13 @@ func TestCacadingDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("Updated parent with replicas=0")
+	klog.Infof("Updated parent with replicas=0")
 
 	// Make sure the child gets actually deleted, which means no GC finalizers got
 	// added to it. Note that we don't actually run the GC in this integration
 	// test env, so we don't need to worry about the GC racing us to process the
 	// finalizers.
-	t.Logf("Waiting for child job to be deleted")
+	klog.Infof("Waiting for child job to be deleted")
 	var child *batchv1.Job
 	err = f.Wait(func() (bool, error) {
 		var getErr error
@@ -259,7 +284,7 @@ func TestCacadingDelete(t *testing.T) {
 		out, _ := json.Marshal(child)
 		t.Errorf("Child job delete failed: %v; object: %s", err, out)
 	}
-	t.Logf("Child job deleted successfully")
+	klog.Infof("Child job deleted successfully")
 }
 
 // TestResyncAfter tests that the resyncAfterSeconds field works.
@@ -277,7 +302,8 @@ func TestResyncAfter(t *testing.T) {
 
 	f.CreateNamespace(testName)
 	parentCRD, parentClient := f.SetupCRD(
-		"CCtlResyncAfterParent", apiextensions.NamespaceScoped,
+		"CCtlResyncAfterParent",
+		apiextensions.NamespaceScoped,
 	)
 
 	var lastSync time.Time
@@ -323,10 +349,14 @@ func TestResyncAfter(t *testing.T) {
 
 	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
 	unstructured.SetNestedStringMap(
-		parentResource.Object, labels, "spec", "selector", "matchLabels",
+		parentResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
@@ -337,14 +367,14 @@ func TestResyncAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
 
-	t.Logf("Waiting for status.elaspedSeconds to be reported")
+	klog.Infof("Waiting for status.elaspedSeconds to be reported")
 	var elapsedSeconds float64
 	err = f.Wait(func() (bool, error) {
 		parentResource, err :=
@@ -354,7 +384,9 @@ func TestResyncAfter(t *testing.T) {
 		}
 
 		val, found, err := unstructured.NestedFloat64(
-			parentResource.Object, "status", "elapsedSeconds",
+			parentResource.Object,
+			"status",
+			"elapsedSeconds",
 		)
 		if err != nil || !found {
 			// The value hasn't been populated. Keep waiting.
@@ -367,7 +399,7 @@ func TestResyncAfter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Didn't find status.elapsedSeconds: %v", err)
 	}
-	t.Logf("status.elapsedSeconds is %v", elapsedSeconds)
+	klog.Infof("status.elapsedSeconds is %v", elapsedSeconds)
 
 	if elapsedSeconds > 1.0 {
 		t.Errorf(

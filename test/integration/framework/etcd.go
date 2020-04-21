@@ -1,118 +1,114 @@
-/*
-Copyright 2017 The Kubernetes Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-// This file is copied from k8s.io/kubernetes/test/integration/framework/
-// to avoid vendoring the rest of the package, which depends on all of k8s.
-
 package framework
 
 import (
-	"context"
-	"fmt"
-	"io/ioutil"
-	"net"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"io"
+	"time"
 
-	"github.com/pkg/errors"
-	"k8s.io/klog"
+	"net/url"
+
+	"openebs.io/metac/test/integration/framework/internal"
 )
 
-var etcdURL = ""
+// Etcd knows how to run an etcd server.
+type Etcd struct {
+	// URL is the address the Etcd should listen on for client connections.
+	//
+	// If this is not specified, we default to a random free port on localhost.
+	URL *url.URL
 
-const installEtcd = `
-Cannot find etcd, cannot run integration tests
+	// Path is the path to the etcd binary.
+	//
+	// If this is left as the empty string, we will attempt to locate a binary,
+	// by checking for the TEST_ASSET_ETCD environment variable, and the default
+	// test assets directory. See the "Binaries" section above (in doc.go) for
+	// details.
+	Path string
 
-Please download kube-apiserver and ensure it is somewhere in the PATH.
-See hack/get-kube-binaries.sh
+	// Args is a list of arguments which will passed to the Etcd binary. Before
+	// they are passed on, the`y will be evaluated as go-template strings. This
+	// means you can use fields which are defined and exported on this Etcd
+	// struct (e.g. "--data-dir={{ .Dir }}").
+	// Those templates will be evaluated after the defaulting of the Etcd's
+	// fields has already happened and just before the binary actually gets
+	// started. Thus you have access to calculated fields like `URL` and others.
+	//
+	// If not specified, the minimal set of arguments to run the Etcd will be
+	// used.
+	Args []string
 
-`
+	// DataDir is a path to a directory in which etcd can store its state.
+	//
+	// If left unspecified, then the Start() method will create a fresh temporary
+	// directory, and the Stop() method will clean it up.
+	DataDir string
 
-// getEtcdPath returns a path to an etcd executable.
-func getEtcdPath() (string, error) {
-	bazelPath := filepath.Join(os.Getenv("RUNFILES_DIR"), "com_coreos_etcd/etcd")
-	p, err := exec.LookPath(bazelPath)
-	if err == nil {
-		return p, nil
-	}
-	return exec.LookPath("etcd")
+	// StartTimeout, StopTimeout specify the time the Etcd is allowed to
+	// take when starting and stopping before an error is emitted.
+	//
+	// If not specified, these default to 20 seconds.
+	StartTimeout time.Duration
+	StopTimeout  time.Duration
+
+	// Out, Err specify where Etcd should write its StdOut, StdErr to.
+	//
+	// If not specified, the output will be discarded.
+	Out io.Writer
+	Err io.Writer
+
+	processState *internal.ProcessState
 }
 
-// getAvailablePort returns a TCP port that is available for binding.
-func getAvailablePort() (int, error) {
-	l, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return 0, errors.Wrapf(err, "Can't bind to port")
-	}
-	// It is possible but unlikely that someone else will bind this port
-	// before we get a chance to use it.
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// startEtcd executes an etcd instance. The returned function will signal the
-// etcd process and wait for it to exit.
-func startEtcd() (func(), error) {
-	etcdPath, err := getEtcdPath()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, installEtcd)
-		return nil, errors.Wrapf(err, "Can't find etcd in PATH")
-	}
-	etcdPort, err := getAvailablePort()
-	if err != nil {
-		return nil, err
-	}
-	etcdURL = fmt.Sprintf("http://127.0.0.1:%d", etcdPort)
-	klog.Infof("Starting etcd on %s", etcdURL)
-
-	etcdDataDir, err := ioutil.TempDir(os.TempDir(), "integration_test_etcd_data")
-	if err != nil {
-		return nil, errors.Wrapf(err, "Can't make temp etcd data dir")
-	}
-	klog.Infof("Storing etcd data in: %v", etcdDataDir)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(
-		ctx,
-		etcdPath,
-		"--data-dir", etcdDataDir,
-		"--listen-client-urls", etcdURL,
-		"--advertise-client-urls", etcdURL,
-		"--listen-peer-urls", "http://127.0.0.1:0",
-	)
-
-	// Uncomment these to see etcd output in test logs.
-	// For Metacontroller tests, we generally don't expect problems at this level.
-	//cmd.Stdout = os.Stdout
-	//cmd.Stderr = os.Stderr
-
-	stop := func() {
-		klog.Infof("Stopping etcd")
-		cancel()
-		err := cmd.Wait()
-		klog.Infof("etcd exit status: %v", err)
-		err = os.RemoveAll(etcdDataDir)
-		if err != nil {
-			klog.Warningf("Cleanup etcd failed: %v", err)
+// Start starts the etcd, waits for it to come up, and returns an error, if one
+// occoured.
+func (e *Etcd) Start() error {
+	if e.processState == nil {
+		if err := e.setProcessState(); err != nil {
+			return err
 		}
 	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, errors.Wrapf(err, "Failed to run etcd")
-	}
-	return stop, nil
+	return e.processState.Start(e.Out, e.Err)
 }
+
+func (e *Etcd) setProcessState() error {
+	var err error
+
+	e.processState = &internal.ProcessState{}
+
+	e.processState.DefaultedProcessInput, err = internal.DoDefaulting(
+		"etcd",
+		e.URL,
+		e.DataDir,
+		e.Path,
+		e.StartTimeout,
+		e.StopTimeout,
+	)
+	if err != nil {
+		return err
+	}
+
+	e.processState.StartMessage = internal.GetEtcdStartMessage(e.processState.URL)
+
+	e.URL = &e.processState.URL
+	e.DataDir = e.processState.Dir
+	e.Path = e.processState.Path
+	e.StartTimeout = e.processState.StartTimeout
+	e.StopTimeout = e.processState.StopTimeout
+
+	e.processState.Args, err = internal.RenderTemplates(
+		internal.DoEtcdArgDefaulting(e.Args), e,
+	)
+	return err
+}
+
+// Stop stops this process gracefully, waits for its termination, and cleans up
+// the DataDir if necessary.
+func (e *Etcd) Stop() error {
+	return e.processState.Stop()
+}
+
+// EtcdDefaultArgs exposes the default args for Etcd so that you
+// can use those to append your own additional arguments.
+//
+// The internal default arguments are explicitly copied here, we don't want to
+// allow users to change the internal ones.
+var EtcdDefaultArgs = append([]string{}, internal.EtcdDefaultArgs...)

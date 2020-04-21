@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
@@ -65,13 +66,16 @@ func TestSetStatusOnCR(t *testing.T) {
 	//
 	// NOTE:
 	// 	Targeted CustomResources will be set in this namespace
-	targetNamespace, err := f.GetTypedClientset().CoreV1().Namespaces().Create(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: targetNamespaceName,
+	targetNamespace, err := f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Create(
+			&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: targetNamespaceName,
+				},
 			},
-		},
-	)
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,15 +87,7 @@ func TestSetStatusOnCR(t *testing.T) {
 	// NOTE:
 	// 	This makes use of inline function as hook
 	sHook := func(req *generic.SyncHookRequest, resp *generic.SyncHookResponse) error {
-		if req == nil || req.Watch == nil {
-			t.Logf("Request does not have watch")
-			return nil
-		}
 
-		t.Logf("Request has watch: %v", req.Watch.GetName())
-		if resp == nil {
-			resp = &generic.SyncHookResponse{}
-		}
 		resp.Status = map[string]interface{}{
 			"phase": "Active",
 			"conditions": []string{
@@ -100,13 +96,13 @@ func TestSetStatusOnCR(t *testing.T) {
 			},
 		}
 
-		t.Logf("Sending response status %v", resp.Status)
+		klog.Infof("Sending response status %v", resp.Status)
 		return nil
 	}
 
 	// Add this sync hook implementation to inline hook registry
-	var testWatchStatusFuncName = "test/watch-status"
-	generic.AddToInlineRegistry(testWatchStatusFuncName, sHook)
+	var inlineHookName = "test/watch-status"
+	generic.AddToInlineRegistry(inlineHookName, sHook)
 
 	// ---------------------------------------------------------
 	// Define & Apply a GenericController i.e. a Meta Controller
@@ -121,7 +117,7 @@ func TestSetStatusOnCR(t *testing.T) {
 		ctlNS.Name,
 
 		// set sync hook
-		generic.WithInlinehookSyncFunc(k8s.StringPtr(testWatchStatusFuncName)),
+		generic.WithInlinehookSyncFunc(k8s.StringPtr(inlineHookName)),
 
 		// We want CoolNerd resource as our watched resource
 		generic.WithWatch(
@@ -145,11 +141,16 @@ func TestSetStatusOnCR(t *testing.T) {
 		"CoolNerd",
 		targetNamespace.GetName(),
 		targetResName,
-		framework.SetFinalizers([]string{"protect.abc.io", "protect.def.io"}),
+		framework.SetFinalizers(
+			[]string{
+				"protect.abc.io",
+				"protect.def.io",
+			},
+		),
 	)
 
 	// Need to wait & see if our controller works as expected
-	t.Logf("Waiting for verification of CoolNerd resource status")
+	klog.Infof("Waiting for verification of CoolNerd resource status")
 
 	err = f.Wait(func() (bool, error) {
 		var errs []error
@@ -157,21 +158,43 @@ func TestSetStatusOnCR(t *testing.T) {
 		// -------------------------------------------
 		// verify if our custom resources are deleted
 		// -------------------------------------------
-		cnObj, cpcGetErr := cnClient.Namespace(targetNamespaceName).Get(targetResName, metav1.GetOptions{})
+		cnObj, cpcGetErr := cnClient.
+			Namespace(targetNamespaceName).
+			Get(
+				targetResName,
+				metav1.GetOptions{},
+			)
 		if cpcGetErr != nil && !apierrors.IsNotFound(cpcGetErr) {
 			errs = append(
-				errs, errors.Wrapf(cpcGetErr, "Get CoolNerd %s failed", targetResName),
+				errs,
+				errors.Wrapf(
+					cpcGetErr,
+					"Get CoolNerd %s failed",
+					targetResName,
+				),
 			)
 		}
-		phase, _, _ :=
-			unstructured.NestedString(cnObj.UnstructuredContent(), "status", "phase")
+		phase, _, _ := unstructured.NestedString(
+			cnObj.UnstructuredContent(),
+			"status",
+			"phase",
+		)
 		if cnObj != nil && phase != "Active" {
-			errs = append(errs, errors.Errorf("CoolNerd status is not 'Active'"))
+			errs = append(
+				errs,
+				errors.Errorf("CoolNerd status is not 'Active'"),
+			)
 		}
-		conditions, _, _ :=
-			unstructured.NestedStringSlice(cnObj.UnstructuredContent(), "status", "conditions")
+		conditions, _, _ := unstructured.NestedStringSlice(
+			cnObj.UnstructuredContent(),
+			"status",
+			"conditions",
+		)
 		if cnObj != nil && len(conditions) != 2 {
-			errs = append(errs, errors.Errorf("CoolNerd conditions count is not 2"))
+			errs = append(
+				errs,
+				errors.Errorf("CoolNerd conditions count is not 2"),
+			)
 		}
 
 		// condition did not pass in case of any errors
@@ -186,5 +209,5 @@ func TestSetStatusOnCR(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Setting CoolNerd resource status failed: %v", err)
 	}
-	t.Logf("Setting CoolNerd resource status was successful")
+	klog.Infof("CoolNerd resource status was set successfully")
 }

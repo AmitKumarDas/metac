@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
@@ -70,13 +71,16 @@ func TestCleanUninstall(t *testing.T) {
 	//
 	// NOTE:
 	// 	Targeted CustomResources will be set in this namespace
-	targetNamespace, err := f.GetTypedClientset().CoreV1().Namespaces().Create(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: targetNamespaceName,
+	targetNamespace, err := f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Create(
+			&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: targetNamespaceName,
+				},
 			},
-		},
-	)
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,14 +92,24 @@ func TestCleanUninstall(t *testing.T) {
 	cpcCRD, cpcClient, _ := f.SetupClusterCRDAndItsCR(
 		"CStorPoolClaim",
 		targetResName,
-		framework.SetFinalizers([]string{"protect.abc.io", "protect.def.io"}),
+		framework.SetFinalizers(
+			[]string{
+				"protect.abc.io",
+				"protect.def.io",
+			},
+		),
 	)
 	// define a namespace scoped CStorVolumeReplica CRD & CR with finalizers
 	cvrCRD, cvrClient, _ := f.SetupNamespaceCRDAndItsCR(
 		"CStorVolumeReplica",
 		targetNamespace.GetName(),
 		targetResName,
-		framework.SetFinalizers([]string{"protect.xyz.io", "protect.ced.io"}),
+		framework.SetFinalizers(
+			[]string{
+				"protect.xyz.io",
+				"protect.ced.io",
+			},
+		),
 	)
 
 	// ------------------------------------------------------------
@@ -189,9 +203,10 @@ func TestCleanUninstall(t *testing.T) {
 			}
 		}
 
-		t.Logf(
+		klog.V(2).Infof(
 			"Finalize attachments count: Req %d: Resp %d",
-			req.Attachments.Len(), len(resp.Attachments),
+			req.Attachments.Len(),
+			len(resp.Attachments),
 		)
 
 		return json.Marshal(resp)
@@ -293,8 +308,13 @@ func TestCleanUninstall(t *testing.T) {
 	// updates the watch with its own finalizer if it finds a
 	// finalize hook in its specifications.
 	err = f.Wait(func() (bool, error) {
-		targetNamespace, err =
-			f.GetTypedClientset().CoreV1().Namespaces().Get(targetNamespaceName, metav1.GetOptions{})
+		targetNamespace, err = f.GetTypedClientset().
+			CoreV1().
+			Namespaces().
+			Get(
+				targetNamespaceName,
+				metav1.GetOptions{},
+			)
 		if err != nil {
 			return false, err
 		}
@@ -303,8 +323,10 @@ func TestCleanUninstall(t *testing.T) {
 				return true, nil
 			}
 		}
-		return false,
-			errors.Errorf("Namespace %s is not set with gctl finalizer", targetNamespaceName)
+		return false, errors.Errorf(
+			"Namespace %s is not set with gctl finalizer",
+			targetNamespaceName,
+		)
 
 	})
 	if err != nil {
@@ -325,7 +347,7 @@ func TestCleanUninstall(t *testing.T) {
 
 	// Need to wait & see if our controller works as expected
 	// Make sure the specified attachments are deleted
-	t.Logf("Waiting for deletion of CRs & CRDs")
+	klog.Infof("Waiting for deletion of CRs & CRDs")
 
 	err = f.Wait(func() (bool, error) {
 		var errs []error
@@ -336,14 +358,23 @@ func TestCleanUninstall(t *testing.T) {
 		cpc, cpcGetErr := cpcClient.Get(targetResName, metav1.GetOptions{})
 		if cpcGetErr != nil && !apierrors.IsNotFound(cpcGetErr) {
 			errs = append(
-				errs, errors.Wrapf(cpcGetErr, "Get CPC %s failed", targetResName),
+				errs,
+				errors.Wrapf(cpcGetErr, "Get CPC %s failed", targetResName),
 			)
 		}
 		if cpc != nil {
-			errs = append(errs, errors.Errorf("CPC %s is not deleted", targetResName))
+			errs = append(
+				errs,
+				errors.Errorf("CPC %s is not deleted", targetResName),
+			)
 		}
 
-		cvr, cvrGetErr := cvrClient.Namespace(targetNamespaceName).Get(targetResName, metav1.GetOptions{})
+		cvr, cvrGetErr := cvrClient.
+			Namespace(targetNamespaceName).
+			Get(
+				targetResName,
+				metav1.GetOptions{},
+			)
 		if cvrGetErr != nil && !apierrors.IsNotFound(cvrGetErr) {
 			errs = append(
 				errs,
@@ -351,14 +382,22 @@ func TestCleanUninstall(t *testing.T) {
 			)
 		}
 		if cvr != nil {
-			errs = append(errs, errors.Errorf("CVR %s is not deleted", targetResName))
+			errs = append(
+				errs,
+				errors.Errorf("CVR %s is not deleted", targetResName),
+			)
 		}
 
 		// ------------------------------------------
 		// verify if our target namespace is deleted
 		// ------------------------------------------
-		targetNSAgain, targetNSGetErr := f.GetTypedClientset().CoreV1().Namespaces().
-			Get(targetNamespace.GetName(), metav1.GetOptions{})
+		targetNSAgain, targetNSGetErr := f.GetTypedClientset().
+			CoreV1().
+			Namespaces().
+			Get(
+				targetNamespace.GetName(),
+				metav1.GetOptions{},
+			)
 		if targetNSGetErr != nil && !apierrors.IsNotFound(targetNSGetErr) {
 			errs = append(errs, targetNSGetErr)
 		}
@@ -366,7 +405,8 @@ func TestCleanUninstall(t *testing.T) {
 			errs = append(
 				errs,
 				errors.Errorf(
-					"Namespace %s has finalizers", targetNSAgain.GetName(),
+					"Namespace %s has finalizers",
+					targetNSAgain.GetName(),
 				),
 			)
 		}
@@ -374,7 +414,8 @@ func TestCleanUninstall(t *testing.T) {
 			errs = append(
 				errs,
 				errors.Errorf(
-					"Namespace %s is not marked for deletion", targetNSAgain.GetName(),
+					"Namespace %s is not marked for deletion",
+					targetNSAgain.GetName(),
 				),
 			)
 		}
@@ -391,5 +432,5 @@ func TestCleanUninstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CRs & CRDs deletion failed: %v", err)
 	}
-	t.Logf("CRs & CRDs were finalized / deleted successfully")
+	klog.Infof("CRs & CRDs were finalized / deleted successfully")
 }

@@ -25,6 +25,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/klog"
 
 	dynamicclientset "openebs.io/metac/dynamic/clientset"
 )
@@ -91,12 +92,13 @@ func (f *Fixture) SetupCRD(
 		},
 	}
 
-	f.t.Logf("Creating %s CRD", kind)
-
+	//f.t.Logf("Creating %s CRD", kind)
+	klog.V(2).Infof("Creating CRD %s", kind)
 	crd, err := f.crdClient.CustomResourceDefinitions().Create(crd)
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	klog.V(2).Infof("Created CRD %s", kind)
 
 	// add to teardown functions
 	f.addToTeardown(func() error {
@@ -107,32 +109,32 @@ func (f *Fixture) SetupCRD(
 		return f.crdClient.CustomResourceDefinitions().Delete(crd.Name, nil)
 	})
 
-	f.t.Logf("Discovering %s CRD server API", kind)
+	klog.V(2).Infof("Discovering %s API", kind)
 	err = f.Wait(func() (bool, error) {
-		return resourceManager.GetAPIForAPIVersionAndResource(APIVersion, plural) != nil, nil
+		return apiResourceDiscovery.GetAPIForAPIVersionAndResource(APIVersion, plural) != nil, nil
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.t.Logf("Discovered %s CRD server API", kind)
+	klog.V(2).Infof("Discovered %s API", kind)
 
-	crdClient, err := f.dynamicClientset.GetClientForAPIVersionResource(APIVersion, plural)
+	crClient, err := f.dynamicClientset.GetClientForAPIVersionResource(APIVersion, plural)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 
-	f.t.Logf("Listing CRDs")
+	klog.V(2).Infof("Listing CRs for %s", kind)
 	err = f.Wait(func() (bool, error) {
-		_, err := crdClient.List(metav1.ListOptions{})
+		_, err := crClient.List(metav1.ListOptions{})
 		return err == nil, err
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.t.Logf("Listed CRDs")
+	klog.V(2).Infof("Listed CRs for %s", kind)
 
-	f.t.Logf("Created %s CRD", kind)
-	return crd, crdClient
+	klog.V(2).Infof("Created CRD %s", kind)
+	return crd, crClient
 }
 
 // SetupNamespaceCRDAndItsCR will install a namespace scoped

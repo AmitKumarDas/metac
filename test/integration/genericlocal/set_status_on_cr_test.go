@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/klog"
 
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 	"openebs.io/metac/controller/generic"
@@ -57,12 +58,6 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 	// NOTE:
 	// 	This makes use of inline function as hook
 	sHook := func(req *generic.SyncHookRequest, resp *generic.SyncHookResponse) error {
-		if req == nil || req.Watch == nil {
-			t.Logf("Request does not have watch")
-			return nil
-		}
-
-		t.Logf("Request has watch: %s", req.Watch.GetName())
 		if resp == nil {
 			resp = &generic.SyncHookResponse{}
 		}
@@ -74,15 +69,14 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 				"RunFromLocalConfig",
 			},
 		}
+		// there are no attachments to be reconciled
 		resp.SkipReconcile = true
-
-		t.Logf("Sending response status %v", resp.Status)
 		return nil
 	}
 
 	// Add this sync hook implementation to inline hook registry
-	var testWatchStatusFuncName = "test/gctl-local-set-status-on-cr"
-	generic.AddToInlineRegistry(testWatchStatusFuncName, sHook)
+	var inlineHookName = "test/gctl-local-set-status-on-cr"
+	generic.AddToInlineRegistry(inlineHookName, sHook)
 
 	// ---------------------------------------------------------
 	// Define & Apply a GenericController i.e. a Meta Controller
@@ -96,7 +90,7 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 		ctlName,
 
 		// set sync hook
-		generic.WithInlinehookSyncFunc(k8s.StringPtr(testWatchStatusFuncName)),
+		generic.WithInlinehookSyncFunc(k8s.StringPtr(inlineHookName)),
 
 		// We want LocalNerd resource as our watched resource
 		generic.WithWatch(
@@ -112,9 +106,11 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 	)
 
 	// start metac that uses above GenericController instance as a config
-	stopMetac := f.StartMetacFromGenericControllerConfig(func() ([]*v1alpha1.GenericController, error) {
-		return []*v1alpha1.GenericController{gctlConfig}, nil
-	})
+	stopMetac := f.StartMetacFromGenericControllerConfig(
+		func() ([]*v1alpha1.GenericController, error) {
+			return []*v1alpha1.GenericController{gctlConfig}, nil
+		},
+	)
 	defer stopMetac()
 
 	// ---------------------------------------------------
@@ -123,13 +119,16 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 	//
 	// NOTE:
 	// 	Targeted CustomResources will be set in this namespace
-	targetNamespace, nsCreateErr := f.GetTypedClientset().CoreV1().Namespaces().Create(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: targetNamespaceName,
+	targetNamespace, nsCreateErr := f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Create(
+			&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: targetNamespaceName,
+				},
 			},
-		},
-	)
+		)
 	if nsCreateErr != nil {
 		t.Fatal(nsCreateErr)
 	}
@@ -147,7 +146,7 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 	)
 
 	// Need to wait & see if our controller works as expected
-	t.Logf("Waiting for verification of LocalNerd resource status")
+	klog.Infof("Will wait to verify LocalNerd status")
 
 	waitCondErr := f.Wait(func() (bool, error) {
 		var errs []error
@@ -155,25 +154,47 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 		// -------------------------------------------
 		// verify if our custom resources are set with status
 		// -------------------------------------------
-		lnObj, getLNErr := lnClient.Namespace(targetNamespaceName).Get(targetResName, metav1.GetOptions{})
+		lnObj, getLNErr := lnClient.
+			Namespace(targetNamespaceName).
+			Get(
+				targetResName,
+				metav1.GetOptions{},
+			)
 		if getLNErr != nil {
 			errs = append(
-				errs, errors.Wrapf(getLNErr, "Get LocalNerd %s failed", targetResName),
+				errs,
+				errors.Wrapf(
+					getLNErr,
+					"Get LocalNerd %s failed",
+					targetResName,
+				),
 			)
 		}
 
 		// verify phase
-		phase, _, _ :=
-			unstructured.NestedString(lnObj.UnstructuredContent(), "status", "phase")
+		phase, _, _ := unstructured.NestedString(
+			lnObj.UnstructuredContent(),
+			"status",
+			"phase",
+		)
 		if phase != "Active" {
-			errs = append(errs, errors.Errorf("LocalNerd status is not 'Active'"))
+			errs = append(
+				errs,
+				errors.Errorf("LocalNerd status is not 'Active'"),
+			)
 		}
 
 		// verify conditions
-		conditions, _, _ :=
-			unstructured.NestedStringSlice(lnObj.UnstructuredContent(), "status", "conditions")
+		conditions, _, _ := unstructured.NestedStringSlice(
+			lnObj.UnstructuredContent(),
+			"status",
+			"conditions",
+		)
 		if len(conditions) != 3 {
-			errs = append(errs, errors.Errorf("LocalNerd conditions count is not 3"))
+			errs = append(
+				errs,
+				errors.Errorf("LocalNerd conditions count is not 3"),
+			)
 		}
 
 		// condition did not pass in case of any errors
@@ -186,7 +207,10 @@ func TestLocalSetStatusOnCR(t *testing.T) {
 	})
 
 	if waitCondErr != nil {
-		t.Fatalf("Setting LocalNerd resource status failed: %v", waitCondErr)
+		t.Fatalf(
+			"Failed to set LocalNerd status: %v",
+			waitCondErr,
+		)
 	}
-	t.Logf("Setting LocalNerd resource status was successful")
+	klog.Infof("LocalNerd status was set successfully")
 }

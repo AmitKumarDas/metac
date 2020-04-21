@@ -25,19 +25,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/klog"
 
 	"openebs.io/metac/controller/decorator"
 	"openebs.io/metac/test/integration/framework"
 )
-
-// This will be run only once when go test is invoked against this package.
-// All the other TestXYZ functions will be invoked via m.Run call only.
-//
-// framework.TestMain provides setup & teardown features required for
-// all the individual testcases to run.
-func TestMain(m *testing.M) {
-	framework.TestWithCRDMetac(m.Run)
-}
 
 // TestSyncWebhook tests that the sync webhook triggers and passes the
 // request/response properly.
@@ -56,8 +48,14 @@ func TestSyncWebhook(t *testing.T) {
 	f.CreateNamespace(testName)
 
 	// Setup  namespace scoped CRDs
-	parentCRD, parentClient := f.SetupCRD("DCtlSyncParent", apiextensions.NamespaceScoped)
-	childCRD, childClient := f.SetupCRD("DCtlSyncChild", apiextensions.NamespaceScoped)
+	parentCRD, parentClient := f.SetupCRD(
+		"DCtlSyncParent",
+		apiextensions.NamespaceScoped,
+	)
+	childCRD, childClient := f.SetupCRD(
+		"DCtlSyncChild",
+		apiextensions.NamespaceScoped,
+	)
 
 	// define the "reconcile logic" i.e. sync hook logic here
 	hook := f.ServeWebhook(func(body []byte) ([]byte, error) {
@@ -92,28 +90,36 @@ func TestSyncWebhook(t *testing.T) {
 
 	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
 	unstructured.SetNestedStringMap(
-		parentResource.Object, labels, "spec", "selector", "matchLabels",
+		parentResource.Object,
+		labels,
+		"spec",
+		"selector",
+		"matchLabels",
 	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
-	_, err :=
-		parentClient.Namespace(testName).Create(parentResource, metav1.CreateOptions{})
+	_, err := parentClient.
+		Namespace(testName).
+		Create(
+			parentResource,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
 
-	t.Logf("Waiting for child sync")
+	klog.Infof("Waiting for child sync")
 	err = f.Wait(func() (bool, error) {
 		_, err =
 			childClient.Namespace(testName).Get(testName, metav1.GetOptions{})
@@ -122,7 +128,7 @@ func TestSyncWebhook(t *testing.T) {
 	if err != nil {
 		t.Errorf("Child sync failed: %v", err)
 	}
-	t.Logf("Child sync was successful")
+	klog.Infof("Child sync was successful")
 }
 
 // TestResyncAfter tests that the resyncAfterSeconds field works.
@@ -140,7 +146,8 @@ func TestResyncAfter(t *testing.T) {
 
 	f.CreateNamespace(testName)
 	parentCRD, parentClient := f.SetupCRD(
-		"DCtlResyncAfterParent", apiextensions.NamespaceScoped,
+		"DCtlResyncAfterParent",
+		apiextensions.NamespaceScoped,
 	)
 
 	var lastSync time.Time
@@ -188,10 +195,13 @@ func TestResyncAfter(t *testing.T) {
 
 	parentResource := framework.BuildUnstructObjFromCRD(parentCRD, testName)
 	unstructured.SetNestedStringMap(
-		parentResource.Object, labels, "spec", "selector", "matchLabels",
+		parentResource.Object,
+		labels,
+		"spec",
+		"selector", "matchLabels",
 	)
 
-	t.Logf(
+	klog.Infof(
 		"Creating %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
@@ -202,14 +212,14 @@ func TestResyncAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf(
+	klog.Infof(
 		"Created %s %s/%s",
 		parentResource.GetKind(),
 		parentResource.GetNamespace(),
 		parentResource.GetName(),
 	)
 
-	t.Logf("Waiting for status.elapsedSeconds to be reported")
+	klog.Infof("Waiting for status.elapsedSeconds to be reported")
 	var elapsedSeconds float64
 	err = f.Wait(func() (bool, error) {
 		parentResource, err :=
@@ -231,7 +241,7 @@ func TestResyncAfter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Didn't find status.elapsedSeconds: %v", err)
 	}
-	t.Logf("status.elapsedSeconds is %v", elapsedSeconds)
+	klog.Infof("status.elapsedSeconds is %v", elapsedSeconds)
 
 	if elapsedSeconds > 1.0 {
 		t.Errorf(

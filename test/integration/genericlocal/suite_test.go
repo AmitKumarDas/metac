@@ -17,28 +17,44 @@ limitations under the License.
 package genericlocal
 
 import (
+	"flag"
 	"testing"
 
+	"k8s.io/klog"
 	"openebs.io/metac/test/integration/framework"
 )
 
-// This will be run only once when go test is invoked against this
-// package. All the other Test* functions will be invoked via m.Run
-// call.
+// TestMain will run only once when go test is invoked
+// against this package. All the other Test* functions
+// will be invoked via m.Run call.
 //
 // NOTE:
-// 	`func TestMain(m *testing.M) {...}`
-// is the canonical golang way to execute the test functions
-// present in all *_test.go files in this package.
-//
-// NOTE:
-// 	framework.TestWithConfigMetac provides the common dependencies
-// like setup & teardown to let this test package run properly.
-//
-// NOTE:
-// 	Instead of directly invoking m.Run() where m is *testing.M this
-// function delegates to framework's TestWithConfigMetac which in
-// turn invokes m.Run()
+//	There can be only one TestMain function in the entire
+// package
 func TestMain(m *testing.M) {
-	framework.TestWithConfigMetac(m.Run)
+	flag.Parse()
+
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+
+	// Sync the glog and klog flags.
+	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
+		f2 := klogFlags.Lookup(f1.Name)
+		if f2 != nil {
+			value := f1.Value.String()
+			f2.Value.Set(value)
+		}
+	})
+
+	// Pass m.Run function to framework which in turn
+	// sets up a kubernetes environment & then invokes
+	// m.Run.
+	err := framework.StartConfigBasedMetac(m.Run)
+	if err != nil {
+		// Since this is an error we must to invoke os.Exit(1)
+		// as per TestMain guidelines
+		klog.Exitf("%+v", err)
+	}
+
+	defer klog.Flush()
 }
