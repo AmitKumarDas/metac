@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package decorator
+package configmode
 
 import (
 	"flag"
@@ -49,7 +49,7 @@ func TestMain(m *testing.M) {
 	// Pass m.Run function to framework which in turn
 	// sets up a kubernetes environment & then invokes
 	// m.Run.
-	err := framework.StartCRDBasedMetac(m.Run)
+	err := framework.StartConfigBasedMetacServer(m.Run)
 	if err != nil {
 		// Since this is an error we must to invoke os.Exit(1)
 		// as per TestMain guidelines

@@ -14,14 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package generic
+package configmode
 
 import (
 	"testing"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -33,52 +32,24 @@ import (
 	k8s "openebs.io/metac/third_party/kubernetes"
 )
 
-// TestSetStatusOnCR will verify if GenericController can be
+// TestLocalSetStatusOnCR will verify if GenericController can be
 // used to implement setting of status against the watched
 // resource
-func TestSetStatusOnCR(t *testing.T) {
-	// namespace to setup GenericController
-	ctlNSNamePrefix := "gctl-test"
+func TestLocalSetStatusOnCR(t *testing.T) {
 
 	// name of the GenericController
-	ctlName := "set-watch-status-gctrl"
+	ctlName := "set-status-on-cr-localgctrl"
 
-	// name of the target namespace which is deleted before
-	// starting the metacontroller
-	targetNamespaceName := "watch-status-ns"
+	// name of the target namespace
+	targetNamespaceName := "my-watch-cr"
 
 	// name of the target resource(s) that are created
 	// and are expected to get deleted upon deletion
 	// of target namespace
-	targetResName := "my-watch-stat"
+	targetResName := "my-cr"
 
 	f := framework.NewFixture(t)
 	defer f.TearDown()
-
-	// create namespace to setup GenericController resources
-	ctlNS := f.CreateNamespaceGen(ctlNSNamePrefix)
-
-	var err error
-
-	// ---------------------------------------------------
-	// Create the target namespace i.e. target under test
-	// ---------------------------------------------------
-	//
-	// NOTE:
-	// 	Targeted CustomResources will be set in this namespace
-	targetNamespace, err := f.GetTypedClientset().
-		CoreV1().
-		Namespaces().
-		Create(
-			&v1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: targetNamespaceName,
-				},
-			},
-		)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// ------------------------------------------------------------
 	// Define the "reconcile logic" for sync i.e. create/update event
@@ -87,21 +58,24 @@ func TestSetStatusOnCR(t *testing.T) {
 	// NOTE:
 	// 	This makes use of inline function as hook
 	sHook := func(req *generic.SyncHookRequest, resp *generic.SyncHookResponse) error {
-
+		if resp == nil {
+			resp = &generic.SyncHookResponse{}
+		}
 		resp.Status = map[string]interface{}{
 			"phase": "Active",
 			"conditions": []string{
 				"GenericController",
 				"InlineHookCall",
+				"RunFromLocalConfig",
 			},
 		}
-
-		klog.Infof("Sending response status %v", resp.Status)
+		// there are no attachments to be reconciled
+		resp.SkipReconcile = true
 		return nil
 	}
 
 	// Add this sync hook implementation to inline hook registry
-	var inlineHookName = "test/watch-status"
+	var inlineHookName = "test/gctl-local-set-status-on-cr"
 	generic.AddToInlineRegistry(inlineHookName, sHook)
 
 	// ---------------------------------------------------------
@@ -112,19 +86,18 @@ func TestSetStatusOnCR(t *testing.T) {
 	// a Kubernetes custom resource. It listens to the resource
 	// specified in the watch field and acts against the resources
 	// specified in the attachments field.
-	f.CreateGenericController(
+	gctlConfig := f.CreateGenericControllerAsMetacConfig(
 		ctlName,
-		ctlNS.Name,
 
 		// set sync hook
 		generic.WithInlinehookSyncFunc(k8s.StringPtr(inlineHookName)),
 
-		// We want CoolNerd resource as our watched resource
+		// We want LocalNerd resource as our watched resource
 		generic.WithWatch(
 			&v1alpha1.GenericControllerResource{
 				ResourceRule: v1alpha1.ResourceRule{
 					APIVersion: "test.metac.openebs.io/v1",
-					Resource:   "coolnerds",
+					Resource:   "localnerds",
 				},
 				// We are interested only for our custom resource
 				NameSelector: []string{targetResName},
@@ -132,68 +105,95 @@ func TestSetStatusOnCR(t *testing.T) {
 		),
 	)
 
+	// start metac that uses above GenericController instance as a config
+	stopMetac := f.StartMetacFromGenericControllerConfig(
+		func() ([]*v1alpha1.GenericController, error) {
+			return []*v1alpha1.GenericController{gctlConfig}, nil
+		},
+	)
+	defer stopMetac()
+
+	// ---------------------------------------------------
+	// Create the target namespace i.e. target under test
+	// ---------------------------------------------------
+	//
+	// NOTE:
+	// 	Targeted CustomResources will be set in this namespace
+	targetNamespace, nsCreateErr := f.GetTypedClientset().
+		CoreV1().
+		Namespaces().
+		Create(
+			&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: targetNamespaceName,
+				},
+			},
+		)
+	if nsCreateErr != nil {
+		t.Fatal(nsCreateErr)
+	}
+
 	// ------------------------------------------------------
 	// Create target CRD & CR to trigger above generic controller
 	// ------------------------------------------------------
 	//
 	// Create a namespace scoped CoolNerd CRD & CR with finalizers
-	_, cnClient, _ := f.SetupNamespaceCRDAndItsCR(
-		"CoolNerd",
+	_, lnClient, _ := f.SetupNamespaceCRDAndItsCR(
+		"LocalNerd",
 		targetNamespace.GetName(),
 		targetResName,
-		framework.SetFinalizers(
-			[]string{
-				"protect.abc.io",
-				"protect.def.io",
-			},
-		),
+		framework.SetFinalizers([]string{"protect.abc.io", "protect.def.io"}),
 	)
 
 	// Need to wait & see if our controller works as expected
-	klog.Infof("Waiting for verification of CoolNerd resource status")
+	klog.Infof("Will wait to verify LocalNerd status")
 
-	err = f.Wait(func() (bool, error) {
+	waitCondErr := f.Wait(func() (bool, error) {
 		var errs []error
 
 		// -------------------------------------------
-		// verify if our custom resources are deleted
+		// verify if our custom resources are set with status
 		// -------------------------------------------
-		cnObj, cpcGetErr := cnClient.
+		lnObj, getLNErr := lnClient.
 			Namespace(targetNamespaceName).
 			Get(
 				targetResName,
 				metav1.GetOptions{},
 			)
-		if cpcGetErr != nil && !apierrors.IsNotFound(cpcGetErr) {
+		if getLNErr != nil {
 			errs = append(
 				errs,
 				errors.Wrapf(
-					cpcGetErr,
-					"Get CoolNerd %s failed",
+					getLNErr,
+					"Get LocalNerd %s failed",
 					targetResName,
 				),
 			)
 		}
+
+		// verify phase
 		phase, _, _ := unstructured.NestedString(
-			cnObj.UnstructuredContent(),
+			lnObj.UnstructuredContent(),
 			"status",
 			"phase",
 		)
-		if cnObj != nil && phase != "Active" {
+		if phase != "Active" {
 			errs = append(
 				errs,
-				errors.Errorf("CoolNerd status is not 'Active'"),
+				errors.Errorf("LocalNerd status is not 'Active'"),
 			)
 		}
+
+		// verify conditions
 		conditions, _, _ := unstructured.NestedStringSlice(
-			cnObj.UnstructuredContent(),
+			lnObj.UnstructuredContent(),
 			"status",
 			"conditions",
 		)
-		if cnObj != nil && len(conditions) != 2 {
+		if len(conditions) != 3 {
 			errs = append(
 				errs,
-				errors.Errorf("CoolNerd conditions count is not 2"),
+				errors.Errorf("LocalNerd conditions count is not 3"),
 			)
 		}
 
@@ -206,8 +206,11 @@ func TestSetStatusOnCR(t *testing.T) {
 		return true, nil
 	})
 
-	if err != nil {
-		t.Fatalf("Setting CoolNerd resource status failed: %v", err)
+	if waitCondErr != nil {
+		t.Fatalf(
+			"Failed to set LocalNerd status: %v",
+			waitCondErr,
+		)
 	}
-	klog.Infof("CoolNerd resource status was set successfully")
+	klog.Infof("LocalNerd status was set successfully")
 }

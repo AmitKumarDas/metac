@@ -1,5 +1,6 @@
 PWD := ${CURDIR}
 PATH := $(PWD)/hack/bin:$(PATH)
+ASSETS_PATH := $(PWD)/test/integration/framework/assets/bin
 
 PACKAGE_NAME := openebs.io/metac
 API_GROUPS := metacontroller/v1alpha1
@@ -34,20 +35,17 @@ CONTROLLER_GEN := go run ./vendor/sigs.k8s.io/controller-tools/cmd/controller-ge
 
 all: manifests bins
 
+$(ALL_SRC): ;
+
+$(GIT_TAGS): ;
+
 bins: generated_files $(IMG_NAME)
 
 $(IMG_NAME): $(ALL_SRC)
+	@rm -f $(IMG_NAME)
 	@echo "+ Generating $(IMG_NAME) binary"
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 	  go build -mod=vendor -tags bins $(GO_FLAGS) -o $@ ./main.go
-
-$(ALL_SRC): ;
-
-# Code generators
-# https://github.com/kubernetes/community/blob/master/contributors/devel/api_changes.md#generate-code
-.PHONY: generated_files
-generated_files: vendor
-	@./hack/update-codegen.sh
 
 # Generate manifests e.g. CRD, RBAC etc.
 .PHONY: manifests
@@ -59,6 +57,12 @@ manifests: generated_files
 	@sed -i'' -e 's@annotations:@annotations:\n    "helm.sh/hook": crd-install@g' helm/metac/crds/*
 	@rm -rf manifests/crds
 
+# Code generators
+# https://github.com/kubernetes/community/blob/master/contributors/devel/api_changes.md#generate-code
+.PHONY: generated_files
+generated_files: vendor
+	@./hack/update-codegen.sh
+
 # go mod download modules to local cache
 # make vendored copy of dependencies
 # install other go binaries for code generation
@@ -69,7 +73,7 @@ vendor: go.mod go.sum
 	@go mod vendor
 
 .PHONY: image
-image:
+image: $(GIT_TAGS)
 	docker build -t $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION) .
 	docker build -t $(REGISTRY)/$(IMG_NAME):$(PACKAGE_VERSION)_debug -f Dockerfile.debug .
 
@@ -83,24 +87,40 @@ unit-test: generated_files
 	@go test -cover -i ${PKGS}
 	@go test -cover ${PKGS}
 
+# integration-dependencies ensures generation of manifests as 
+# well as metac binary.
+#
+# NOTE:
+# 	One can use metac binary in integration tests with webhooks
+# only. The tests that need to use inline hooks need to use the
+# source code itself.
 .PHONY: integration-dependencies
-integration-dependencies: manifests
+integration-dependencies: all
+	@rm -f $(ASSETS_PATH)/$(IMG_NAME)
+	@mv $(IMG_NAME) $(ASSETS_PATH)/$(IMG_NAME)
 	@./hack/get-kube-binaries.sh
 
 # Integration test makes use of kube-apiserver, etcd & kubectl
-# binaries. This does not require metac binary or docker image.
-# This can be run on one's laptop or Travis like CI environments.
+# binaries. One may optionally make use of metac binary. Use of
+# metac docker image is not required. This can be run on one's 
+# laptop or via docker build. This ensures integration tests
+# can be run on any CI environments like Travis, etc without the
+# need to have a full blown kubernetes setup.
 .PHONY: integration-test
 integration-test: integration-dependencies
 	@go test ./test/integration/... \
-		-v -timeout 5m -args --logtostderr --alsologtostderr -v=1
+		-v -timeout=10m -args --logtostderr --alsologtostderr -v=1
 
-.PHONY: integration-test-gctl
-integration-test-gctl: integration-dependencies
-	@go test ./test/integration/generic/... \
-		-v -timeout=5m -args --logtostderr --alsologtostderr -v=1
+# integration-test-crd-mode runs tests with metac loading 
+# metacontrollers as kubernetes custom resources
+.PHONY: integration-test-crd-mode
+integration-test-crd-mode: integration-dependencies
+	@go test ./test/integration/crd-mode/... \
+		-v -timeout=10m -args --logtostderr --alsologtostderr -v=1
 
-.PHONY: integration-test-local-gctl
-integration-test-local-gctl: integration-dependencies
-	@go test ./test/integration/genericlocal/... \
-		-v -timeout 5m -args --logtostderr --alsologtostderr -v=1
+# integration-test-local-gctl runs generic controller tests when 
+# metac makes use of metacontrollers as config files
+.PHONY: integration-test-config-mode
+integration-test-config-mode: integration-dependencies
+	@go test ./test/integration/config-mode/... \
+		-v -timeout=10m -args --logtostderr --alsologtostderr -v=1

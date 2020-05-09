@@ -17,7 +17,9 @@ limitations under the License.
 package framework
 
 import (
-	"path"
+	"flag"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -26,24 +28,30 @@ import (
 	"k8s.io/klog"
 	dynamicdiscovery "openebs.io/metac/dynamic/discovery"
 	"openebs.io/metac/server"
+	"openebs.io/metac/test/integration/framework/internal"
 )
 
-var apiResourceDiscovery *dynamicdiscovery.APIResourceDiscovery
+// These global variables are used in test functions to
+// invoke various kubernetes APIs
+var apiDiscovery *dynamicdiscovery.APIResourceDiscovery
 var apiServerConfig *rest.Config
 
 // manifestDir is the path from the integration test binary
-// working dir to the directory containing manifests to
-// install Metacontroller.
+// working dir to the directory containing metac manifests.
+// These manifests needs to be applied against the kubernetes
+// cluster before using metac.
 const manifestDir = "../../../manifests"
 
-// StartCRDBasedMetac sets up kubernetes environment by starting
-// kube apiserver & etcd binaries. Once the setup is done the test
-// case functions provided as arguments are executed.
-func StartCRDBasedMetac(testFns func() int) error {
+// StartCRDBasedMetacBinary sets up a kubernetes environment
+// by starting kube apiserver & etcd binaries. Once the setup
+// is up & running; metac artifacts are applied against this
+// cluster. Finally the test functions provided as arguments
+// are executed.
+func StartCRDBasedMetacBinary(testFns func() int) error {
 	klog.V(2).Infof("Will setup k8s")
 	cp := &ControlPlane{
-		StartTimeout: time.Second * 40,
-		StopTimeout:  time.Second * 40,
+		StartTimeout: time.Second * 60,
+		StopTimeout:  time.Second * 60,
 		// Uncomment below to debug
 		//Out: os.Stdout,
 		//Err: os.Stderr,
@@ -52,58 +60,115 @@ func StartCRDBasedMetac(testFns func() int) error {
 	if err != nil {
 		return err
 	}
+	defer cp.Stop()
 	klog.V(2).Infof("k8s was setup successfully")
 
-	// Create Metacontroller Namespace.
-	err = cp.KubeCtl().Run(
-		"apply",
-		"-f",
-		path.Join(
-			manifestDir,
+	klog.V(2).Infof("Will apply metac artifacts")
+	err = cp.KubeCtl().Apply(ApplyConfig{
+		Path: manifestDir,
+		YAMLFiles: []string{
 			"metacontroller-namespace.yaml",
-		),
-	)
-	if err != nil {
-		return errors.Wrapf(
-			err,
-			"Can't install metacontroller namespace",
-		)
-	}
-
-	// Install Metacontroller RBAC.
-	err = cp.KubeCtl().Run(
-		"apply",
-		"-f",
-		path.Join(
-			manifestDir,
 			"metacontroller-rbac.yaml",
-		),
-	)
-	if err != nil {
-		return errors.Wrapf(
-			err,
-			"Can't install metacontroller RBAC",
-		)
-	}
-
-	// Install Metacontroller CRDs.
-	err = cp.KubeCtl().Run(
-		"apply",
-		"-f",
-		path.Join(
-			manifestDir,
 			"metacontroller.yaml",
+		},
+	})
+	if err != nil {
+		return err
+	}
+	klog.V(2).Infof("Metac artifacts were applied successfully")
+
+	klog.V(2).Infof("Will start metac binary")
+	metacBinPath := internal.BinPathFinder("metac")
+	cmd := NewCommand(CommandConfig{
+		Err: os.Stderr,
+		Out: os.Stdout,
+	})
+	var allArgs []string
+	allArgs = append(
+		allArgs,
+		flag.Args()...,
+	)
+	allArgs = append(
+		allArgs,
+		fmt.Sprintf(
+			"-kube-apiserver-url=%s",
+			cp.APIURL().String(),
 		),
 	)
+	stop, err := cmd.Start(metacBinPath, allArgs...)
 	if err != nil {
-		return errors.Wrapf(
-			err,
-			"Can't install metacontroller CRDs",
-		)
+		return err
+	}
+	defer stop()
+	klog.V(2).Infof("Metac binary was started successfully")
+
+	// set the config to this global variable which is in turn
+	// used by the test functions
+	apiServerConfig, err = cp.GetRESTClientConfig()
+	if err != nil {
+		return err
 	}
 
-	// set the config to the global variable
-	apiServerConfig, err = cp.RESTClientConfig()
+	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
+		apiServerConfig,
+	)
+
+	// set api resource discovery to this global variable which
+	// is in turn used by the test functions
+	apiDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
+		discoveryClient,
+	)
+
+	// We don't care about stopping this cleanly since it has no
+	// external effects.
+	apiDiscovery.Start(500 * time.Millisecond)
+
+	// Run the actual tests now since setup is up & running
+	if exitCode := testFns(); exitCode != 0 {
+		return errors.Errorf(
+			"One or more tests failed: Exit code %d",
+			exitCode,
+		)
+	}
+	return nil
+}
+
+// StartCRDBasedMetacServer sets up a kubernetes environment
+// by starting kube apiserver & etcd binaries. Once the setup
+// is up & running; metac artifacts are applied against this
+// cluster. Finally the test functions provided as arguments
+// are executed.
+func StartCRDBasedMetacServer(testFns func() int) error {
+	klog.V(2).Infof("Will setup k8s")
+	cp := &ControlPlane{
+		StartTimeout: time.Second * 60,
+		StopTimeout:  time.Second * 60,
+		// Uncomment below to debug
+		//Out: os.Stdout,
+		//Err: os.Stderr,
+	}
+	err := cp.Start()
+	if err != nil {
+		return err
+	}
+	defer cp.Stop()
+	klog.V(2).Infof("k8s was setup successfully")
+
+	err = cp.KubeCtl().Apply(ApplyConfig{
+		Path: manifestDir,
+		YAMLFiles: []string{
+			"metacontroller-namespace.yaml",
+			"metacontroller-rbac.yaml",
+			"metacontroller.yaml",
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	// set the config to this global variable which
+	// is in turn used by the test functions
+	apiServerConfig, err = cp.GetRESTClientConfig()
 	if err != nil {
 		return err
 	}
@@ -120,7 +185,9 @@ func StartCRDBasedMetac(testFns func() int) error {
 			InformerRelist:    30 * time.Minute,
 		},
 	}
-	stop, err := metac.Start(5)
+	// Start with a single worker
+	// One worker should be sufficient for Integration Tests
+	stop, err := metac.Start(1)
 	if err != nil {
 		return errors.Wrapf(
 			err,
@@ -128,75 +195,23 @@ func StartCRDBasedMetac(testFns func() int) error {
 		)
 	}
 	defer stop()
-	klog.Info("Started CRD based metac server")
+	klog.V(2).Info("Started CRD based metac server")
 
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
 		apiServerConfig,
 	)
 
-	// set api resource discovery to global variable
-	apiResourceDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
+	// set api resource discovery to this global variable which
+	// is in turn used by the test functions
+	apiDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
 		discoveryClient,
 	)
 
 	// We don't care about stopping this cleanly since it has no
 	// external effects.
-	apiResourceDiscovery.Start(500 * time.Millisecond)
+	apiDiscovery.Start(500 * time.Millisecond)
 
-	// Run the actual tests now after above setup was done
-	// successfully
-	//
-	// NOTE:
-	//	We ignore the exit code & rely on the using t.Fatal
-	// statements if individual test cases fail or error out
-	// at runtime
-	//
-	// NOTE:
-	//	This always returns an exit code of 1 & hence a single
-	// word FAIL is printed at the end
-	testFns()
-
-	return nil
-}
-
-// StartConfigBasedMetac sets up kubernetes environment by starting
-// kube apiserver & etcd binaries. Once the setup is done the test
-// case functions provided as arguments are executed.
-func StartConfigBasedMetac(testFns func() int) error {
-	klog.V(2).Infof("Will setup k8s")
-	cp := &ControlPlane{
-		StartTimeout: time.Second * 40,
-		StopTimeout:  time.Second * 40,
-		// Uncomment below to debug
-		//Out: os.Stdout,
-		//Err: os.Stderr,
-	}
-	err := cp.Start()
-	if err != nil {
-		return err
-	}
-	klog.V(2).Infof("k8s was setup successfully")
-
-	// set the config to the global variable
-	apiServerConfig, err = cp.RESTClientConfig()
-	if err != nil {
-		return err
-	}
-
-	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
-		apiServerConfig,
-	)
-
-	// set api resource discovery to the global variable
-	apiResourceDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
-		discoveryClient,
-	)
-
-	// We don't care about stopping this cleanly since it has no
-	// external effects.
-	apiResourceDiscovery.Start(500 * time.Millisecond)
-
-	// Run the actual tests now after above setup was done
+	// Run the actual tests now since setup is up & running
 	// successfully
 	if exitCode := testFns(); exitCode != 0 {
 		return errors.Errorf(
@@ -205,5 +220,57 @@ func StartConfigBasedMetac(testFns func() int) error {
 		)
 	}
 
+	return nil
+}
+
+// StartConfigBasedMetacServer sets up kubernetes environment by
+// starting kube apiserver & etcd binaries. Once the setup is up
+// & running; test functions provided as arguments are executed.
+func StartConfigBasedMetacServer(testFns func() int) error {
+	klog.V(2).Infof("Will setup k8s")
+	cp := &ControlPlane{
+		StartTimeout: time.Second * 60,
+		StopTimeout:  time.Second * 60,
+
+		// Uncomment below to debug setup issues
+		//Out: os.Stdout,
+		//Err: os.Stderr,
+	}
+	err := cp.Start()
+	if err != nil {
+		return err
+	}
+	defer cp.Stop()
+	klog.V(2).Infof("k8s was setup successfully")
+
+	// set the config to this global variable which
+	// is in turn used by the test functions
+	apiServerConfig, err = cp.GetRESTClientConfig()
+	if err != nil {
+		return err
+	}
+
+	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
+		apiServerConfig,
+	)
+
+	// set api resource discovery to this global variable which
+	// is in turn used by the test functions
+	apiDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
+		discoveryClient,
+	)
+
+	// We don't care about stopping this cleanly since it has no
+	// external effects.
+	apiDiscovery.Start(500 * time.Millisecond)
+
+	// Run the actual tests now since setup is up & running
+	// successfully
+	if exitCode := testFns(); exitCode != 0 {
+		return errors.Errorf(
+			"One or more tests failed: Exit code %d",
+			exitCode,
+		)
+	}
 	return nil
 }

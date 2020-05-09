@@ -29,6 +29,49 @@ import (
 	"openebs.io/metac/apis/metacontroller/v1alpha1"
 )
 
+// unstructToTyped transforms the provided unstruct instance
+// to target type
+func unstructToTyped(
+	src *unstructured.Unstructured,
+	target interface{},
+) error {
+	if src == nil || src.UnstructuredContent() == nil {
+		return errors.Errorf(
+			"Failed to transform unstruct to typed: Nil unstruct",
+		)
+	}
+	if target == nil {
+		return errors.Errorf(
+			"Failed to transform unstruct to typed: Nil target",
+		)
+	}
+	return runtime.DefaultUnstructuredConverter.FromUnstructured(
+		src.UnstructuredContent(),
+		target,
+	)
+}
+
+// typedToUnstruct transforms the provided typed instance
+// to unstructured instance
+func typedToUnstruct(
+	typed interface{},
+) (*unstructured.Unstructured, error) {
+	if typed == nil {
+		return nil, errors.Errorf(
+			"Failed to transform typed to unstruct: Nil typed",
+		)
+	}
+	got, err := runtime.DefaultUnstructuredConverter.ToUnstructured(
+		typed,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &unstructured.Unstructured{
+		Object: got,
+	}, nil
+}
+
 // PrettyYml returns yaml formatted string corresponding
 // to the given object
 func PrettyYml(obj runtime.Object) string {
