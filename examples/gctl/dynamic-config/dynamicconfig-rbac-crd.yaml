@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dontpanic
+  namespace: dontpanic
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: dontpanic
+rules:
+- apiGroups: ["example.com"]
+  resources: ["dontpanics"]
+  verbs: ["get","watch", "update", "list"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: dontpanic
+subjects:
+- kind: ServiceAccount
+  name: dontpanic
+  namespace: dontpanic
+roleRef:
+  kind: ClusterRole
+  name: dontpanic
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: dontpanics.example.com
+spec:
+  group: example.com
+  version: v1
+  names:
+    kind: DontPanic
+    plural: dontpanics
+    singular: dontpanic
+  scope: Namespaced

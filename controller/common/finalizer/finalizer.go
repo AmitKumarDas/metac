@@ -18,6 +18,7 @@ limitations under the License.
 package finalizer
 
 import (
+	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -58,9 +59,15 @@ func (m *Finalizer) SyncObject(
 	// 	Enabled is typically set by the caller, when metacontroller
 	// specs has a finalizer hook
 	if m.Enabled {
-		// If the object is already pending deletion, we don't add the finalizer.
-		// We might have already removed it.
+		// If the object is already pending deletion, we don't add
+		// the finalizer. We might have already removed it.
 		if obj.GetDeletionTimestamp() != nil {
+			glog.V(6).Infof(
+				"Won't add finalizer %s: Resource %s %s is pending deletion",
+				m.Name,
+				obj.GetNamespace(),
+				obj.GetName(),
+			)
 			return obj, nil
 		}
 		return client.Namespace(obj.GetNamespace()).AddFinalizer(obj, m.Name)
@@ -72,13 +79,25 @@ func (m *Finalizer) SyncObject(
 // to manage children even though the parent is pending deletion
 // (i.e. finalize).
 func (m *Finalizer) ShouldFinalize(parent metav1.Object) bool {
-	// There's no point managing children if the parent has a GC finalizer,
-	// because we'd be fighting the GC.
+	// There's no point managing children if the parent has a
+	// GC finalizer, because we'd be fighting the GC.
 	if hasGCFinalizer(parent) {
+		glog.V(7).Infof(
+			"Resource has GC finalizer(s) %v: Resource %s %s",
+			parent.GetFinalizers(),
+			parent.GetNamespace(),
+			parent.GetName(),
+		)
 		return false
 	}
 	// If we already removed the finalizer, don't try to manage children anymore.
 	if !dynamicobject.HasFinalizer(parent, m.Name) {
+		glog.V(7).Infof(
+			"Finalizer %s not found: Resource %s %s",
+			m.Name,
+			parent.GetNamespace(),
+			parent.GetName(),
+		)
 		return false
 	}
 	return m.Enabled

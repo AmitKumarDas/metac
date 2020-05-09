@@ -101,19 +101,36 @@ type ClusterStatesControllerBase struct {
 type ClusterStatesController struct {
 	ClusterStatesControllerBase
 
-	// DynamicClientSet provides dynamic client(s) corresponding
-	// to resource(s)
+	// clientset to fetch dynamic client(s) corresponding to resource(s)
 	DynamicClientSet *dynamicclientset.Clientset
 
-	// Observed states _(i.e. resource states found in kubernetes cluster)_
+	// observed states _(i.e. resource states found in kubernetes cluster)_
 	Observed AnyUnstructRegistry
 
-	// Desired states _(i.e. to be applied against the kubernetes cluster)_
+	// desired states _(i.e. to apply against the kubernetes cluster)_
 	Desired AnyUnstructRegistry
 
-	// Various executioners required to execute apply
+	// resources that need to be deleted explicitly in the
+	// kubernetes cluster
+	//
+	// NOTE:
+	//	explicit deletes implies these resources can be deleted even
+	// if these were not created by this controller
+	ExplicitDeletes AnyUnstructRegistry
+
+	// resources that need to be updated explicitly in the
+	// kubernetes cluster
+	//
+	// NOTE:
+	//	explicit updates implies these resources can be updated even
+	// if these were not created by this controller
+	ExplicitUpdates AnyUnstructRegistry
+
+	// Various executioners required to arrive at desired states i.e. apply
 	DeleteFn         func() error
 	CreateOrUpdateFn func() error
+	ExplicitDeleteFn func() error
+	ExplicitUpdateFn func() error
 
 	// error as value
 	errs []error
@@ -138,24 +155,20 @@ func (m ClusterStatesController) String() string {
 	return strings.Join(strs, ": ")
 }
 
-// ControllerOption is a typed function used to
-// build Controller
-//
-// This follows "functional options" pattern
-type ControllerOption func(*ClusterStatesController) error
-
-// initDeleter sets this Controller with deleter logic that handles
-// deletion of resources across different api versions
+// initDeleter sets this controller with deleter logic that
+// handles deletion of resources across different api version
+// & kind combinations
 func (m *ClusterStatesController) initDeleter() {
 	var errs []error
 	var clusterStatesDeleter ClusterStatesDeleter
-	// delete is based on **observed states**
+	// delete is set only if there was corresponding
+	// **observed states**
 	//
 	// iterate to group resources by kind & apiVersion
 	for verkind, objects := range m.Observed {
 		apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
 		// get dynamic client corresponding to kind & apiversion
-		client, err := m.DynamicClientSet.GetClientForAPIVersionKind(
+		client, err := m.DynamicClientSet.GetClientForAPIVersionAndKind(
 			apiVersion,
 			kind,
 		)
@@ -163,9 +176,9 @@ func (m *ClusterStatesController) initDeleter() {
 			errs = append(errs, err)
 			continue
 		}
-		// create a resource controller for all the instances
-		// belonging to current api version
-		resCtrl := &ResourceStatesController{
+		// create an instance of delete controller capable
+		// of deleting resources of current api version & kind
+		resourceDeleteCtrl := &ResourceStatesController{
 			ClusterStatesControllerBase: m.ClusterStatesControllerBase,
 			DynamicClient:               client,
 			Observed:                    objects,
@@ -173,7 +186,7 @@ func (m *ClusterStatesController) initDeleter() {
 		}
 		clusterStatesDeleter = append(
 			clusterStatesDeleter,
-			resCtrl,
+			resourceDeleteCtrl,
 		)
 	}
 	// set deleter instance only if there were no errors
@@ -184,19 +197,71 @@ func (m *ClusterStatesController) initDeleter() {
 	}
 }
 
+// initExplicitDeleter sets this Controller with explicit deleter
+// logic that handles deletion of resources across different api
+// version & kind combinations
+func (m *ClusterStatesController) initExplicitDeleter() {
+	var errs []error
+	var clusterStatesExplicitDeleter ClusterStatesExplicitDeleter
+	// explicit delete is set only if it has corresponding
+	// **observed state**
+	//
+	// loop for every kind & apiVersion
+	for verkind, objects := range m.Observed {
+		apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
+		// get dynamic client corresponding to current kind & apiversion
+		client, err := m.DynamicClientSet.GetClientForAPIVersionAndKind(
+			apiVersion,
+			kind,
+		)
+		if err != nil {
+			errs = append(
+				errs,
+				errors.Wrapf(
+					err,
+					"Can't init explicit deleter: %s: %s",
+					verkind,
+					m,
+				),
+			)
+			continue
+		}
+		// create an instance of explicit delete controller
+		// capable of deleting resources of current api version & kind
+		explicitDeleteCtrl := &ResourceStatesController{
+			ClusterStatesControllerBase: m.ClusterStatesControllerBase,
+			DynamicClient:               client,
+			Observed:                    objects,
+			ExplicitDeletes:             m.ExplicitDeletes[verkind],
+		}
+		// add resource states deleter instance to cluster states deleter
+		clusterStatesExplicitDeleter = append(
+			clusterStatesExplicitDeleter,
+			explicitDeleteCtrl,
+		)
+	}
+	// set deleter instance only if there were no errors
+	if len(errs) == 0 {
+		m.ExplicitDeleteFn = clusterStatesExplicitDeleter.Delete
+	} else {
+		m.errs = append(m.errs, errs...)
+	}
+}
+
 // initCreateUpdater sets this Controller instance with a
-// create or updater logic that handles creation or updation
-// of resources across multiple api versions
+// create or updater logic that handles create or update
+// of resources across different api version & kind
+// combinations
 func (m *ClusterStatesController) initCreateUpdater() {
 	var errs []error
 	var clusterStatesCreateUpdater ClusterStatesCreateUpdater
-	// create or update is based on **desired states**
+	// create or update is set based on **desired states**
 	//
 	// iterate to group resources by kind & apiVersion
 	for verkind, objects := range m.Desired {
 		apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
 		// get dynamic client corresponding to resource kind & apiversion
-		client, err := m.DynamicClientSet.GetClientForAPIVersionKind(
+		client, err := m.DynamicClientSet.GetClientForAPIVersionAndKind(
 			apiVersion,
 			kind,
 		)
@@ -204,7 +269,10 @@ func (m *ClusterStatesController) initCreateUpdater() {
 			errs = append(errs, err)
 			continue
 		}
-		cu := &ResourceStatesController{
+		// create an instance of create-update controller
+		// capable of creating or deleting resources of
+		// current api version & kind
+		createUpdateCtrl := &ResourceStatesController{
 			ClusterStatesControllerBase: m.ClusterStatesControllerBase,
 			DynamicClient:               client,
 			Observed:                    m.Observed[verkind],
@@ -212,12 +280,71 @@ func (m *ClusterStatesController) initCreateUpdater() {
 		}
 		clusterStatesCreateUpdater = append(
 			clusterStatesCreateUpdater,
-			cu,
+			createUpdateCtrl,
 		)
 	}
 	// set create / updater instance only if there are no errors
 	if len(errs) == 0 {
 		m.CreateOrUpdateFn = clusterStatesCreateUpdater.CreateOrUpdate
+	} else {
+		m.errs = append(m.errs, errs...)
+	}
+}
+
+// initExplicitUpdater sets this Controller instance with
+// explicit updater logic that handles updates of resources
+// across different api version & kind combinations
+func (m *ClusterStatesController) initExplicitUpdater() {
+	var errs []error
+	var clusterStatesExplicitUpdater ClusterStatesExplicitUpdater
+
+	// loop over objects by their kind & apiVersion
+	for verkind, updates := range m.ExplicitUpdates {
+		observed := m.Observed[verkind]
+		if len(observed) == 0 {
+			// resources are not updated explicitly if
+			// they were never observed in the cluster
+			glog.V(6).Infof(
+				"Will skip init of explicit update: No resources observed for %s: %s",
+				verkind,
+				m,
+			)
+			continue
+		}
+		apiVersion, kind := ParseKeyToAPIVersionKind(verkind)
+		// get dynamic client corresponding to resource kind & apiversion
+		client, err := m.DynamicClientSet.GetClientForAPIVersionAndKind(
+			apiVersion,
+			kind,
+		)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		// explicit update controller capable of updating resources
+		// belonging to current api version & kind
+		explicitUpdateCtrl := &ResourceStatesController{
+			ClusterStatesControllerBase: m.ClusterStatesControllerBase,
+			DynamicClient:               client,
+			Observed:                    observed,
+			ExplicitUpdates:             updates,
+		}
+		// set UpdateAny to true to enable explicit update
+		//
+		// NOTE:
+		//	This is very important to **transform** Update into an
+		// ExplicitUpdate
+		explicitUpdateCtrl.UpdateAny = kubernetes.BoolPtr(true)
+		// add resource states explicit updater to
+		// cluster states explicit updater
+		clusterStatesExplicitUpdater = append(
+			clusterStatesExplicitUpdater,
+			explicitUpdateCtrl,
+		)
+	}
+	// set explicit updater instance only if there are no errors
+	if len(errs) == 0 {
+		m.ExplicitUpdateFn = clusterStatesExplicitUpdater.Update
 	} else {
 		m.errs = append(m.errs, errs...)
 	}
@@ -230,6 +357,12 @@ func (m *ClusterStatesController) initIfNil() {
 	}
 	if m.CreateOrUpdateFn == nil {
 		m.initCreateUpdater()
+	}
+	if m.ExplicitDeleteFn == nil {
+		m.initExplicitDeleter()
+	}
+	if m.ExplicitUpdateFn == nil {
+		m.initExplicitUpdater()
 	}
 	if m.IsWatchOwner == nil {
 		// defaults to set this watch as the owner of the
@@ -247,10 +380,14 @@ func (m *ClusterStatesController) Apply() error {
 	if len(m.errs) != 0 {
 		return utilerrors.NewAggregate(m.errs)
 	}
-	// execute deletes as part of apply
+	// execute deletes
 	m.errs = append(m.errs, m.DeleteFn())
-	// execute creates & updates as part of apply
+	// execute creates or updates
 	m.errs = append(m.errs, m.CreateOrUpdateFn())
+	// execute explicit updates
+	m.errs = append(m.errs, m.ExplicitUpdateFn())
+	// execute explicit deletes
+	m.errs = append(m.errs, m.ExplicitDeleteFn())
 	return utilerrors.NewAggregate(m.errs)
 }
 
@@ -259,18 +396,25 @@ func (m *ClusterStatesController) Apply() error {
 type ResourceStatesController struct {
 	ClusterStatesControllerBase
 
-	// Dynamic client to invoke kubernetes CRUD operations corresponding
-	// to a resource i.e. apiVersion & kind
+	// dynamic client to invoke kubernetes CRUD operations
+	// corresponding to a resource i.e. apiVersion & kind
 	DynamicClient *dynamicclientset.ResourceClient
 
-	// Group of observed & desired resources anchored by
-	// resource name.
+	// observed & desired resources anchored by name
 	//
 	// NOTE:
-	// 	Resources in these maps must have the **same**
-	// apiVersion & kind as that of the DynamicResourceClient
+	// 	These resources must have **same** api version & kind
+	// and should be possible to operate by above DynamicClient
 	Observed map[string]*unstructured.Unstructured
 	Desired  map[string]*unstructured.Unstructured
+
+	// explicit resources anchored by name
+	//
+	// NOTE:
+	//	These resources must have **same** api version & kind
+	// and should be possible to operate by above DynamicClient
+	ExplicitDeletes map[string]*unstructured.Unstructured
+	ExplicitUpdates map[string]*unstructured.Unstructured
 }
 
 // String implements Stringer interface
@@ -309,11 +453,7 @@ func (e *ResourceStatesController) update(
 	observed *unstructured.Unstructured,
 	desired *unstructured.Unstructured,
 ) (bool, error) {
-	// TODO (@amitkumardas):
-	//
-	// Should this be desired object's namespace or
-	// current object's namespace. Updating the namespace
-	// may not work just by taking up the desired object's namespace.
+	// use either desired namespace or watch namespace to update
 	ns := desired.GetNamespace()
 	if ns == "" {
 		ns = e.Watch.GetNamespace()
@@ -336,7 +476,7 @@ func (e *ResourceStatesController) update(
 		updateAny = *e.UpdateAny
 	}
 
-	// Check if this object was created due to a GenericController watch
+	// Check if this object was created due to the controller watch
 	observedAnns := observed.GetAnnotations()
 	currentWatchUID := string(e.Watch.GetUID())
 	createdByWatchUID := ""
@@ -522,7 +662,7 @@ func (e *ResourceStatesController) update(
 	return true, nil
 }
 
-// Create creates the provided resource in the kubernetes cluster
+// Create creates the desired resource in the kubernetes cluster
 func (e *ResourceStatesController) create(desired *unstructured.Unstructured) error {
 	ns := desired.GetNamespace()
 	if ns == "" {
@@ -619,8 +759,37 @@ func (e *ResourceStatesController) CreateOrUpdate() error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// Delete will delete the child resources based on observed
-// & owned child resources that are no longer desired
+// ExplicitUpdate will update the resources to their desired states.
+// This differs from **Update** call by ignoring the validation of
+// updating resources that were exclusively created by this controller.
+func (e *ResourceStatesController) ExplicitUpdate() error {
+	var errs []error
+	if len(e.Observed) == 0 {
+		glog.V(6).Infof(
+			"Will skip explicit update: No observed resources: %s",
+			e,
+		)
+		return nil
+	}
+	for name, dObj := range e.ExplicitUpdates {
+		oObj := e.Observed[name]
+		if oObj == nil {
+			// explicit update is ignored if this resource
+			// was never observed in kubernetes
+			continue
+		}
+		// -------------------------------------------
+		// try explicit update since object already exists
+		// -------------------------------------------
+		_, err := e.update(oObj, dObj)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// Delete will delete the resources that are no longer desired
 func (e *ResourceStatesController) Delete() error {
 	var errs []error
 
@@ -634,12 +803,15 @@ func (e *ResourceStatesController) Delete() error {
 		if obj.GetDeletionTimestamp() != nil {
 			// Skip objects that are already pending deletion.
 			glog.V(6).Infof(
-				"Can't delete %s: Pending deletion: %s",
-				e,
+				"Can't delete %s: Object pending deletion: %s",
 				DescObjectAsKey(obj),
+				e,
 			)
+			// try delete of other resources that are no longer desired
 			continue
 		}
+
+		// check if the observed state is no longer desired
 		if e.Desired == nil || e.Desired[name] == nil {
 			// check which watch created this resource in the first place
 			ann := obj.GetAnnotations()
@@ -660,6 +832,7 @@ func (e *ResourceStatesController) Delete() error {
 					deleteAny,
 					e,
 				)
+				// try delete of other resources that are no longer desired
 				continue
 			}
 
@@ -690,6 +863,7 @@ func (e *ResourceStatesController) Delete() error {
 						e,
 						err,
 					)
+					// try delete of other resources that are no longer desired
 					continue
 				}
 				errs = append(
@@ -701,6 +875,7 @@ func (e *ResourceStatesController) Delete() error {
 						e,
 					),
 				)
+				// try delete of other resources that are no longer desired
 				continue
 			}
 			glog.Infof(
@@ -713,11 +888,102 @@ func (e *ResourceStatesController) Delete() error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// ClusterStatesDeleter manages deletion of cluster resources
+// ExplicitDelete will delete the resources that are no
+// longer desired. This differs from **Delete** call by ignoring the
+// validation of deleting resources that were exclusively created
+// by this controller.
+func (e *ResourceStatesController) ExplicitDelete() error {
+	if len(e.ExplicitDeletes) == 0 {
+		// nothing to delete explicitly
+		return nil
+	}
+	var errs []error
+	for name, obj := range e.Observed {
+		if e.ExplicitDeletes[name] == nil {
+			// this resource is not meant to be deleted explicitly
+			continue
+		}
+		if obj.GetDeletionTimestamp() != nil {
+			// skip objects that are already pending deletion.
+			glog.V(6).Infof(
+				"Can't delete explicitly %s: Object pending deletion: %s",
+				DescObjectAsKey(obj),
+				e,
+			)
+			// try explicit delete of other listed resources
+			continue
+		}
+		// observed object is listed for explicit delete.
+		glog.V(4).Infof(
+			"Will explicitly delete %s: %s",
+			DescObjectAsKey(obj),
+			e,
+		)
+		uid := obj.GetUID()
+		// Explicitly request deletion propagation, which is what
+		// users expect, since some objects default to orphaning
+		// for backwards compatibility.
+		propagation := metav1.DeletePropagationBackground
+		err := e.DynamicClient.Namespace(obj.GetNamespace()).Delete(
+			obj.GetName(),
+			&metav1.DeleteOptions{
+				Preconditions:     &metav1.Preconditions{UID: &uid},
+				PropagationPolicy: &propagation,
+			},
+		)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				glog.V(4).Infof(
+					"Can't explicitly delete %s: IsNotFound: %s: %v",
+					DescObjectAsKey(obj),
+					e,
+					err,
+				)
+				// try explicit delete of other listed resources
+				continue
+			}
+			errs = append(
+				errs,
+				errors.Wrapf(
+					err,
+					"Failed to delete explicitly %s: %s",
+					DescObjectAsKey(obj),
+					e,
+				),
+			)
+			// try explicit delete of other listed resources
+			continue
+		}
+		glog.Infof(
+			"Explicitly deleted %s: %s",
+			DescObjectAsKey(obj),
+			e,
+		)
+
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// ClusterStatesExplicitDeleter deletes cluster resources that
+// spans **one or more** api versions & kinds
+type ClusterStatesExplicitDeleter []*ResourceStatesController
+
+// Delete will delete the configured cluster resources that were
+// not created by this controller
+func (list ClusterStatesExplicitDeleter) Delete() error {
+	var errs []error
+	for _, deleter := range list {
+		err := deleter.ExplicitDelete()
+		errs = append(errs, err)
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// ClusterStatesDeleter deletes cluster resources that
+// spans one or more api versions & kinds
 type ClusterStatesDeleter []*ResourceStatesController
 
-// Delete will delete all the attachment resources available in
-// this instance
+// Delete will delete the configured cluster resources
 func (list ClusterStatesDeleter) Delete() error {
 	var errs []error
 	for _, deleter := range list {
@@ -727,15 +993,31 @@ func (list ClusterStatesDeleter) Delete() error {
 	return utilerrors.NewAggregate(errs)
 }
 
-// ClusterStatesCreateUpdater manages create or update of cluster
-// resources
+// ClusterStatesCreateUpdater creates or updates cluster
+// resources that spans one or more api versions & kinds
 type ClusterStatesCreateUpdater []*ResourceStatesController
 
-// CreateOrUpdate will create or update the attachment resources
+// CreateOrUpdate will create or update the configured
+// cluster resources
 func (list ClusterStatesCreateUpdater) CreateOrUpdate() error {
 	var errs []error
 	for _, createUpdater := range list {
 		err := createUpdater.CreateOrUpdate()
+		errs = append(errs, err)
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// ClusterStatesExplicitUpdater updates cluster resources that
+// were not created by this controller
+type ClusterStatesExplicitUpdater []*ResourceStatesController
+
+// Update will update the configured cluster resources that were
+// not created by this controller
+func (list ClusterStatesExplicitUpdater) Update() error {
+	var errs []error
+	for _, updater := range list {
+		err := updater.ExplicitUpdate()
 		errs = append(errs, err)
 	}
 	return utilerrors.NewAggregate(errs)

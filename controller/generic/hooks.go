@@ -59,6 +59,34 @@ type SyncHookResponse struct {
 	// desired state of all attachments
 	Attachments []*unstructured.Unstructured `json:"attachments"`
 
+	// attachments that were not created by this controller but
+	// still need to be updated
+	//
+	// NOTE:
+	//	This provides granular control to hook implementers by
+	// adding specific resource instances to this list. This is
+	// similar to more generic **UpdateAny** tunable found in
+	// GenericController's spec.
+	//
+	// NOTE:
+	//	UpdateAny tunable grants permission to update resource of
+	// all kinds that were not created by this controller.
+	ExplicitUpdates []*unstructured.Unstructured `json:"explicitUpdates"`
+
+	// attachments that were not created by this controller but
+	// still need to be deleted
+	//
+	// NOTE:
+	//	This provides granular control to hook implementers by
+	// adding specific resource instances to this list. This is
+	// similar to more generic **DeleteAny** tunable found in
+	// GenericController's spec.
+	//
+	// NOTE:
+	//	DeleteAny tunable grants permission to delete resource of
+	// all kinds that were not created by this controller.
+	ExplicitDeletes []*unstructured.Unstructured `json:"explicitDeletes"`
+
 	// indicate the controller if a resync is required after
 	// the specified interval
 	ResyncAfterSeconds float64 `json:"resyncAfterSeconds"`

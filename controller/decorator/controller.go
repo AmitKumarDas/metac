@@ -244,7 +244,7 @@ func (c *decoratorController) Start(workerCount int) {
 		defer glog.Infof("Shutting down DecoratorController %v", c.schema.Name)
 
 		// Wait for dynamic client and all informers.
-		glog.Infof("Waiting for DecoratorController %v caches to sync", c.schema.Name)
+		glog.V(7).Infof("Waiting for DecoratorController %v caches to sync", c.schema.Name)
 		syncFuncs := make(
 			[]cache.InformerSynced,
 			0,
@@ -264,7 +264,7 @@ func (c *decoratorController) Start(workerCount int) {
 			return
 		}
 
-		glog.Infof("Starting %d workers for %v", workerCount, c.schema.Name)
+		glog.V(5).Infof("Starting %d workers for %v", workerCount, c.schema.Name)
 		var wg sync.WaitGroup
 		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
@@ -574,7 +574,7 @@ func (c *decoratorController) syncParentObject(parent *unstructured.Unstructured
 	)
 
 	parentClient, err :=
-		c.dynCliSet.GetClientForAPIVersionKind(parent.GetAPIVersion(), parent.GetKind())
+		c.dynCliSet.GetClientForAPIVersionAndKind(parent.GetAPIVersion(), parent.GetKind())
 	if err != nil {
 		return errors.Wrapf(
 			err,

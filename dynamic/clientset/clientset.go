@@ -65,9 +65,9 @@ func (cs *Clientset) HasSynced() bool {
 	return cs.discoveryManager.HasSynced()
 }
 
-// GetClientForAPIVersionResource returns the dynamic client for
+// GetClientForAPIVersionAndResource returns the dynamic client for
 // the given apiversion & resource name _(i.e. plural of kind)_
-func (cs *Clientset) GetClientForAPIVersionResource(
+func (cs *Clientset) GetClientForAPIVersionAndResource(
 	apiVersion string,
 	resource string,
 ) (*ResourceClient, error) {
@@ -86,9 +86,9 @@ func (cs *Clientset) GetClientForAPIVersionResource(
 	return cs.getClientForAPIResource(apiResource), nil
 }
 
-// GetClientForAPIVersionKind returns the dynamic client for the given
+// GetClientForAPIVersionAndKind returns the dynamic client for the given
 // apiversion & kind
-func (cs *Clientset) GetClientForAPIVersionKind(
+func (cs *Clientset) GetClientForAPIVersionAndKind(
 	apiVersion string,
 	kind string,
 ) (*ResourceClient, error) {

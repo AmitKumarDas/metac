@@ -312,7 +312,7 @@ type ReferenceSelectorRequirement struct {
 	//
 	// NOTE:
 	//	Value at these field paths should be of string type.
-	Operator ReferenceSelectorOperator `json:"operator"`
+	Operator ReferenceSelectorOperator `json:"operator,omitempty"`
 }
 
 // ReferenceSelectorOperator is a set of supported operators that is

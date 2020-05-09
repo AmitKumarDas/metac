@@ -52,11 +52,17 @@ var (
 		":9999",
 		"The address to bind the debug http endpoints",
 	)
+	kubeAPIServerURL = flag.String(
+		"kube-apiserver-url",
+		"",
+		`Kubernetes api server url (same format as used by kubectl).
+		If not specified, uses in-cluster config`,
+	)
 	clientConfigPath = flag.String(
 		"client-config-path",
 		"",
-		`Path to kubeconfig file (same format as used by kubectl); 
-		if not specified, uses in-cluster config`,
+		`Path to kubeconfig file (same format as used by kubectl).
+		If not specified, uses in-cluster config`,
 	)
 	workerCount = flag.Int(
 		"workers-count",
@@ -76,13 +82,13 @@ var (
 	runAsLocal = flag.Bool(
 		"run-as-local",
 		false,
-		`When true it enables metac to run by looking up its config file;
+		`When true it enables metac to run by looking up its config file.
 		 Metac will no longer be dependent on its CRDs and CRs`,
 	)
 	metacConfigPath = flag.String(
 		"metac-config-path",
 		"/etc/config/metac/",
-		`Path to metac config file to let metac run as a self contained binary;
+		`Path to metac config file to let metac run as a self contained binary.
 		 Needs run-as-local set to true`,
 	)
 )
@@ -99,10 +105,13 @@ func Start() {
 	var config *rest.Config
 	var err error
 	if *clientConfigPath != "" {
-		glog.Infof("Using kubeconfig %v", *clientConfigPath)
+		glog.Infof("Using kubeconfig %s", *clientConfigPath)
 		config, err = clientcmd.BuildConfigFromFlags("", *clientConfigPath)
+	} else if *kubeAPIServerURL != "" {
+		glog.Infof("Using kubernetes api server url %s", *kubeAPIServerURL)
+		config, err = clientcmd.BuildConfigFromFlags(*kubeAPIServerURL, "")
 	} else {
-		glog.Info("No kubeconfig file specified: Trying in-cluster auto-config")
+		glog.Info("Using in-cluster kubeconfig")
 		config, err = rest.InClusterConfig()
 	}
 	if err != nil {
