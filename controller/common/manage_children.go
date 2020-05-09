@@ -315,7 +315,7 @@ func ManageChildren(
 	// Delete observed, owned objects that are not desired.
 	for key, objects := range observedChildren {
 		apiVersion, kind := ParseKeyToAPIVersionKind(key)
-		client, err := dynClient.GetClientForAPIVersionKind(apiVersion, kind)
+		client, err := dynClient.GetClientForAPIVersionAndKind(apiVersion, kind)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -329,7 +329,7 @@ func ManageChildren(
 	// Create or update desired objects.
 	for key, objects := range desiredChildren {
 		apiVersion, kind := ParseKeyToAPIVersionKind(key)
-		client, err := dynClient.GetClientForAPIVersionKind(apiVersion, kind)
+		client, err := dynClient.GetClientForAPIVersionAndKind(apiVersion, kind)
 		if err != nil {
 			errs = append(errs, err)
 			continue

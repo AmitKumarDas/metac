@@ -288,7 +288,6 @@ spec:
                                     type: string
                                 required:
                                 - key
-                                - operator
                                 type: object
                               type: array
                             matchSlice:
@@ -824,7 +823,6 @@ spec:
                                   type: string
                               required:
                               - key
-                              - operator
                               type: object
                             type: array
                           matchSlice:

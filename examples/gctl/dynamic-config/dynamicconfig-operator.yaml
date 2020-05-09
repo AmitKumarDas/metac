@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.metac.io/name: dynamicconfig
+  name: dynamicconfig
+  namespace: dynamicconfig
+spec:
+  replicas: 1
+  serviceName: ""
+  selector:
+    matchLabels:
+      app.metac.io/name: dynamicconfig
+  template:
+    metadata:
+      labels:
+        app.metac.io/name: dynamicconfig
+    spec:
+      serviceAccountName: dynamicconfig
+      containers:
+      - name: dynamicconfig
+        image: localhost:5000/dynamicconfig:latest # local registry
+        command: ["/dynamicconfig"]
+        args:
+        - --logtostderr
+        - --run-as-local
+        - --workers-count=1 # number of workers per controller
+        - --discovery-interval=40s
+        - --cache-flush-interval=240s # re-sync interval
+        - -v=5
+---

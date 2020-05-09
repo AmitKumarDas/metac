@@ -61,7 +61,11 @@ func NewInvoker(opts ...InvokerOption) (*Invoker, error) {
 
 // String implements Stringer interface
 func (i *Invoker) String() string {
-	return fmt.Sprintf("Webhook Invoker: URL=%s: Timeout=%s", i.URL, i.Timeout)
+	return fmt.Sprintf(
+		"Webhook Invoker: URL=%s: Timeout=%s",
+		i.URL,
+		i.Timeout,
+	)
 }
 
 // Invoke this webhook by passing the given request
@@ -70,32 +74,55 @@ func (i *Invoker) Invoke(request, response interface{}) error {
 	// Encode request.
 	reqBody, err := json.Marshal(request)
 	if err != nil {
-		return errors.Wrapf(err, "%s: Failed to marshal", i)
+		return errors.Wrapf(
+			err,
+			"%s: Failed to marshal",
+			i,
+		)
 	}
-	if glog.V(6) {
-		reqBodyIndent, _ := gojson.MarshalIndent(request, "", "  ")
-		glog.Infof("%s: Will invoke %q", i, reqBodyIndent)
+	if glog.V(8) {
+		reqBodyIndent, _ := gojson.MarshalIndent(request, " ", ".")
+		glog.Infof(
+			"%s: Will invoke %s",
+			i,
+			reqBodyIndent,
+		)
 	}
 
 	// Send request.
 	client := &http.Client{Timeout: i.Timeout}
-	resp, err := client.Post(i.URL, "application/json", bytes.NewReader(reqBody))
+	resp, err := client.Post(
+		i.URL,
+		"application/json",
+		bytes.NewReader(reqBody),
+	)
 	if err != nil {
-		return errors.Wrapf(err, "%s: Failed to invoke", i)
+		return errors.Wrapf(
+			err,
+			"%s: Failed to invoke",
+			i,
+		)
 	}
 	defer resp.Body.Close()
 
 	// Read response.
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrapf(err, "%s: Failed to read response", i)
+		return errors.Wrapf(
+			err,
+			"%s: Failed to read response",
+			i,
+		)
 	}
-	glog.V(6).Infof("%s: Got response %q", i, respBody)
+	glog.V(8).Infof("%s: Got response %q", i, respBody)
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
 		return errors.Errorf(
-			"%s: Response status is not OK: Got %d: Response %q", i, resp.StatusCode, respBody,
+			"%s: Response status is not OK: Got %d: Response %q",
+			i,
+			resp.StatusCode,
+			respBody,
 		)
 	}
 
@@ -104,6 +131,6 @@ func (i *Invoker) Invoke(request, response interface{}) error {
 		return errors.Wrapf(err, "%s: Failed to unmarshal response", i)
 	}
 
-	glog.V(6).Infof("%s: Invoked successfully", i)
+	glog.V(8).Infof("%s: Invoked successfully", i)
 	return nil
 }

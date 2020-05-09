@@ -31,6 +31,12 @@ func Int32Ptr(i int32) *int32 {
 	return &o
 }
 
+// IntPtr returns a pointer to the given int
+func IntPtr(i int) *int {
+	o := i
+	return &o
+}
+
 // StringPtr returns a pointer to the given string
 func StringPtr(s string) *string {
 	o := s

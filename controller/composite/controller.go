@@ -79,7 +79,7 @@ func newParentController(
 	api *v1alpha1.CompositeController,
 ) (pc *parentController, newErr error) {
 	// Make a dynamic client for the parent resource.
-	parentClient, err := dynClientSet.GetClientForAPIVersionResource(
+	parentClient, err := dynClientSet.GetClientForAPIVersionAndResource(
 		api.Spec.ParentResource.APIVersion,
 		api.Spec.ParentResource.Resource,
 	)
@@ -215,8 +215,9 @@ func (pc *parentController) Start(workerCount int) {
 		defer glog.Infof("Shutting down CompositeController %s", pc)
 
 		// Wait for dynamic client and all informers.
-		glog.Infof(
-			"CompositeController %s waiting for caches to sync", pc,
+		glog.V(7).Infof(
+			"Waiting for caches to sync: %s",
+			pc,
 		)
 
 		syncFuncs := make([]cache.InformerSynced, 0, 2+len(pc.api.Spec.ChildResources))
@@ -245,7 +246,7 @@ func (pc *parentController) Start(workerCount int) {
 			return
 		}
 
-		glog.Infof("Starting %d workers for %s", workerCount, pc)
+		glog.V(5).Infof("Starting %d workers for %s", workerCount, pc)
 		var wg sync.WaitGroup
 		for i := 0; i < workerCount; i++ {
 			wg.Add(1)
@@ -812,7 +813,7 @@ func (pc *parentController) claimChildren(
 		// List all objects of the child kind in the parent object's namespace,
 		// or in all namespaces if the parent is cluster-scoped.
 		childClient, err :=
-			pc.dynClientSet.GetClientForAPIVersionResource(child.APIVersion, child.Resource)
+			pc.dynClientSet.GetClientForAPIVersionAndResource(child.APIVersion, child.Resource)
 		if err != nil {
 			return nil, err
 		}

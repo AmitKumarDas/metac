@@ -1,0 +1,24 @@
+apiVersion: metac.openebs.io/v1alpha1
+kind: GenericController
+metadata:
+  name: dynamicconfig-controller
+spec:
+  updateAny: true
+  watch:
+    apiVersion: example.com/v1
+    resource: dynamicconfigs
+  attachments:
+  - apiVersion: example.com/v1
+    resource: dynamicconfigs
+    advancedSelector:
+      selectorTerms:
+      - matchReferenceExpressions:
+        # select IAmError if its annotation
+        #
+        # matches DontPanic _(i.e. watch)_ UID
+        - key: metadata.annotations.dynamicconfig/uid
+          operator: EqualsWatchUID
+  hooks:
+    sync:
+      inline:
+        funcName: sync/dynamicconfig

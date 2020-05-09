@@ -1,5 +1,6 @@
 /*
 Copyright 2018 Google Inc.
+Copyright 2020 The MayaData Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,25 +47,26 @@ type AnyUnstructRegistry map[string]map[string]*unstructured.Unstructured
 
 // String implements Stringer interface
 func (m AnyUnstructRegistry) String() string {
-	var message []string
-	title := "unstructs:-"
+	var details []string
+	var count int
 	for vk, group := range m {
-		for nsname, obj := range group {
-			message = append(
-				message,
+		for nsname := range group {
+			details = append(
+				details,
 				fmt.Sprintf(
-					"  %s: %s: %s",
+					"- %s: %s",
 					vk,
 					nsname,
-					obj.GetUID(),
 				),
 			)
+			count++
 		}
 	}
+	title := fmt.Sprintf("%d objects found", count)
 	return fmt.Sprintf(
-		"%s\n%s",
+		"%s\n\t%s",
 		title,
-		strings.Join(message, "\n"),
+		strings.Join(details, "\n"),
 	)
 }
 
@@ -464,8 +466,8 @@ func makeKeyFromAPIGroupKind(apiGroup, kind string) string {
 // anchored by apiversion and resource name (i.e. plural format of kind)
 type ResourceInformerRegistrar map[string]*dynamicinformer.ResourceInformer
 
-// Set registers the given informer object based on the given version
-// and resource
+// Set registers the given informer by mapping it against the
+// given version and resource
 func (m ResourceInformerRegistrar) Set(
 	apiVersion string,
 	resource string,
@@ -474,8 +476,7 @@ func (m ResourceInformerRegistrar) Set(
 	m[makeKeyFromAPIVersionResource(apiVersion, resource)] = informer
 }
 
-// Get returns the informer instance from the registrar based on the
-// given version and resource
+// Get returns the informer corresponding to given version and resource
 func (m ResourceInformerRegistrar) Get(
 	apiVersion string,
 	resource string,
@@ -483,8 +484,7 @@ func (m ResourceInformerRegistrar) Get(
 	return m[makeKeyFromAPIVersionResource(apiVersion, resource)]
 }
 
-// makeKeyFromAPIVersionResource returns the string format of given
-// apiVersion and resource
+// build the string key from given apiVersion and resource
 func makeKeyFromAPIVersionResource(apiVersion, resource string) string {
 	return fmt.Sprintf("%s.%s", resource, apiVersion)
 }
