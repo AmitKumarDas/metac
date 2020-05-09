@@ -18,6 +18,7 @@ package framework
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func NewFixture(t *testing.T) *Fixture {
 	}
 	dynamicClientset, err := dynamicclientset.New(
 		apiServerConfig,
-		apiResourceDiscovery,
+		apiDiscovery,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -169,12 +170,39 @@ func (f *Fixture) TearDown() {
 	for i := len(f.teardownFuncs) - 1; i >= 0; i-- {
 		teardown := f.teardownFuncs[i]
 		err := teardown()
-		if err != nil && !apierrors.IsNotFound(err) {
-			f.t.Logf("Teardown %d failed: %v", i, err)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				klog.Infof(
+					"Teardown ignored: Resource deleted already: %+v",
+					err,
+				)
+				continue
+			}
+			if apierrors.IsConflict(err) {
+				klog.Infof(
+					"Teardown ignored: Conflict: %+v",
+					err,
+				)
+				continue
+			}
+			klog.Infof(
+				"Teardown failed: %s: %+v",
+				apierrors.ReasonForError(err),
+				err,
+			)
 			// Mark the test as failed, but continue trying to tear down.
 			f.t.Fail()
 		}
 	}
+}
+
+// Waitf if a formatted invocation of Wait call
+func (f *Fixture) Waitf(
+	condition func() (bool, error),
+	message string,
+	format ...interface{},
+) error {
+	return f.Wait(condition, fmt.Sprintf(message, format...))
 }
 
 // Wait polls the condition until it's true, with a default interval
@@ -188,30 +216,45 @@ func (f *Fixture) TearDown() {
 //
 // If the condition function returns a non-nil error, Wait will log the error
 // and continue retrying until the timeout.
-func (f *Fixture) Wait(condition func() (bool, error)) error {
+func (f *Fixture) Wait(condition func() (bool, error), message ...string) error {
 	// mark the start time
 	start := time.Now()
 	for {
 		done, err := condition()
 		if err == nil && done {
-			//f.t.Logf("Wait condition succeeded")
-			klog.V(3).Infof("Wait condition succeeded")
+			klog.V(2).Infof(
+				"Wait condition succeeded: %s",
+				strings.Join(message, " "),
+			)
 			return nil
+		}
+		if err != nil && done {
+			klog.V(2).Infof(
+				"Wait condition exited: %s",
+				strings.Join(message, " "),
+			)
+			return err
 		}
 		if time.Since(start) > defaultWaitTimeout {
 			return fmt.Errorf(
-				"Wait condition timed out after %s: %v",
+				"Wait condition timed out after %s: %v: %s",
 				defaultWaitTimeout,
 				err,
+				strings.Join(message, " "),
 			)
 		}
 		if err != nil {
-			// Log error, but keep trying until timeout.
-			//f.t.Logf("Wait condition failed: Will retry: %v", err)
-			klog.V(3).Infof("Wait condition failed: Will retry: %v", err)
+			// Log error, but keep trying until timeout
+			klog.V(2).Infof(
+				"Wait condition failed: Will retry: %v: %s",
+				err,
+				strings.Join(message, " "),
+			)
 		} else {
-			//f.t.Logf("Waiting for condition to succeed: Will retry")
-			klog.V(3).Infof("Waiting for condition to succeed: Will retry")
+			klog.V(2).Infof(
+				"Waiting for condition to succeed: Will retry: %s",
+				strings.Join(message, " "),
+			)
 		}
 		time.Sleep(defaultWaitInterval)
 	}

@@ -102,7 +102,12 @@ func (f *Fixture) SetupCRD(
 
 	// add to teardown functions
 	f.addToTeardown(func() error {
-		_, err := f.crdClient.CustomResourceDefinitions().Get(crd.GetName(), metav1.GetOptions{})
+		_, err := f.crdClient.
+			CustomResourceDefinitions().
+			Get(
+				crd.GetName(),
+				metav1.GetOptions{},
+			)
 		if err != nil && apierrors.IsNotFound(err) {
 			return nil
 		}
@@ -111,19 +116,25 @@ func (f *Fixture) SetupCRD(
 
 	klog.V(2).Infof("Discovering %s API", kind)
 	err = f.Wait(func() (bool, error) {
-		return apiResourceDiscovery.GetAPIForAPIVersionAndResource(APIVersion, plural) != nil, nil
+		return apiDiscovery.GetAPIForAPIVersionAndResource(
+			APIVersion,
+			plural,
+		) != nil, nil
 	})
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	klog.V(2).Infof("Discovered %s API", kind)
 
-	crClient, err := f.dynamicClientset.GetClientForAPIVersionResource(APIVersion, plural)
+	klog.V(2).Infof("Listing CRs for %s", kind)
+	crClient, err := f.dynamicClientset.
+		GetClientForAPIVersionAndResource(
+			APIVersion,
+			plural,
+		)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-
-	klog.V(2).Infof("Listing CRs for %s", kind)
 	err = f.Wait(func() (bool, error) {
 		_, err := crClient.List(metav1.ListOptions{})
 		return err == nil, err
@@ -133,7 +144,6 @@ func (f *Fixture) SetupCRD(
 	}
 	klog.V(2).Infof("Listed CRs for %s", kind)
 
-	klog.V(2).Infof("Created CRD %s", kind)
 	return crd, crClient
 }
 
@@ -157,18 +167,33 @@ func (f *Fixture) SetupNamespaceCRDAndItsCR(
 		o(obj)
 	}
 
-	obj, err := resClient.Namespace(namespace).Create(obj, metav1.CreateOptions{})
+	obj, err := resClient.
+		Namespace(namespace).
+		Create(
+			obj,
+			metav1.CreateOptions{},
+		)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 
 	// add to teardown functions
 	f.addToTeardown(func() error {
-		_, err := resClient.Namespace(namespace).Get(obj.GetName(), metav1.GetOptions{})
+		_, err := resClient.
+			Namespace(namespace).
+			Get(
+				obj.GetName(),
+				metav1.GetOptions{},
+			)
 		if err != nil && apierrors.IsNotFound(err) {
 			return nil
 		}
-		return resClient.Namespace(namespace).Delete(obj.GetName(), &metav1.DeleteOptions{})
+		return resClient.
+			Namespace(namespace).
+			Delete(
+				obj.GetName(),
+				&metav1.DeleteOptions{},
+			)
 	})
 
 	return crd, resClient, obj

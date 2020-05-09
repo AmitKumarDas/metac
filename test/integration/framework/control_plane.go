@@ -52,42 +52,42 @@ type ControlPlane struct {
 
 // Start will start your control plane processes. To stop them, call
 // Stop().
-func (f *ControlPlane) Start() error {
-	if f.Etcd == nil {
-		f.Etcd = &Etcd{
-			Path:         f.Path,
-			Out:          f.Out,
-			Err:          f.Err,
-			StartTimeout: f.StartTimeout,
-			StopTimeout:  f.StopTimeout,
+func (cp *ControlPlane) Start() error {
+	if cp.Etcd == nil {
+		cp.Etcd = &Etcd{
+			Path:         cp.Path,
+			Out:          cp.Out,
+			Err:          cp.Err,
+			StartTimeout: cp.StartTimeout,
+			StopTimeout:  cp.StopTimeout,
 		}
 	}
-	if err := f.Etcd.Start(); err != nil {
+	if err := cp.Etcd.Start(); err != nil {
 		return err
 	}
 
-	if f.APIServer == nil {
-		f.APIServer = &APIServer{
-			Path:         f.Path,
-			Out:          f.Out,
-			Err:          f.Err,
-			StartTimeout: f.StartTimeout,
-			StopTimeout:  f.StopTimeout,
+	if cp.APIServer == nil {
+		cp.APIServer = &APIServer{
+			Path:         cp.Path,
+			Out:          cp.Out,
+			Err:          cp.Err,
+			StartTimeout: cp.StartTimeout,
+			StopTimeout:  cp.StopTimeout,
 		}
 	}
-	f.APIServer.EtcdURL = f.Etcd.URL
-	return f.APIServer.Start()
+	cp.APIServer.EtcdURL = cp.Etcd.URL
+	return cp.APIServer.Start()
 }
 
 // Stop will stop your control plane processes, and clean up their data.
-func (f *ControlPlane) Stop() error {
-	if f.APIServer != nil {
-		if err := f.APIServer.Stop(); err != nil {
+func (cp *ControlPlane) Stop() error {
+	if cp.APIServer != nil {
+		if err := cp.APIServer.Stop(); err != nil {
 			return err
 		}
 	}
-	if f.Etcd != nil {
-		if err := f.Etcd.Stop(); err != nil {
+	if cp.Etcd != nil {
+		if err := cp.Etcd.Stop(); err != nil {
 			return err
 		}
 	}
@@ -95,33 +95,33 @@ func (f *ControlPlane) Stop() error {
 }
 
 // APIURL returns the URL you should connect to to talk to your API.
-func (f *ControlPlane) APIURL() *url.URL {
-	return f.APIServer.URL
+func (cp *ControlPlane) APIURL() *url.URL {
+	return cp.APIServer.URL
 }
 
 // KubeCtl returns a pre-configured KubeCtl, ready to connect to this
 // ControlPlane.
-func (f *ControlPlane) KubeCtl() *KubeCtl {
+func (cp *ControlPlane) KubeCtl() *KubeCtl {
 	k := &KubeCtl{
-		Path: f.Path,
-		Out:  f.Out,
-		Err:  f.Err,
+		Path: cp.Path,
+		Out:  cp.Out,
+		Err:  cp.Err,
 	}
 	k.Opts = append(
 		k.Opts,
 		fmt.Sprintf(
 			"--server=%s",
-			f.APIURL(),
+			cp.APIURL(),
 		),
 	)
 	return k
 }
 
-// RESTClientConfig returns a pre-configured restconfig, ready to connect
-// to this ControlPlane.
-func (f *ControlPlane) RESTClientConfig() (*rest.Config, error) {
+// GetRESTClientConfig returns a pre-configured restconfig,
+// ready to connect to this ControlPlane.
+func (cp *ControlPlane) GetRESTClientConfig() (*rest.Config, error) {
 	c := &rest.Config{
-		Host: f.APIURL().String(),
+		Host: cp.APIURL().String(),
 		ContentConfig: rest.ContentConfig{
 			NegotiatedSerializer: serializer.WithoutConversionCodecFactory{
 				CodecFactory: scheme.Codecs,

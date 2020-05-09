@@ -167,8 +167,10 @@ func (f *Fixture) CreateGenericController(
 		o(gc)
 	}
 
-	gc, err :=
-		f.metaClientset.MetacontrollerV1alpha1().GenericControllers(namespace).Create(gc)
+	gc, err := f.metaClientset.
+		MetacontrollerV1alpha1().
+		GenericControllers(namespace).
+		Create(gc)
 	if err != nil {
 		f.t.Fatal(err)
 	}
