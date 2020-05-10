@@ -179,7 +179,7 @@ func StartCRDBasedMetacServer(testFns func() int) error {
 	// locally inside the test binary, since that's part of the
 	// code under test.
 	metac := &server.CRDServer{
-		Server: server.Server{
+		Server: &server.Server{
 			Config:            apiServerConfig,
 			DiscoveryInterval: 500 * time.Millisecond,
 			InformerRelist:    30 * time.Minute,

@@ -219,7 +219,7 @@ func (f *Fixture) CreateGenericControllerAsMetacConfig(
 func (f *Fixture) StartMetacFromGenericControllerConfig(
 	gctlAsConfigFn func() ([]*v1alpha1.GenericController, error),
 ) (stop func()) {
-	var mserver = server.Server{
+	var mserver = &server.Server{
 		Config:            apiServerConfig,
 		DiscoveryInterval: 500 * time.Millisecond,
 		InformerRelist:    30 * time.Minute,

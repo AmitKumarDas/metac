@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	"k8s.io/klog"
 )
 
 // APIResource represents the discovered resources at kubernetes
@@ -119,6 +120,11 @@ type APIResourceDiscovery struct {
 	// and resource name is sufficient to find a particular
 	// API resource.
 	discoveredResources map[string]apiResourceRegistry
+
+	// isStarted is true if api discovery process has been
+	// started to discover server resources at a specified
+	// interval
+	isStarted bool
 
 	stopCh, doneCh chan struct{}
 }
@@ -269,8 +275,15 @@ func (d *APIResourceDiscovery) refresh() {
 	d.mutex.Unlock()
 }
 
-// Start executes resource discovery in the given interval
+// Start starts resource discovery process in the given interval
 func (d *APIResourceDiscovery) Start(refreshInterval time.Duration) {
+	if d.isStarted || !d.StartIfNotAlready() {
+		klog.V(5).Infof(
+			"Won't start api discovery: Already started",
+		)
+		return
+	}
+
 	d.stopCh = make(chan struct{})
 	d.doneCh = make(chan struct{})
 
@@ -296,6 +309,9 @@ func (d *APIResourceDiscovery) Start(refreshInterval time.Duration) {
 func (d *APIResourceDiscovery) Stop() {
 	close(d.stopCh)
 	<-d.doneCh // blocks till done channel is closed
+
+	// set started flag to false
+	d.isStarted = false
 }
 
 // HasSynced flags if any resources were discovered
@@ -303,4 +319,18 @@ func (d *APIResourceDiscovery) HasSynced() bool {
 	d.mutex.RLock()
 	defer d.mutex.RUnlock()
 	return d.discoveredResources != nil
+}
+
+// StartIfNotAlready sets started flag to true if resource discovery
+// process has not been started. It returns false if api discovery
+// was started previously.
+func (d *APIResourceDiscovery) StartIfNotAlready() bool {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	if d.isStarted {
+		return false
+	}
+	d.isStarted = true
+	return true
 }
