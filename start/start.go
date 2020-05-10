@@ -25,7 +25,6 @@ import (
 	"syscall"
 	"time"
 
-	//"go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/golang/glog"
 	"go.opencensus.io/stats/view"
@@ -93,6 +92,18 @@ var (
 	)
 )
 
+// KubeDetails provides kubernetes config & api discovery instance
+// based on the kubernetes cluster that gets connected by metac.
+//
+// These details are helpful when custom controllers import metac &
+// in-turn want to invoke kubernetes apis directly without tying
+// into metacontrollers' reconciliation process.
+//
+// This helps the resulting binaries _(read custom controllers)_
+// to access copies of kubernetes config as well kubernetes api
+// discovery utility.
+var KubeDetails *server.KubeDetails
+
 // Start starts this binary
 func Start() {
 	flag.Parse()
@@ -123,7 +134,7 @@ func Start() {
 	// declare the stop server function
 	var stopServer func()
 	// common server values
-	var mserver = server.Server{
+	var mserver = &server.Server{
 		Config:            config,
 		DiscoveryInterval: *discoveryInterval,
 		InformerRelist:    *informerRelist,
@@ -139,12 +150,19 @@ func Start() {
 		}
 		stopServer, err = configServer.Start(*workerCount)
 	} else {
-		crdServer := &server.CRDServer{Server: mserver}
+		crdServer := &server.CRDServer{
+			Server: mserver,
+		}
 		stopServer, err = crdServer.Start(*workerCount)
 	}
 	if err != nil {
 		glog.Fatal(err)
 	}
+
+	// Expose kubernetes information via this global variable.
+	// This provides a suitable way for consumers of this library
+	// to use the same.
+	KubeDetails = mserver.GetKubeDetails()
 
 	exporter, err := prometheus.NewExporter(prometheus.Options{})
 	if err != nil {
