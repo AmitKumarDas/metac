@@ -147,7 +147,7 @@ func (a *Applyable) postCreateCRD(
 	// discover custom resource API
 	err := a.Retry.Waitf(
 		func() (bool, error) {
-			got := apiDiscovery.GetAPIForAPIVersionAndResource(
+			got := APIDiscovery.GetAPIForAPIVersionAndResource(
 				crd.Spec.Group+"/"+crd.Spec.Version,
 				crd.Spec.Names.Plural,
 			)

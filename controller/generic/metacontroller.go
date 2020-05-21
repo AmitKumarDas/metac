@@ -17,6 +17,8 @@ limitations under the License.
 package generic
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,19 +84,15 @@ type ConfigMetaController struct {
 	// controllers
 	Configs []*v1alpha1.GenericController
 
-	// Total timeout for any condition to succeed.
-	//
-	// NOTE:
-	//	This is currently used to load config that is required
-	// to run Metac.
-	WaitTimeoutForCondition time.Duration
+	// This will allow executing start logic to be retried
+	// indefinitely till all the watch controllers are started
+	RetryIndefinitelyUntilSucceed *bool
 
-	// Interval between retries for any condition to succeed.
-	//
-	// NOTE:
-	// 	This is currently used to load config that is required
-	// to run Metac
-	WaitIntervalForCondition time.Duration
+	// Maximum time to wait to start all watch controllers
+	WaitTimeoutForStartAttempt time.Duration
+
+	// Interval between retries to start all watch controllers
+	WaitIntervalBetweenRestarts time.Duration
 
 	opts []ConfigMetaControllerOption
 	err  error
@@ -106,8 +104,29 @@ type ConfigMetaController struct {
 // This follows **functional options** pattern
 type ConfigMetaControllerOption func(*ConfigMetaController) error
 
-// SetMetaControllerConfigLoadFn sets the config loader function
-func SetMetaControllerConfigLoadFn(
+// SetMetacConfigToRetryIndefinitelyForStart will let this
+// controller to retry indefinitely till all its watch controllers
+// are started
+//
+// NOTE:
+//	Indefinite retry is set only when the provided flag is true
+func SetMetacConfigToRetryIndefinitelyForStart(enabled *bool) ConfigMetaControllerOption {
+	return func(c *ConfigMetaController) error {
+		// indefinite retry is set only if enabled is true
+		if enabled == nil || !*enabled {
+			return nil
+		}
+		// We are not bothered about performance. We do not
+		// need to be fast. We can be lazy but not to the
+		// extent of sleeping for hours.
+		c.WaitIntervalBetweenRestarts = 1 * time.Minute
+		c.RetryIndefinitelyUntilSucceed = k8s.BoolPtr(true)
+		return nil
+	}
+}
+
+// SetMetacConfigLoadFn sets the config loader function
+func SetMetacConfigLoadFn(
 	fn func() ([]*v1alpha1.GenericController, error),
 ) ConfigMetaControllerOption {
 	return func(c *ConfigMetaController) error {
@@ -116,8 +135,8 @@ func SetMetaControllerConfigLoadFn(
 	}
 }
 
-// SetMetaControllerConfigPath sets the config path
-func SetMetaControllerConfigPath(path string) ConfigMetaControllerOption {
+// SetMetacConfigPath sets the config path
+func SetMetacConfigPath(path string) ConfigMetaControllerOption {
 	return func(c *ConfigMetaController) error {
 		c.ConfigPath = path
 		return nil
@@ -134,9 +153,12 @@ func NewConfigMetaController(
 ) (*ConfigMetaController, error) {
 	// initialize with defaults & the provided values
 	ctl := &ConfigMetaController{
-		WaitTimeoutForCondition:  30 * time.Minute,
-		WaitIntervalForCondition: 1 * time.Second,
-		opts:                     opts,
+		// Default setting for retry
+		// - Retry times out in 30 minutes
+		WaitTimeoutForStartAttempt: 30 * time.Minute,
+		// - Interval between retries is 1 second
+		WaitIntervalBetweenRestarts: 1 * time.Second,
+		opts:                        opts,
 		BaseMetaController: BaseMetaController{
 			ResourceManager:    resourceMgr,
 			DynClientset:       dynClientset,
@@ -230,24 +252,27 @@ func (mc *ConfigMetaController) Start() {
 
 		glog.Infof("Starting %s", mc)
 
-		// we run this as a continuous process
-		// until all the configs are loaded
-		err := mc.wait(mc.startAllWatchControllers)
+		// Run this with retries until all the configs are loaded
+		// and started. In other words, this starts all the
+		// generic controllers configured in config file eventually.
+		err := mc.startWithRetries(mc.startAllWatchControllers)
 		if err != nil {
 			glog.Fatalf("Failed to start %s: %+v", mc, err)
 		}
 	}()
 }
 
-// wait polls the condition until it's true, with a configured
-// interval and timeout.
+// startWithRetries polls the condition until it's true, with
+// a configured interval and timeout.
 //
 // The condition function returns a bool indicating whether it
 // is satisfied, as well as an error which should be non-nil if
 // and only if the function was unable to determine whether or
 // not the condition is satisfied (for example if the check
 // involves calling a remote server and the request failed).
-func (mc *ConfigMetaController) wait(condition func() (bool, error)) error {
+func (mc *ConfigMetaController) startWithRetries(
+	condition func() (bool, error),
+) error {
 	// mark the start time
 	start := time.Now()
 	for {
@@ -257,31 +282,38 @@ func (mc *ConfigMetaController) wait(condition func() (bool, error)) error {
 			// returning nil implies the condition has completed
 			return nil
 		}
-		if time.Since(start) > mc.WaitTimeoutForCondition {
-			return errors.Wrapf(
-				err,
-				"Condition timed out after %s: %s",
-				mc.WaitTimeoutForCondition,
-				mc,
-			)
+		if time.Since(start) > mc.WaitTimeoutForStartAttempt &&
+			(mc.RetryIndefinitelyUntilSucceed == nil ||
+				!*mc.RetryIndefinitelyUntilSucceed) {
+			{
+				return errors.Errorf(
+					"Condition timed out after %s: %+v: %s",
+					mc.WaitTimeoutForStartAttempt,
+					err,
+					mc,
+				)
+			}
 		}
 		if err != nil {
-			// Log error, but keep trying until timeout.
+			// condition resulted in error
+			// keep trying until timeout
 			glog.V(7).Infof(
-				"Condition failed: Will retry after %s: %s: %v",
-				mc.WaitIntervalForCondition,
-				mc,
+				"Condition failed: Will retry after %s: %+v: %s",
+				mc.WaitIntervalBetweenRestarts,
 				err,
+				mc,
 			)
 		} else {
+			// condition did not pass
+			// keep trying until timeout
 			glog.V(7).Infof(
 				"Waiting for condition to succeed: Will retry after %s: %s",
-				mc.WaitIntervalForCondition,
+				mc.WaitIntervalBetweenRestarts,
 				mc,
 			)
 		}
 		// wait & then continue retrying
-		time.Sleep(mc.WaitIntervalForCondition)
+		time.Sleep(mc.WaitIntervalBetweenRestarts)
 	}
 }
 
@@ -290,11 +322,12 @@ func (mc *ConfigMetaController) wait(condition func() (bool, error)) error {
 // binary
 //
 // NOTE:
-//	This method is used as a condition and hence can be invoked
-// more than once.
+//	This method is used as a condition and is repeatedly executed
+// under a loop till this condition is not met.
 func (mc *ConfigMetaController) startAllWatchControllers() (bool, error) {
-	// In this metacontroller, we are only responsible for
-	// starting/stopping the relevant watch based controllers
+	var errs []string
+	// This logic is responsible to start all the generic controllers
+	// configured in the config file
 	for _, conf := range mc.Configs {
 		key := conf.AsNamespaceNameKey()
 		if _, ok := mc.WatchControllers[key]; ok {
@@ -302,8 +335,7 @@ func (mc *ConfigMetaController) startAllWatchControllers() (bool, error) {
 			// checks
 			continue
 		}
-		// watch controller i.e. a controller based on the resource
-		// specified in the **watch field** of GenericController
+		// Initialize the GenericController
 		wc, err := NewWatchController(
 			mc.ResourceManager,
 			mc.DynClientset,
@@ -311,16 +343,34 @@ func (mc *ConfigMetaController) startAllWatchControllers() (bool, error) {
 			conf,
 		)
 		if err != nil {
-			return false, errors.Wrapf(
-				err,
-				"Failed to init %s: %s",
-				key,
-				mc,
+			errs = append(
+				errs,
+				fmt.Sprintf(
+					"Failed to init gctl %s: %s",
+					key,
+					err.Error(),
+				),
 			)
+			// continue to initialise & start remaining controllers
+			//
+			// NOTE:
+			//	This helps operating controllers independently
+			// from other controllers that are currently experiencing
+			// issues. Most of the times these issues are temporary
+			// in nature.
+			continue
 		}
-		// start this watch controller
+		// start this controller
 		wc.Start(mc.WorkerCount)
 		mc.WatchControllers[key] = wc
+	}
+	if len(errs) != 0 {
+		return false, errors.Errorf(
+			"Failed to start all gctl controllers: %d errors found: %s: %s",
+			len(errs),
+			strings.Join(errs, ": "),
+			mc,
+		)
 	}
 	return true, nil
 }
