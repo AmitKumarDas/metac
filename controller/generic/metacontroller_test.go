@@ -159,7 +159,7 @@ func TestConfigMetaControllerIsDuplicateConfig(t *testing.T) {
 	}
 }
 
-func TestConfigMetaControllerWait(t *testing.T) {
+func TestConfigMetaControllerStartWithRetry(t *testing.T) {
 	var tests = map[string]struct {
 		controller *ConfigMetaController
 		condition  func() (bool, error)
@@ -167,8 +167,8 @@ func TestConfigMetaControllerWait(t *testing.T) {
 	}{
 		"cond returns error": {
 			controller: &ConfigMetaController{
-				WaitIntervalForCondition: 1 * time.Second,
-				WaitTimeoutForCondition:  5 * time.Second,
+				WaitIntervalBetweenRestarts: 1 * time.Second,
+				WaitTimeoutForStartAttempt:  5 * time.Second,
 			},
 			condition: func() (bool, error) {
 				return false, errors.Errorf("Err")
@@ -177,8 +177,8 @@ func TestConfigMetaControllerWait(t *testing.T) {
 		},
 		"cond returns true": {
 			controller: &ConfigMetaController{
-				WaitIntervalForCondition: 1 * time.Second,
-				WaitTimeoutForCondition:  5 * time.Second,
+				WaitIntervalBetweenRestarts: 1 * time.Second,
+				WaitTimeoutForStartAttempt:  5 * time.Second,
 			},
 			condition: func() (bool, error) {
 				return true, nil
@@ -187,13 +187,13 @@ func TestConfigMetaControllerWait(t *testing.T) {
 		},
 		"cond returns false": {
 			controller: &ConfigMetaController{
-				WaitIntervalForCondition: 1 * time.Second,
-				WaitTimeoutForCondition:  5 * time.Second,
+				WaitIntervalBetweenRestarts: 1 * time.Second,
+				WaitTimeoutForStartAttempt:  5 * time.Second,
 			},
 			condition: func() (bool, error) {
 				return false, nil
 			},
-			isErr: false,
+			isErr: true,
 		},
 	}
 	for name, mock := range tests {
@@ -201,7 +201,7 @@ func TestConfigMetaControllerWait(t *testing.T) {
 		mock := mock
 		t.Run(name, func(t *testing.T) {
 			ctl := mock.controller
-			err := ctl.wait(mock.condition)
+			err := ctl.startWithRetries(mock.condition)
 			if mock.isErr && err == nil {
 				t.Fatalf("Expected error got none")
 			}

@@ -68,26 +68,26 @@ type Fixture struct {
 // NewFixture returns a new instance of Fixture
 func NewFixture(t *testing.T) *Fixture {
 	crdClient, err := apiextensionsclientset.NewForConfig(
-		apiServerConfig,
+		APIServerConfig,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dynamicClientset, err := dynamicclientset.New(
-		apiServerConfig,
-		apiDiscovery,
+		APIServerConfig,
+		APIDiscovery,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	metaClientset, err := metaclientset.NewForConfig(
-		apiServerConfig,
+		APIServerConfig,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	typedClientset, err := kubernetes.NewForConfig(
-		apiServerConfig,
+		APIServerConfig,
 	)
 	if err != nil {
 		t.Fatal(err)

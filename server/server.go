@@ -240,6 +240,10 @@ type ConfigServer struct {
 	//  ConfigPath has higher priority
 	GenericControllerConfigLoadFn func() ([]*v1alpha1.GenericController, error)
 
+	// This will allow executing start logic to be retried
+	// indefinitely till all the watch controllers are started
+	RetryIndefinitelyForStart *bool
+
 	// Number of workers per watch controller
 	workerCount int
 }
@@ -273,10 +277,9 @@ func (s *ConfigServer) Start(workerCount int) (stop func(), err error) {
 
 	// various generic meta controller options to setup meta controller
 	configOpts := []generic.ConfigMetaControllerOption{
-		generic.SetMetaControllerConfigLoadFn(
-			s.GenericControllerConfigLoadFn,
-		),
-		generic.SetMetaControllerConfigPath(s.ConfigPath),
+		generic.SetMetacConfigLoadFn(s.GenericControllerConfigLoadFn),
+		generic.SetMetacConfigPath(s.ConfigPath),
+		generic.SetMetacConfigToRetryIndefinitelyForStart(s.RetryIndefinitelyForStart),
 	}
 
 	genericMetac, err := generic.NewConfigMetaController(

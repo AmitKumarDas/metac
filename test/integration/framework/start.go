@@ -33,8 +33,8 @@ import (
 
 // These global variables are used in test functions to
 // invoke various kubernetes APIs
-var apiDiscovery *dynamicdiscovery.APIResourceDiscovery
-var apiServerConfig *rest.Config
+var APIDiscovery *dynamicdiscovery.APIResourceDiscovery
+var APIServerConfig *rest.Config
 
 // manifestDir is the path from the integration test binary
 // working dir to the directory containing metac manifests.
@@ -104,24 +104,24 @@ func StartCRDBasedMetacBinary(testFns func() int) error {
 
 	// set the config to this global variable which is in turn
 	// used by the test functions
-	apiServerConfig, err = cp.GetRESTClientConfig()
+	APIServerConfig, err = cp.GetRESTClientConfig()
 	if err != nil {
 		return err
 	}
 
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
-		apiServerConfig,
+		APIServerConfig,
 	)
 
 	// set api resource discovery to this global variable which
 	// is in turn used by the test functions
-	apiDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
+	APIDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
 		discoveryClient,
 	)
 
 	// We don't care about stopping this cleanly since it has no
 	// external effects.
-	apiDiscovery.Start(500 * time.Millisecond)
+	APIDiscovery.Start(500 * time.Millisecond)
 
 	// Run the actual tests now since setup is up & running
 	if exitCode := testFns(); exitCode != 0 {
@@ -168,7 +168,7 @@ func StartCRDBasedMetacServer(testFns func() int) error {
 
 	// set the config to this global variable which
 	// is in turn used by the test functions
-	apiServerConfig, err = cp.GetRESTClientConfig()
+	APIServerConfig, err = cp.GetRESTClientConfig()
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func StartCRDBasedMetacServer(testFns func() int) error {
 	// code under test.
 	metac := &server.CRDServer{
 		Server: &server.Server{
-			Config:            apiServerConfig,
+			Config:            APIServerConfig,
 			DiscoveryInterval: 500 * time.Millisecond,
 			InformerRelist:    30 * time.Minute,
 		},
@@ -198,18 +198,18 @@ func StartCRDBasedMetacServer(testFns func() int) error {
 	klog.V(2).Info("Started CRD based metac server")
 
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
-		apiServerConfig,
+		APIServerConfig,
 	)
 
 	// set api resource discovery to this global variable which
 	// is in turn used by the test functions
-	apiDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
+	APIDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
 		discoveryClient,
 	)
 
 	// We don't care about stopping this cleanly since it has no
 	// external effects.
-	apiDiscovery.Start(500 * time.Millisecond)
+	APIDiscovery.Start(500 * time.Millisecond)
 
 	// Run the actual tests now since setup is up & running
 	// successfully
@@ -245,24 +245,24 @@ func StartConfigBasedMetacServer(testFns func() int) error {
 
 	// set the config to this global variable which
 	// is in turn used by the test functions
-	apiServerConfig, err = cp.GetRESTClientConfig()
+	APIServerConfig, err = cp.GetRESTClientConfig()
 	if err != nil {
 		return err
 	}
 
 	discoveryClient := discovery.NewDiscoveryClientForConfigOrDie(
-		apiServerConfig,
+		APIServerConfig,
 	)
 
 	// set api resource discovery to this global variable which
 	// is in turn used by the test functions
-	apiDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
+	APIDiscovery = dynamicdiscovery.NewAPIResourceDiscoverer(
 		discoveryClient,
 	)
 
 	// We don't care about stopping this cleanly since it has no
 	// external effects.
-	apiDiscovery.Start(500 * time.Millisecond)
+	APIDiscovery.Start(500 * time.Millisecond)
 
 	// Run the actual tests now since setup is up & running
 	// successfully

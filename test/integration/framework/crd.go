@@ -116,7 +116,7 @@ func (f *Fixture) SetupCRD(
 
 	klog.V(2).Infof("Discovering %s API", kind)
 	err = f.Wait(func() (bool, error) {
-		return apiDiscovery.GetAPIForAPIVersionAndResource(
+		return APIDiscovery.GetAPIForAPIVersionAndResource(
 			APIVersion,
 			plural,
 		) != nil, nil

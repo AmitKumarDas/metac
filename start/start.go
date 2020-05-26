@@ -88,7 +88,13 @@ var (
 		"metac-config-path",
 		"/etc/config/metac/",
 		`Path to metac config file to let metac run as a self contained binary.
-		 Needs run-as-local set to true`,
+		 Applicable if run-as-local is set to true`,
+	)
+	retryIndefinitelyToStart = flag.Bool(
+		"retry-indefinitely-to-start",
+		false,
+		`When true will let metac to retry continuously till all its controllers are started.
+		 Applicable if run-as-local is set to true`,
 	)
 )
 
@@ -145,8 +151,9 @@ func Start() {
 		// looking up various MetaController resources as
 		// config files
 		configServer := &server.ConfigServer{
-			Server:     mserver,
-			ConfigPath: *metacConfigPath,
+			Server:                    mserver,
+			ConfigPath:                *metacConfigPath,
+			RetryIndefinitelyForStart: retryIndefinitelyToStart,
 		}
 		stopServer, err = configServer.Start(*workerCount)
 	} else {

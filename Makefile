@@ -109,7 +109,7 @@ integration-dependencies: all
 .PHONY: integration-test
 integration-test: integration-dependencies
 	@go test ./test/integration/... \
-		-v -timeout=10m -args --logtostderr --alsologtostderr -v=1
+		-v -short -timeout=10m -args --logtostderr --alsologtostderr -v=1
 
 # integration-test-crd-mode runs tests with metac loading 
 # metacontrollers as kubernetes custom resources
