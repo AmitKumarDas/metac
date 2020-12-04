@@ -334,3 +334,19 @@ func (d *APIResourceDiscovery) StartIfNotAlready() bool {
 	d.isStarted = true
 	return true
 }
+
+// GetAPIResourcesForKind returns the list of discovered API resources
+// corresponding to the provided kind
+func (d *APIResourceDiscovery) GetAPIResourcesForKind(kind string) []*metav1.APIResource {
+	var apiResources []*metav1.APIResource
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	for _, apiResourceRegistery := range d.discoveredResources {
+		apiResource, isExist := apiResourceRegistery.kinds[kind]
+		if isExist {
+			apiResources = append(apiResources, &apiResource.APIResource)
+		}
+	}
+	return apiResources
+}
