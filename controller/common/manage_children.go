@@ -402,7 +402,7 @@ func updateChildren(
 			}
 
 			// Attempt an update, if the 3-way merge resulted in any changes.
-			if reflect.DeepEqual(newObj.UnstructuredContent(), oldObj.UnstructuredContent()) {
+			if a.isEqual {
 				// Nothing changed.
 				continue
 			}

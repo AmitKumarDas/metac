@@ -36,4 +36,6 @@ replace (
 	k8s.io/apimachinery => k8s.io/apimachinery v0.17.0
 	k8s.io/client-go => k8s.io/client-go v0.17.0
 	k8s.io/code-generator => k8s.io/code-generator v0.17.0
+	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.3.1
+	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20200410145947-bcb3869e6f29
 )
