@@ -2009,6 +2009,322 @@ func TestMerge(t *testing.T) {
 	}
 }
 
+func TestMergeTwo(t *testing.T) {
+	tests := map[string]struct {
+		observed        map[string]interface{}
+		lastApplied     map[string]interface{}
+		desired         map[string]interface{}
+		want            map[string]interface{}
+		isErrorExpected bool
+	}{
+		"Merge config map with mismatch type": {
+			observed: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data1",
+				},
+			},
+			lastApplied: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]string{
+					"node.properties": "data2",
+				},
+			},
+			desired: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]string{
+					"node.properties": "data2",
+				},
+			},
+			isErrorExpected: true,
+			want:            nil,
+		},
+		"Merge config map with mismatch type and without lastapplied": {
+			observed: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data1",
+				},
+			},
+			lastApplied: nil,
+			desired: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]string{
+					"node.properties": "data2",
+				},
+			},
+			isErrorExpected: true,
+			want: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]string{
+					"node.properties": "data2",
+				},
+			},
+		},
+		"Merge configmap with correct type": {
+			observed: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+					"labels": map[string]interface{}{
+						"key1": "value1",
+					},
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data1",
+				},
+			},
+			lastApplied: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+					"labels": map[string]interface{}{
+						"key1": "value1",
+					},
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data2",
+				},
+			},
+			desired: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data2",
+				},
+			},
+			want: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data2",
+				},
+			},
+		},
+		"Merge array of nested interfaces with last applied": {
+			observed: map[string]interface{}{
+				"key1": "old-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "old-value",
+					},
+					map[string]interface{}{
+						"key2": []interface{}{
+							"old-value1",
+							"old-value2",
+						},
+					},
+				},
+			},
+			lastApplied: map[string]interface{}{
+				"key1": "old-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "new-value",
+					},
+					map[string]interface{}{
+						"key2": []interface{}{
+							"new-value1",
+							"new-value2",
+						},
+					},
+				},
+			},
+			desired: map[string]interface{}{
+				"key1": "old-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "new-value",
+					},
+					map[string]interface{}{
+						"key2": []interface{}{
+							"new-value1",
+							"new-value2",
+						},
+					},
+				},
+			},
+			want: map[string]interface{}{
+				"key1": "old-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "new-value",
+					},
+					map[string]interface{}{
+						"key2": []interface{}{
+							"new-value1",
+							"new-value2",
+						},
+					},
+				},
+			},
+		},
+		"Merge array of interfaces without last applied and desired contains array of strings": {
+			observed: map[string]interface{}{
+				"key1": "old-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "old-value1",
+					},
+					map[string]interface{}{
+						"key1": "old-value2",
+						"key2": []interface{}{
+							"old-value1",
+							"old-value2",
+						},
+					},
+				},
+			},
+			lastApplied: nil,
+			desired: map[string]interface{}{
+				"key1": "new-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "new-value",
+					},
+					map[string]interface{}{
+						"key2": []string{
+							"new-value1",
+						},
+					},
+				},
+			},
+			want: map[string]interface{}{
+				"key1": "new-value",
+				"key2": []interface{}{
+					map[string]interface{}{
+						"key1": "new-value",
+					},
+					map[string]interface{}{
+						"key2": []string{
+							"new-value1",
+						},
+					},
+				},
+			},
+		},
+		"Merge array list with last applied": {
+			observed: map[string]interface{}{
+				"list1": []interface{}{
+					"old-value1",
+					"old-value2",
+				},
+				"list2": []interface{}{
+					int64(1),
+					int64(2),
+				},
+			},
+			lastApplied: map[string]interface{}{
+				"list1": []interface{}{
+					"old-value3",
+				},
+			},
+			desired: map[string]interface{}{
+				"list1": []interface{}{
+					"old-value1",
+					"old-value3",
+				},
+			},
+			want: map[string]interface{}{
+				"list1": []interface{}{
+					"old-value1",
+					"old-value3",
+				},
+				"list2": []interface{}{
+					int64(1),
+					int64(2),
+				},
+			},
+		},
+		"Merge array list with mismatch of type and last applied": {
+			observed: map[string]interface{}{
+				"list1": []interface{}{
+					"old-value1",
+					"old-value2",
+				},
+			},
+			lastApplied: map[string]interface{}{
+				"list1": []string{
+					"old-value3",
+				},
+			},
+			desired: map[string]interface{}{
+				"list1": []string{
+					"old-value1",
+					"old-value3",
+				},
+			},
+			want:            nil,
+			isErrorExpected: true,
+		},
+	}
+	for name, tc := range tests {
+		name := name
+		tc := tc
+		got, err := Merge(tc.observed, tc.lastApplied, tc.desired)
+		if tc.isErrorExpected && err == nil {
+			t.Errorf(
+				"%s test case expected error to occur but error didn't occur",
+				name)
+		}
+		if !tc.isErrorExpected && err != nil {
+			t.Errorf(
+				"%s test case expected error not to occur but got error %v",
+				name,
+				err)
+		}
+		if !tc.isErrorExpected {
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("%q:\nGot: %v\nWant: %v\nDiff: %s",
+					name, got, tc.want, diff.ObjectReflectDiff(got, tc.want),
+				)
+			}
+		}
+	}
+}
+
 func TestLastAppliedAnnotation(t *testing.T) {
 	// Round-trip some JSON through Set/Get methods.
 	inJSON := `{
