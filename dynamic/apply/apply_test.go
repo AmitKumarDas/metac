@@ -2054,7 +2054,7 @@ func TestMergeTwo(t *testing.T) {
 			isErrorExpected: true,
 			want:            nil,
 		},
-		"Merge configmap with correct type": {
+		"Merge config map with mismatch type and without lastapplied": {
 			observed: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
@@ -2066,12 +2066,55 @@ func TestMergeTwo(t *testing.T) {
 					"node.properties": "data1",
 				},
 			},
+			lastApplied: nil,
+			desired: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]string{
+					"node.properties": "data2",
+				},
+			},
+			isErrorExpected: true,
+			want: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+				},
+				"data": map[string]string{
+					"node.properties": "data2",
+				},
+			},
+		},
+		"Merge configmap with correct type": {
+			observed: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "ConfigMap",
+				"metadata": map[string]interface{}{
+					"name":      "node-cm1",
+					"namespace": "metac",
+					"labels": map[string]interface{}{
+						"key1": "value1",
+					},
+				},
+				"data": map[string]interface{}{
+					"node.properties": "data1",
+				},
+			},
 			lastApplied: map[string]interface{}{
 				"apiVersion": "v1",
 				"kind":       "ConfigMap",
 				"metadata": map[string]interface{}{
 					"name":      "node-cm1",
 					"namespace": "metac",
+					"labels": map[string]interface{}{
+						"key1": "value1",
+					},
 				},
 				"data": map[string]interface{}{
 					"node.properties": "data2",
