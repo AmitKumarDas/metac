@@ -19,7 +19,7 @@ require (
 	github.com/pkg/errors v0.8.1
 	go.opencensus.io v0.21.0
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
-	golang.org/x/sys v0.0.0-20190922100055-0a153f010e69 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v2 v2.2.7
 	k8s.io/api v0.17.0
